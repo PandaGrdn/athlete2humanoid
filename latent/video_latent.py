@@ -23,9 +23,10 @@ def video_latent(out_dir, vj=None):
     mediapy.write_video(str(out_dir / "silhouette.mp4"), sil, fps=meta["fps"])
     vj = vj or VJepa()
     emb, starts = vj.embed_windows(sil)
-    np.savez(out_dir / "video_latent.npz", emb=emb, starts=starts, fps=meta["fps"],
+    dense = vj.embed_dense(sil)
+    np.savez(out_dir / "video_latent.npz", emb=emb, starts=starts, dense=dense, fps=meta["fps"],
              view_azimuth=meta["view_azimuth"])
-    print(f"{out_dir.name}: {len(emb)} windows x {emb.shape[1]} dims")
+    print(f"{out_dir.name}: {len(emb)} windows, {len(dense)} dense steps ({meta['fps'] / 2:.0f}/s) x {emb.shape[1]} dims")
     return emb, starts
 
 

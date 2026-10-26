@@ -26,7 +26,7 @@ from latent.video_latent import video_latent  # noqa: E402
 from latent.vjepa import VJepa  # noqa: E402
 
 # Which bank motions count as "the same action" for each clip name.
-CATEGORY = {"squat": "squat_", "lunge": "lunge_", "jacks": "jumping_jacks", "kick": "kick_",
+CATEGORY = {"squat_jump": ("vertical_jump", "squat_"), "squat": "squat_", "lunge": "lunge_", "jacks": "jumping_jacks", "kick": "kick_",
             "arms": "arms_raise_", "jump": "vertical_jump", "march": "march", "punch": "punch"}
 
 
@@ -34,11 +34,18 @@ def _processed(path):
     """A pipeline output folder; videos are run through pipeline.py into outputs/<name> first."""
     path = Path(path)
     if path.suffix.lower() in (".mp4", ".mov", ".avi", ".mkv"):
+        import subprocess
         import config
+        import imageio_ffmpeg
         import pipeline
-        out = config.OUTPUT_DIR / path.stem
+        out = config.OUTPUT_DIR / path.stem.lower()
         if not (out / "masks.npz").exists():
-            pipeline.video_to_motion(path, out, use_sam=True)
+            # 30 fps like the robot renders (phones often record 60), 720p for SAM and MediaPipe.
+            out.mkdir(parents=True, exist_ok=True)
+            clip = out / "clip30.mp4"
+            subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-loglevel", "error", "-i", str(path),
+                            "-vf", "fps=30,scale=-2:720", "-an", str(clip)], check=True)
+            pipeline.video_to_motion(clip, out, use_sam=True)
         return out
     return path
 
@@ -69,7 +76,7 @@ def main(dirs, out):
         sims = {k: float(unit(v.mean(0) - r_mean) @ hv) for k, v in robot.items()}
         sims["(own retarget)"] = float(unit(own.mean(0) - r_mean) @ hv)
         ranked = sorted(sims.items(), key=lambda kv: -kv[1])
-        prefix = next((p for c, p in CATEGORY.items() if name.startswith(c)), None)
+        prefix = next((p for c, p in CATEGORY.items() if name.lower().startswith(c)), None)
         bank_ranked = [k for k, _ in ranked if k != "(own retarget)"]
         hit = next((i + 1 for i, k in enumerate(bank_ranked) if prefix and k.startswith(prefix)), None)
         results[name] = {"view_azimuth": h["az"], "rank_of_same_action": hit, "top5": ranked[:5],
