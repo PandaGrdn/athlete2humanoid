@@ -4,6 +4,7 @@ Needs a CUDA GPU (Colab L4 or A100; T4 is too old for the attention kernels) and
 access to the gated checkpoint at huggingface.co/facebook/sam3.1 (log in with an HF token).
 """
 
+import inspect
 import subprocess
 import tempfile
 from pathlib import Path
@@ -22,6 +23,11 @@ def predictor():
 
         # use_fa3 defaults to True, which needs FlashAttention 3 (H100 only). Colab GPUs aren't.
         _predictor = build_sam3_multiplex_video_predictor(use_fa3=False)
+        # Upstream bug: the shared start_session passes offload_state_to_cpu, which the 3.1
+        # multiplex model's init_state doesn't accept. Pass it only the arguments it takes.
+        init_state = _predictor.model.init_state
+        accepted = inspect.signature(init_state).parameters
+        _predictor.model.init_state = lambda **kw: init_state(**{k: v for k, v in kw.items() if k in accepted})
     return _predictor
 
 
