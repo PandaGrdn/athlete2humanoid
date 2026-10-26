@@ -28,5 +28,52 @@ SAM_PROMPT = os.environ.get("A2H_SAM_PROMPT", "athlete")
 # and pipeline.py runs sam_track.py there; leave unset to import sam3 in-process.
 SAM_PYTHON = os.environ.get("A2H_SAM_PYTHON")
 
+# Secrets: one file per secret in this folder (Drive in Colab), e.g. a2h/env/HF_TOKEN containing
+# HF_TOKEN = "hf_...". Works from an IDE attached to a Colab runtime, where the Colab
+# secrets panel (google.colab.userdata) isn't available.
+SECRETS_DIR = Path(os.environ.get("A2H_SECRETS_DIR", "/content/drive/MyDrive/a2h/env"))
+
+
+def get_secret(name, required=True):
+    """Look up a secret: environment variable, then SECRETS_DIR/<name>[.txt], then the repo's
+    .env file, then Colab's secrets panel. Also exports it to os.environ so subprocesses
+    (SAM's own env, huggingface_hub) see it. Never prints the value."""
+    value = os.environ.get(name)
+    for path in (SECRETS_DIR / name, SECRETS_DIR / f"{name}.txt"):
+        if not value and path.is_file():
+            value = _read_secret_file(path, name)
+    if not value and (SECRETS_DIR / f"{name}.gdoc").exists():
+        raise RuntimeError(f"{SECRETS_DIR / name} is a Google Doc, which Drive can't expose as "
+                           "text. Save the secret as a plain text file instead.")
+    if not value and (ROOT / ".env").is_file():
+        value = _read_secret_file(ROOT / ".env", name)
+    if not value:
+        try:
+            from google.colab import userdata
+            value = userdata.get(name)
+        except Exception:
+            pass
+    if value:
+        os.environ[name] = value
+    elif required:
+        raise RuntimeError(f"Secret {name} not found. Put it in {SECRETS_DIR / name} "
+                           f'as {name} = "..." (or set the {name} environment variable).')
+    return value
+
+
+def _read_secret_file(path, name):
+    """Accepts `NAME = "value"`, `NAME=value`, or just the value on the first line."""
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, sep, rest = line.partition("=")
+        if sep and key.strip() == name:
+            return rest.strip().strip("\"'")
+        if not sep and path.name.startswith(name):
+            return line.strip("\"'")
+    return None
+
+
 for _d in (OUTPUT_DIR, CLIPS_DIR, ASSETS_DIR):
     _d.mkdir(parents=True, exist_ok=True)

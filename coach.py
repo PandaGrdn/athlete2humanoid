@@ -1,12 +1,11 @@
 """Muse Spark via the Meta Model API: phases, coaching notes, reward weights.
 
 The API is OpenAI-compatible, so we use the `openai` SDK with Meta's base URL.
-Set META_API_KEY (Colab: the key icon in the left sidebar -> add a secret named META_API_KEY).
+The key comes from config.get_secret("META_API_KEY"): env var, a2h/env/META_API_KEY on Drive, or .env.
 """
 
 import base64
 import json
-import os
 from pathlib import Path
 
 from openai import OpenAI
@@ -15,16 +14,7 @@ import config
 
 
 def get_api_key():
-    key = os.environ.get(config.META_API_KEY_ENV)
-    if not key:
-        try:  # Colab secrets
-            from google.colab import userdata
-            key = userdata.get(config.META_API_KEY_ENV)
-        except Exception:
-            pass
-    if not key:
-        raise RuntimeError(f"Set {config.META_API_KEY_ENV} (env var or Colab secret).")
-    return key
+    return config.get_secret(config.META_API_KEY_ENV)
 
 
 _client = None
