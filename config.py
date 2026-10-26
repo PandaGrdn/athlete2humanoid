@@ -14,6 +14,9 @@ ASSETS_DIR = Path(os.environ.get("A2H_ASSETS_DIR", ROOT / "assets"))
 G1_DIR = ASSETS_DIR / "mujoco_menagerie" / "unitree_g1"
 G1_SCENE_XML = G1_DIR / "scene.xml"
 
+# MediaPipe pose model (fetched by scripts/fetch_assets.sh).
+POSE_MODEL = ASSETS_DIR / "pose_landmarker_heavy.task"
+
 # Meta Model API (OpenAI-compatible). Confirm base URL and model name at kickoff.
 META_API_KEY_ENV = "META_API_KEY"
 META_API_BASE = os.environ.get("META_API_BASE", "https://api.meta.ai/v1")

@@ -61,6 +61,40 @@ def overlay(frames, masks, color=(255, 64, 64), alpha=0.5):
     return out.astype(np.uint8)
 
 
-def crop_to_mask(frames, masks, pad=0.15):
-    """Day 2: crop each frame to the athlete's (padded) bounding box for MediaPipe."""
-    raise NotImplementedError("Day 2")
+def crop_to_mask(frames, masks, pad=0.2, background=114):
+    """Square crops that follow the athlete, for MediaPipe. One crop size for the whole clip
+    keeps the pixel scale constant. Everything outside the (dilated) mask is greyed out so
+    MediaPipe can't latch onto another person.
+
+    Returns crops (T, S, S, 3) and boxes (T, 3) = (x0, y0, S) in full-frame pixels; x0/y0 can
+    be negative (the frame is padded)."""
+    import cv2
+    from scipy.ndimage import uniform_filter1d
+
+    T, H, W = masks.shape
+    seen = masks.any((1, 2))
+    if not seen.any():
+        raise RuntimeError("Mask is empty in every frame.")
+    boxes = np.full((T, 4), np.nan)  # x_min, y_min, x_max, y_max
+    for t in np.flatnonzero(seen):
+        ys, xs = np.nonzero(masks[t])
+        boxes[t] = xs.min(), ys.min(), xs.max(), ys.max()
+    t_all = np.arange(T)
+    for j in range(4):
+        boxes[:, j] = np.interp(t_all, t_all[seen], boxes[seen, j])
+    side = int(np.max(np.maximum(boxes[:, 2] - boxes[:, 0], boxes[:, 3] - boxes[:, 1])) * (1 + 2 * pad))
+    centre = uniform_filter1d((boxes[:, :2] + boxes[:, 2:]) / 2, size=5, axis=0, mode="nearest")
+    x0y0 = np.round(centre - side / 2).astype(int)
+
+    kernel = np.ones((max(3, side // 30),) * 2, np.uint8)
+    padded = np.full((H + 2 * side, W + 2 * side, 3), background, np.uint8)
+    crops = np.empty((T, side, side, 3), np.uint8)
+    for t in range(T):
+        frame = frames[t]
+        if seen[t]:
+            keep = cv2.dilate(masks[t].astype(np.uint8), kernel).astype(bool)
+            frame = np.where(keep[..., None], frame, np.uint8(background))
+        padded[side:side + H, side:side + W] = frame
+        x, y = x0y0[t] + side
+        crops[t] = padded[y:y + side, x:x + side]
+    return crops, np.column_stack([x0y0, np.full(T, side)])

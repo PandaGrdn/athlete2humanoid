@@ -11,9 +11,12 @@ Turn any athlete video into a Unitree G1 humanoid performing the same move.
 | `config.py` | 1 | ✅ paths, model names, env overrides |
 | `render.py` | 1 | ✅ load G1, physics and kinematic rendering, save video · ⬜ `side_by_side` (day 3) |
 | `coach.py` | 1/4 | ✅ Muse Spark client (`ask`, with optional images or JSON) · ⬜ phases (4), infeasibility (6), rewards (7) |
-| `track.py` | 1/2 | ✅ SAM 3.1 tracking, main-athlete mask, overlay · ⬜ `crop_to_mask` (2) |
-| `pose.py` | 2 | ⬜ MediaPipe PoseLandmarker on crops, smoothing |
-| `retarget.py` | 3 | ✅ G1 IK solver (squat demo) · ⬜ `scale_landmarks` (3) |
+| `track.py` | 1 | ✅ SAM 3.1 tracking, main-athlete mask, overlay, athlete-following crops |
+| `pose.py` | 1 | ✅ MediaPipe 3D pose + 2D root motion → metric, z-up human trajectory |
+| `retarget.py` | 1 | ✅ G1 IK retargeting (limbs, pelvis, torso orientation), error report, mjlab CSV export |
+| `pipeline.py` | 1 | ✅ video → G1 motion CSV + side-by-side preview (`--no-sam` runs on any machine) |
+| `mjlab_rollout.py` | 1 | ✅ headless rollout of a trained mjlab policy → video + metrics (untested on GPU) |
+| `notebooks/video_to_policy.ipynb` | 1 | ✅ Colab: clip → SAM → pose → retarget → mjlab PPO → policy video |
 | `app.py` | 5 | ⬜ Gradio demo |
 | `train_rl.py` | 6–8 | ⬜ physics playback, PPO imitation (MuJoCo Playground) |
 | `notebooks/day1_setup.ipynb` | 1 | ✅ runs every day-1 check in Colab |
@@ -28,6 +31,7 @@ pip install -r requirements.txt
 bash scripts/fetch_assets.sh
 python render.py      # outputs/g1_stand.mp4
 python retarget.py    # outputs/g1_ik_squat.mp4
+python pipeline.py clips/your_clip.mp4 --no-sam   # outputs/your_clip/side_by_side.mp4 + motion.csv
 ```
 
 ## Gotchas found during setup

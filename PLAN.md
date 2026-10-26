@@ -1,37 +1,43 @@
-# Plan v2: humanoids that learn athletic skills from video
+# Plan v3: video in, trained humanoid policy out
 
-## Positioning (decides stage 1 pass/fail)
-Kickoff listed **"sports analyzers or coaches"** as an overdone project. We are not one. This is **robot learning from internet video**: sports clips are just the hardest, most dynamic source of human motion. Muse Spark acts as the **reward engineer that trains the robot**, not as a coach for people.
-- Never pitch, label, or demo it as "coaching". Rename `coach.py` to `reward_agent.py` when we touch it next.
+## Fit (stage 1 is pass/fail)
+- **Problem statement: Push the Frontier.** The guide names robotics and asks us to "give a machine a new capability". We turn any video of a human move into a physics policy for a real humanoid, the Unitree G1.
+- **Never a "sports analyzer/coach".** That's on the anti-project list. Sports clips are just the hardest human motion to learn from, and nothing in the product coaches people.
+- **Counted Meta models:** Muse Spark/Wonder/Image/Voice Transcribe and SAM 3.1 via the Meta Model API, and Muse Glimmer / Muse Spark Open as open weights. Other Meta models (SAM 3D Body, Motivo) are extras, not the qualifying use.
 
-## Pipeline (Meta models in bold)
-1. **SAM 3.1** tracks the athlete through occlusion and crowds.
-2. **SAM 3D Body** recovers a full-body 3D mesh and skeleton from each SAM-masked frame, which is far better than MediaPipe on fast sports poses. MediaPipe stays as the fallback.
-3. **Retarget** onto the G1 with mink IK (works now), then clean up foot contacts and ground penetration.
-4. **Physics tracking policy:** PPO in MuJoCo MJX (Playground G1). Train one clip first, then one policy across a library of 5+ moves, with domain randomization.
-5. **Muse Spark reward agent** (Eureka-style): it sees the clip frames plus rollout telemetry (where the robot fell, which joints lagged), rewrites the reward weights or code, and retrains. We measure tracking error per iteration against a hand-tuned baseline. This is the headline technical result.
-6. *Stretch:* **fine-tune a Llama model** (LoRA on Modal credits) into a fast "robot failure critic", trained on thousands of simulator rollouts. The simulator labels the data for free. Evaluate it against Muse Spark on held-out rollouts.
-- *Fallback for step 4:* **Meta Motivo** tracks the motion zero-shot in physics on its own humanoid. This only works if MHR → SMPL conversion is easy, so check it on day 4.
+## Rubric → what we optimise
+| Criterion | Weight | Our answer |
+|---|---|---|
+| Impact | 30% | Teaching robots new skills from ordinary video instead of motion capture or hand-tuned controllers |
+| Use of Meta AI tooling | 25% | SAM 3.1 tracking; a **Muse Wonder/Spark agent** that watches the robot's rollouts and rewrites its reward; a **fine-tuned Muse Glimmer/Spark Open** critic |
+| Technical depth | 20% | IK retargeting, GPU RL (mjlab, MuJoCo Warp), agent-in-the-loop reward design, measured tracking error |
+| Demo | 25% | 3-min video: clip → tracking → robot copies it in physics; agent improves a failed skill live |
 
-## Milestones
-| Day | Date | Goal | Done when |
-|---|---|---|---|
-| 1 | Oct 26 | Credits claimed, themes confirmed, notebook green, clips collected | all day-1 checks pass |
-| 2 | Oct 27 | SAM 3.1 + SAM 3D Body on the squat clip | `(T, joints, 3)` saved; compared with MediaPipe |
-| 3 | Oct 28 | Squat retargeted, side-by-side video | **A: squat replay** |
-| 4 | Oct 29 | Physics PD playback; MJX env; first PPO run | training curve going down |
-| 5 | Oct 30 | Squat tracked in physics; sports clips through steps 1–3 | **B: backup demo video recorded** |
-| 6 | Oct 31 | Muse Spark reward-agent loop on 2 sports moves | error drops across iterations |
-| 7 | Nov 1 | Multi-move policy (kick, jump, lunge, ...) + domain randomization | **C: 3+ sports moves in physics** |
-| 8 | Nov 2 | Llama critic fine-tune *or* more moves and metrics | **feature freeze at end of day** |
-| 9 | Nov 3 | App, README, results charts, 2–3 min video | |
-| 10 | Nov 4 | Submit by midday | |
-| | Nov 5–8 | Rehearse the live demo (top 5 present live on Nov 9) | demo runs in under 2 min |
+Bonus prizes in reach: Best Agentic Use-Case ($5K), Best Build on Meta Open Weight Models ($10K), Most Viral ($20K, post on X).
 
-**Cut order if behind:** Llama fine-tune → multi-move policy → domain randomization. Milestones A and B are never cut.
+## Pipeline
+1. **SAM 3.1** tracks the athlete → masked crops (`track.py`) ✅
+2. MediaPipe 3D pose + 2D root motion → metric human trajectory (`pose.py`) ✅. Upgrade to SAM 3D Body if time allows.
+3. mink IK onto the G1 (feet, knees, pelvis, elbows, hands, torso orientation) → mjlab CSV (`retarget.py`) ✅
+4. **mjlab** PPO motion tracking on GPU → policy, video, metrics (`notebooks/video_to_policy.ipynb`, `mjlab_rollout.py`) ✅ written, **not yet run on a GPU**
+5. **Reward agent:** Muse Wonder watches the reference and rollout videos and reads the metrics, then edits reward weights and termination thresholds and retrains. Each round is logged.
+6. **Open-weights critic:** fine-tune Muse Glimmer or Spark Open on simulator-labelled rollouts (Modal / Fireworks).
+
+## Milestones (submit by Wed Nov 4, 9 PM ET)
+| Day | Date | Goal |
+|---|---|---|
+| 1 | Mon Oct 26 | **One clip → trained policy, end to end** (squat) |
+| 2 | Oct 27 | Policy quality on the squat; 3 sports clips through steps 1–3; Agents 101 session |
+| 3 | Oct 28 | Reward agent v1 (Muse Wonder/Spark) on a move the default reward fails |
+| 4 | Oct 29 | Agent loop measurably improves tracking; **backup demo video recorded** |
+| 5 | Oct 30 | Multi-move: kick, jump, lunge; Fireworks fine-tuning session |
+| 6 | Oct 31 | Rollout dataset for the critic; start the fine-tune |
+| 7 | Nov 1 | Critic fine-tuned and compared with Muse Spark |
+| 8 | Nov 2 | Upload-a-clip demo app; **feature freeze** |
+| 9 | Nov 3 | README, charts, 3-min video, X post |
+| 10 | Nov 4 | Buffer, submit before 9 PM ET |
+
+**Cut order if behind:** critic fine-tune → multi-move → app polish. Never cut: Day 1 end-to-end, and the Day 4 backup video.
 
 ## Compute
-- **Colab** (L4/A100): day-to-day development.
-- **Modal** ($100, for Meta open-weights models): SAM 3.1 on H100 (FlashAttention 3 works there), SAM 3D Body batch runs, Llama fine-tune.
-- **Meta Model API** ($150): Muse Spark reward-agent calls.
-- RL training: Colab A100 or Modal, whichever credits allow.
+- Colab A100: mjlab training. Modal ($100): batch SAM and the fine-tune. Meta API ($150): agent calls. Fireworks: Muse Open fine-tuning, if selected.

@@ -14,6 +14,10 @@ import numpy as np
 
 import config
 
+if not mediapy.video_is_available():  # no system ffmpeg (e.g. a Mac without Homebrew ffmpeg)
+    import imageio_ffmpeg
+    mediapy.set_ffmpeg(imageio_ffmpeg.get_ffmpeg_exe())
+
 
 def load_g1(xml_path: Path = config.G1_SCENE_XML):
     """Return (model, data) for the G1 scene, reset to the 'stand' keyframe."""
@@ -75,16 +79,16 @@ def render_physics(model, data, seconds=3.0, fps=30, size=(480, 640), ctrl_fn=No
 def save_video(frames, path, fps=30):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    if not mediapy.video_is_available():  # no system ffmpeg (e.g. a Mac without Homebrew ffmpeg)
-        import imageio_ffmpeg
-        mediapy.set_ffmpeg(imageio_ffmpeg.get_ffmpeg_exe())
     mediapy.write_video(str(path), frames, fps=fps)
     return path
 
 
 def side_by_side(athlete_frames, robot_frames):
-    """Day 3: stack athlete and robot frames horizontally (resized to the same height)."""
-    raise NotImplementedError("Day 3")
+    """Stack athlete and robot frames horizontally at the robot's height."""
+    h = robot_frames.shape[1]
+    athlete = mediapy.resize_video(athlete_frames, (h, round(athlete_frames.shape[2] * h / athlete_frames.shape[1])))
+    n = min(len(athlete), len(robot_frames))
+    return np.concatenate([athlete[:n], robot_frames[:n]], axis=2)
 
 
 if __name__ == "__main__":
