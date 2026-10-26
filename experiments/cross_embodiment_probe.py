@@ -14,6 +14,7 @@ rendered from the same viewpoint as the video, plus the robot replaying that cli
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -55,41 +56,102 @@ def unit(x):
     return x / np.linalg.norm(x, axis=-1, keepdims=True)
 
 
+AZ_BUCKET = 15  # degrees: robot renders are cached per viewpoint bucket
+
+
+def cached_bank(vj, g1, az):
+    """Bank motions -> dense robot latents for one viewpoint bucket, cached on disk. Rendering
+    26 motions dominates the probe's run time, and clips filmed from similar angles share it."""
+    import config
+    bucket = int(round(az / AZ_BUCKET) * AZ_BUCKET)
+    cache = config.OUTPUT_DIR / "cache"
+    cache.mkdir(parents=True, exist_ok=True)
+    f = cache / f"bank_dense_az{bucket:+04d}_sil{silhouette.VERSION}.npz"
+    if f.exists():
+        d = np.load(f)
+        return {k: d[k] for k in d.files}, bucket
+    qf = cache / "bank_qpos.npz"
+    if qf.exists():
+        bank = dict(np.load(qf))
+    else:
+        bank = motion_bank.motion_bank()
+        np.savez(qf, **bank)
+    t0 = time.time()
+    dense = {k: vj.embed_dense(silhouette.robot_silhouettes(g1, q, azimuth=bucket)) for k, q in bank.items()}
+    np.savez(f, **dense)
+    print(f"rendered + embedded {len(dense)} bank motions at {bucket} deg in {time.time() - t0:.0f} s", flush=True)
+    return dense, bucket
+
+
+def chamfer(H, R):
+    """Order-free match: every human moment finds its best robot moment and vice versa.
+    Robust to rep counts and tempo."""
+    S = H @ R.T
+    return 0.5 * (S.max(1).mean() + S.max(0).mean())
+
+
+def dtw(H, R):
+    """Order-aware match: dynamic time warping of the human sequence against the robot sequence
+    (repeated to cover the human clip, so 1 robot rep can align with several human reps)."""
+    R = np.concatenate([R] * int(np.ceil(len(H) / len(R))))
+    cost = 1 - H @ R.T
+    n, m = cost.shape
+    D = np.full((n + 1, m + 1), np.inf)
+    D[0, 0] = 0
+    L = np.zeros((n + 1, m + 1))
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            prev = min(((D[i - 1, j - 1], L[i - 1, j - 1]), (D[i - 1, j], L[i - 1, j]), (D[i, j - 1], L[i, j - 1])))
+            D[i, j], L[i, j] = cost[i - 1, j - 1] + prev[0], prev[1] + 1
+    end = int(np.argmin(D[n, 1:] / L[n, 1:])) + 1  # open end: the robot sequence may stop early
+    return 1 - D[n, end] / L[n, end]
+
+
+SCORES = {"clip_mean": lambda H, R: float(unit(H.mean(0)) @ unit(R.mean(0))), "chamfer": chamfer, "dtw": dtw}
+
+
 def main(dirs, out):
     dirs = [_processed(d) for d in dirs]
     vj = VJepa()
     g1 = render.load_g1()[0]
-    bank = motion_bank.motion_bank()
 
     human = {}
     for d in map(Path, dirs):
-        emb, _ = video_latent(d, vj)
-        human[d.name] = {"emb": emb, "az": json.loads((d / "meta.json").read_text())["view_azimuth"],
-                         "own": np.load(d / "qpos.npy")}
-    h_mean = np.concatenate([h["emb"] for h in human.values()]).mean(0)
+        video_latent(d, vj)
+        lat = np.load(d / "video_latent.npz")
+        human[d.name] = {"dense": lat["dense"], "az": float(lat["view_azimuth"]), "own": np.load(d / "qpos.npy")}
+    # Centre each domain on its own mean: shared "human" / "robot silhouette" appearance cancels.
+    h_mean = np.concatenate([h["dense"] for h in human.values()]).mean(0)
 
-    results = {}
+    results, hits = {}, {k: [] for k in SCORES}
     for name, h in human.items():
-        robot = {k: vj.embed_windows(silhouette.robot_silhouettes(g1, q, azimuth=h["az"]))[0] for k, q in bank.items()}
-        own = vj.embed_windows(silhouette.robot_silhouettes(g1, h["own"], azimuth=h["az"]))[0]
-        r_mean = np.concatenate(list(robot.values())).mean(0)
-        hv = unit(h["emb"].mean(0) - h_mean)
-        sims = {k: float(unit(v.mean(0) - r_mean) @ hv) for k, v in robot.items()}
-        sims["(own retarget)"] = float(unit(own.mean(0) - r_mean) @ hv)
-        ranked = sorted(sims.items(), key=lambda kv: -kv[1])
+        bank, bucket = cached_bank(vj, g1, h["az"])
+        r_mean = np.concatenate(list(bank.values())).mean(0)
+        own = vj.embed_dense(silhouette.robot_silhouettes(g1, h["own"], azimuth=bucket))
+        H = unit(h["dense"] - h_mean)
+        robots = {k: unit(v - r_mean) for k, v in bank.items()} | {"(own retarget)": unit(own - r_mean)}
         prefix = next((p for c, p in CATEGORY.items() if name.lower().startswith(c)), None)
-        bank_ranked = [k for k, _ in ranked if k != "(own retarget)"]
-        hit = next((i + 1 for i, k in enumerate(bank_ranked) if prefix and k.startswith(prefix)), None)
-        results[name] = {"view_azimuth": h["az"], "rank_of_same_action": hit, "top5": ranked[:5],
-                         "own_retarget": sims["(own retarget)"]}
-        print(f"\n{name} (viewpoint {h['az']:.0f} deg): same action ranks #{hit} of {len(bank_ranked)} bank motions")
-        for k, s in ranked[:5]:
-            print(f"   {s:+.3f}  {k}")
+        prefixes = prefix if isinstance(prefix, tuple) else (prefix,) if prefix else ()
+        res = {"view_azimuth": h["az"], "bucket": bucket}
+        print(f"\n{name} (viewpoint {h['az']:.0f} deg, {len(H)} latent steps)", flush=True)
+        for score_name, fn in SCORES.items():
+            sims = {k: float(fn(H, R)) for k, R in robots.items()}
+            ranked = sorted(sims.items(), key=lambda kv: -kv[1])
+            bank_ranked = [k for k, _ in ranked if k != "(own retarget)"]
+            hit = next((i + 1 for i, k in enumerate(bank_ranked) if any(k.startswith(p) for p in prefixes)), None)
+            own_rank = [k for k, _ in ranked].index("(own retarget)") + 1
+            if hit:
+                hits[score_name].append(hit)
+            res[score_name] = {"rank_of_same_action": hit, "own_retarget_rank": own_rank, "top5": ranked[:5]}
+            print(f"  {score_name:9s}: same action #{hit}, own retarget #{own_rank} | top: "
+                  + ", ".join(f"{k} {v:+.2f}" for k, v in ranked[:4]), flush=True)
+        results[name] = res
 
-    hits = [r["rank_of_same_action"] for r in results.values() if r["rank_of_same_action"]]
-    if hits:
-        print(f"\ntop-1 accuracy {np.mean([h == 1 for h in hits]):.0%}, top-3 {np.mean([h <= 3 for h in hits]):.0%}"
-              f" over {len(hits)} clips (chance top-1 ~{1 / len(bank):.0%})")
+    print()
+    for score_name, hs in hits.items():
+        if hs:
+            print(f"{score_name:9s}: top-1 {np.mean([x == 1 for x in hs]):.0%}, top-3 {np.mean([x <= 3 for x in hs]):.0%}"
+                  f", mean rank {np.mean(hs):.1f} over {len(hs)} clips (26 bank motions; chance top-1 ~4%)")
     Path(out).mkdir(parents=True, exist_ok=True)
     (Path(out) / "cross_embodiment.json").write_text(json.dumps(results, indent=1))
 

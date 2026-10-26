@@ -8,12 +8,15 @@ import numpy as np
 from scipy.ndimage import uniform_filter1d
 
 SIZE = 256
+VERSION = 2  # bump when framing changes, so cached latents are recomputed
 
 
-def normalize(masks, size=SIZE, pad=0.25):
+def normalize(masks, size=SIZE, body_frac=0.6, feet_at=0.85):
     """(T, H, W) bool masks -> (T, size, size, 3) uint8 white-on-black, one crop for the whole
-    clip: square side from the largest body extent, horizontal centre follows the body slowly
-    (about a second), vertical centre fixed, so jumps and squats stay visible as motion."""
+    clip. Scale: the standing body height (90th percentile of mask height, robust to squats and
+    stray mask pixels) fills `body_frac` of the frame, so a human and the robot appear the same
+    size. Position: feet anchored at `feet_at` of the frame height (median foot level, so jumps
+    still rise), horizontal centre following the body over about a second."""
     import cv2
 
     T, H, W = masks.shape
@@ -27,10 +30,10 @@ def normalize(masks, size=SIZE, pad=0.25):
     t_all = np.arange(T)
     for j in range(4):
         box[:, j] = np.interp(t_all, t_all[seen], box[seen, j])
-    extent = max(np.max(box[:, 2] - box[:, 0]), np.max(box[:, 3] - box[:, 1]))
-    side = int(extent * (1 + 2 * pad))
+    height = np.percentile(box[seen, 3] - box[seen, 1], 90)
+    side = int(height / body_frac)
     cx = uniform_filter1d((box[:, 0] + box[:, 2]) / 2, size=31, mode="nearest")
-    cy = np.full(T, np.median((box[:, 1] + box[:, 3]) / 2))
+    cy = np.full(T, np.median(box[seen, 3]) - feet_at * side + side / 2)
 
     padded = np.zeros((H + 2 * side, W + 2 * side), np.uint8)
     out = np.empty((T, size, size, 3), np.uint8)
@@ -42,7 +45,7 @@ def normalize(masks, size=SIZE, pad=0.25):
     return out
 
 
-def robot_masks(model, qpos, azimuth=135.0, elevation=-5.0, distance=4.0, size=512):
+def robot_masks(model, qpos, azimuth=135.0, elevation=-5.0, distance=4.0, size=384):
     """(T, size, size) robot masks rendered from a viewpoint matching the video. The camera
     follows the pelvis horizontally only, at a fixed height, so vertical motion is kept."""
     data = mujoco.MjData(model)

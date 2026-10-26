@@ -17,6 +17,10 @@ from latent.vjepa import VJepa
 
 def video_latent(out_dir, vj=None):
     out_dir = Path(out_dir)
+    cached = out_dir / "video_latent.npz"
+    if cached.exists() and int(np.load(cached).get("sil_version", 0)) == silhouette.VERSION:
+        d = np.load(cached)
+        return d["emb"], d["starts"]
     masks = np.load(out_dir / "masks.npz")["masks"]
     meta = json.loads((out_dir / "meta.json").read_text())
     sil = silhouette.athlete_silhouettes(masks)
@@ -24,8 +28,8 @@ def video_latent(out_dir, vj=None):
     vj = vj or VJepa()
     emb, starts = vj.embed_windows(sil)
     dense = vj.embed_dense(sil)
-    np.savez(out_dir / "video_latent.npz", emb=emb, starts=starts, dense=dense, fps=meta["fps"],
-             view_azimuth=meta["view_azimuth"])
+    np.savez(cached, emb=emb, starts=starts, dense=dense, fps=meta["fps"],
+             view_azimuth=meta["view_azimuth"], sil_version=silhouette.VERSION)
     print(f"{out_dir.name}: {len(emb)} windows, {len(dense)} dense steps ({meta['fps'] / 2:.0f}/s) x {emb.shape[1]} dims")
     return emb, starts
 
