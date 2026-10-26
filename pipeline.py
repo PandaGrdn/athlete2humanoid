@@ -29,6 +29,7 @@ def video_to_motion(video_path, out_dir=None, use_sam=True, prompt=config.SAM_PR
     if use_sam:
         masks = track.athlete_masks(video_path, len(frames), prompt=prompt)
         print(f"SAM 3.1: athlete visible in {masks.any((1, 2)).mean():.0%} of frames")
+        np.savez_compressed(out_dir / "masks.npz", masks=masks)  # for the latent (silhouette) stage
         render.save_video(track.overlay(frames, masks), out_dir / "tracking.mp4", fps=fps)
     else:
         masks = np.ones(frames.shape[:3], bool)
@@ -36,7 +37,7 @@ def video_to_motion(video_path, out_dir=None, use_sam=True, prompt=config.SAM_PR
 
     world, image_xy, vis = pose.landmarks_from_crops(crops, fps)
     print(f"pose found in {(~np.isnan(world[:, 0, 0])).mean():.0%} of frames")
-    human = pose.human_trajectory(world, image_xy, boxes)
+    human, view_azimuth = pose.human_trajectory(world, image_xy, boxes, return_view=True)
     np.save(out_dir / "human.npy", human)
 
     rt = retarget.G1Retargeter()
@@ -50,7 +51,9 @@ def video_to_motion(video_path, out_dir=None, use_sam=True, prompt=config.SAM_PR
     csv = retarget.export_mjlab_csv(qpos, out_dir / "motion.csv")
     robot = render.render_qpos_sequence(rt.model, qpos, size=(480, 480))
     render.save_video(render.side_by_side(frames, robot), out_dir / "side_by_side.mp4", fps=fps)
-    return {"csv": csv, "fps": fps, "frames": len(qpos), "out_dir": out_dir}
+    meta = {"fps": fps, "frames": len(qpos), "view_azimuth": view_azimuth, "sam": use_sam}
+    (out_dir / "meta.json").write_text(json.dumps(meta, indent=1))
+    return {"csv": csv, "out_dir": out_dir, **meta}
 
 
 if __name__ == "__main__":

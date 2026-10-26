@@ -55,9 +55,11 @@ def fill_and_smooth(x, window=9):
     return flat.reshape(x.shape)
 
 
-def human_trajectory(world, image_xy, boxes):
+def human_trajectory(world, image_xy, boxes, return_view=False):
     """Combine hip-centred 3D pose with the hips' 2D image motion -> (T, 33, 3) metres,
-    z-up, ground not yet set, athlete facing +x.
+    z-up, ground not yet set, athlete facing +x. With return_view, also the video camera's
+    viewing direction as a MuJoCo camera azimuth (degrees) in that athlete-facing frame, so the
+    robot can be rendered from the same viewpoint.
 
     MediaPipe world landmarks have no global translation (the hips are always at the origin),
     so a jump would vanish. We recover root motion in the image plane from the 2D hip track,
@@ -83,14 +85,19 @@ def human_trajectory(world, image_xy, boxes):
 
     # Chirality check: the nose should be in front of the ears in the facing direction
     # derived from the hips. If not, the depth axis is mirrored for this clip; flip it.
+    view = np.array([0.0, 1.0, 0.0])  # the camera looks along +depth
     if np.median(_facing_dot(P)) < 0:
         P[..., 1] *= -1
+        view[1] = -1.0
 
     # Rotate about z so the athlete faces +x (the G1's forward).
     fwd = np.median(_forward(P), axis=0)
     yaw = np.arctan2(fwd[1], fwd[0])
     c, s = np.cos(-yaw), np.sin(-yaw)
     rot = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
+    if return_view:
+        v = rot @ view
+        return P @ rot.T, float(np.degrees(np.arctan2(v[1], v[0])))
     return P @ rot.T
 
 
