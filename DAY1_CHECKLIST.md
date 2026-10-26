@@ -21,7 +21,7 @@
 ## Day 1 (Oct 26)
 
 1. **Kickoff.** Record the answers below.
-2. Open `notebooks/day1_setup.ipynb` in Colab (File → Upload notebook, or open it from GitHub), set `REPO_URL`, and run it top to bottom.
+2. Open `notebooks/video_to_policy.ipynb` in Colab (A100) and run it top to bottom.
 3. Upload your chosen clip to Drive at `a2h/clips/raw.mp4`, set `START` and `DURATION` in step 6, and re-run step 6 until SAM tracks the right person in every frame.
 
 ### Kickoff answers

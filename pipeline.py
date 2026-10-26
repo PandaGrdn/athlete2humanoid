@@ -27,8 +27,8 @@ def video_to_motion(video_path, out_dir=None, use_sam=True, prompt=config.SAM_PR
     frames = np.asarray(video)
 
     if use_sam:
-        masks, obj_id = track.main_track_masks(track.track(video_path, prompt=prompt), len(frames))
-        print(f"SAM 3.1: athlete = object {obj_id}, visible in {masks.any((1, 2)).mean():.0%} of frames")
+        masks = track.athlete_masks(video_path, len(frames), prompt=prompt)
+        print(f"SAM 3.1: athlete visible in {masks.any((1, 2)).mean():.0%} of frames")
         render.save_video(track.overlay(frames, masks), out_dir / "tracking.mp4", fps=fps)
     else:
         masks = np.ones(frames.shape[:3], bool)

@@ -24,6 +24,9 @@ MUSE_MODEL = os.environ.get("MUSE_MODEL", "muse-spark-1.1")
 
 # SAM 3.1 open weights (gated on Hugging Face: request access at huggingface.co/facebook/sam3.1).
 SAM_PROMPT = os.environ.get("A2H_SAM_PROMPT", "athlete")
+# SAM 3.1 pins numpy<2, so it lives in its own Python 3.12 env. Point this at that env's python
+# and pipeline.py runs sam_track.py there; leave unset to import sam3 in-process.
+SAM_PYTHON = os.environ.get("A2H_SAM_PYTHON")
 
 for _d in (OUTPUT_DIR, CLIPS_DIR, ASSETS_DIR):
     _d.mkdir(parents=True, exist_ok=True)

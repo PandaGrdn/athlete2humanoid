@@ -1,14 +1,14 @@
-# Core (days 1-5). SAM 3.1 is installed separately from its git repo (see the day-1 notebook).
+# Main environment (Colab's own Python, numpy 2). SAM 3.1 and mjlab each get their own
+# virtualenv; see notebooks/video_to_policy.ipynb.
 mujoco>=3.3
 mink
 daqp
 mediapy
 imageio-ffmpeg
-numpy<2          # sam3 pins numpy<2; keep everything on the same side
-scipy>=1.14,<1.17   # 1.17+ needs numpy 2 (breaks mink via qpsolvers)
+numpy
+scipy
 opencv-python
 openai           # Meta Model API is OpenAI-compatible
 huggingface_hub
 mediapipe        # day 2
 gradio           # day 5
-# Days 6-8: pip install playground "numpy<2"   (MuJoCo Playground: MJX + Brax PPO; resolves to jax 0.7.x)

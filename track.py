@@ -4,6 +4,10 @@ Needs a CUDA GPU (Colab L4 or A100; T4 is too old for the attention kernels) and
 access to the gated checkpoint at huggingface.co/facebook/sam3.1 (log in with an HF token).
 """
 
+import subprocess
+import tempfile
+from pathlib import Path
+
 import numpy as np
 
 import config
@@ -32,6 +36,20 @@ def track(video_path, prompt=config.SAM_PROMPT, frame_index=0):
         outputs[resp["frame_index"]] = resp["outputs"]
     p.handle_request(dict(type="close_session", session_id=session_id))
     return outputs
+
+
+def athlete_masks(video_path, n_frames, prompt=config.SAM_PROMPT):
+    """(n_frames, H, W) athlete masks, running SAM in its own env when A2H_SAM_PYTHON is set."""
+    if not config.SAM_PYTHON:
+        return main_track_masks(track(video_path, prompt=prompt), n_frames)[0]
+    with tempfile.TemporaryDirectory() as tmp:
+        out = f"{tmp}/masks.npz"
+        subprocess.run([config.SAM_PYTHON, str(config.ROOT / "sam_track.py"), str(Path(video_path).resolve()),
+                        "--prompt", prompt, "--out", out], check=True, cwd=config.ROOT)
+        masks = np.load(out)["masks"]
+    if len(masks) < n_frames:  # SAM gave no output for trailing frames
+        masks = np.concatenate([masks, np.zeros((n_frames - len(masks), *masks.shape[1:]), bool)])
+    return masks[:n_frames]
 
 
 def main_track_masks(outputs, n_frames):

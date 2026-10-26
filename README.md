@@ -19,11 +19,11 @@ Turn any athlete video into a Unitree G1 humanoid performing the same move.
 | `notebooks/video_to_policy.ipynb` | 1 | ✅ Colab: clip → SAM → pose → retarget → mjlab PPO → policy video |
 | `app.py` | 5 | ⬜ Gradio demo |
 | `train_rl.py` | 6–8 | ⬜ physics playback, PPO imitation (MuJoCo Playground) |
-| `notebooks/day1_setup.ipynb` | 1 | ✅ runs every day-1 check in Colab |
+
 
 ## Run it
 
-**Colab (main path):** open `notebooks/day1_setup.ipynb` and follow the instructions at the top.
+**Colab (main path):** open `notebooks/video_to_policy.ipynb` on an A100 and run it top to bottom.
 
 **Locally (robot parts only, no GPU needed):**
 ```bash
@@ -37,7 +37,7 @@ python pipeline.py clips/your_clip.mp4 --no-sam   # outputs/your_clip/side_by_si
 ## Gotchas found during setup
 
 - **SAM 3.1** defaults to FlashAttention 3, which only runs on H100s. `track.py` passes `use_fa3=False`, and you need an **L4 or A100**; a T4 won't work.
-- **sam3 pins `numpy<2`**, so the whole project stays on numpy 1.26. That needs `scipy<1.17`, since newer SciPy crashes mink on import. The notebook's install cell restarts the runtime when numpy gets downgraded.
+- **sam3 pins `numpy<2`**, which has no Python 3.13 build (Colab's current Python). SAM 3.1 runs in its own Python 3.12 env via `sam_track.py`, and mjlab in another; the main env keeps Colab's numpy 2.
 - **G1 "stand" keyframe has straight knees,** a singularity where IK can't start a knee bend and tilts the pelvis instead. `retarget.bent_knee_pose` starts from a slight crouch.
 - **mink `lm_damping`** is left at 0 (the default). Tested from the straight-knee pose, any value above 0 stalled the solver about 13 cm short of the target.
 - **G1 IK costs** (`retarget.py`) were tuned on a synthetic squat: feet flat (cost 5), pelvis orientation soft (0.1), torso upright (1.0). Re-check them on real clips.
