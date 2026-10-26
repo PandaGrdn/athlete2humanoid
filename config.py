@@ -35,11 +35,12 @@ SECRETS_DIR = Path(os.environ.get("A2H_SECRETS_DIR", "/content/drive/MyDrive/a2h
 
 
 def get_secret(name, required=True):
-    """Look up a secret: environment variable, then SECRETS_DIR/<name>[.txt], then the repo's
-    .env file, then Colab's secrets panel. Also exports it to os.environ so subprocesses
-    (SAM's own env, huggingface_hub) see it. Never prints the value."""
+    """Look up a secret: environment variable, then SECRETS_DIR/<name>[.txt|.rtf|.txt.rtf], then
+    the repo's .env file, then Colab's secrets panel. Also exports it to os.environ so
+    subprocesses (SAM's own env, huggingface_hub) see it. Never prints the value."""
     value = os.environ.get(name)
-    for path in (SECRETS_DIR / name, SECRETS_DIR / f"{name}.txt"):
+    for suffix in ("", ".txt", ".rtf", ".txt.rtf"):
+        path = SECRETS_DIR / f"{name}{suffix}"
         if not value and path.is_file():
             value = _read_secret_file(path, name)
     if not value and (SECRETS_DIR / f"{name}.gdoc").exists():
@@ -61,18 +62,33 @@ def get_secret(name, required=True):
     return value
 
 
+_QUOTES = "\"'\u201c\u201d\u2018\u2019"  # straight and curly (TextEdit "smart quotes")
+
+
 def _read_secret_file(path, name):
-    """Accepts `NAME = "value"`, `NAME=value`, or just the value on the first line."""
-    for line in path.read_text().splitlines():
+    """Accepts `NAME = "value"`, `NAME=value`, or just the value on the first line; plain text
+    or RTF (TextEdit's default format)."""
+    text = path.read_text(errors="ignore")
+    if path.suffix == ".rtf":
+        return _secret_from_rtf(text, name)
+    for line in text.splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
             continue
         key, sep, rest = line.partition("=")
         if sep and key.strip() == name:
-            return rest.strip().strip("\"'")
+            return rest.strip().strip(_QUOTES)
         if not sep and path.name.startswith(name):
-            return line.strip("\"'")
+            return line.strip(_QUOTES)
     return None
+
+
+def _secret_from_rtf(text, name):
+    """Find NAME = value inside RTF markup, skipping quote escapes like \\'93 or \\uc0\\u8220."""
+    import re
+    skip = r"(?:\\'[0-9a-fA-F]{2}|\\uc\d+ ?|\\u-?\d+ ?\??|[\s\"'\u201c\u201d\u2018\u2019])*"
+    m = re.search(rf"{re.escape(name)}\s*={skip}([A-Za-z0-9_\-.]{{8,}})", text)
+    return m.group(1) if m else None
 
 
 for _d in (OUTPUT_DIR, CLIPS_DIR, ASSETS_DIR):
