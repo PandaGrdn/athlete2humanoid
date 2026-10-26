@@ -6,3 +6,4 @@ assets/mujoco_menagerie/
 .env
 __pycache__/
 .ipynb_checkpoints/
+.DS_Store
