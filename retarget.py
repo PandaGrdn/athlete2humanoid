@@ -39,13 +39,18 @@ TORSO_COST = 1.0
 
 def bent_knee_pose(model, knee=0.5):
     """The 'stand' keyframe has straight knees: an IK singularity where the solver can't start
-    a knee bend and tilts the whole pelvis instead. Start from a slight crouch, feet still flat."""
+    a knee bend and tilts the whole pelvis instead. Start from a slight crouch, feet flat and
+    lowered back onto the floor (bending the knees alone would leave them hovering)."""
     data = mujoco.MjData(model)
     mujoco.mj_resetDataKeyframe(model, data, model.key("stand").id)
+    mujoco.mj_kinematics(model, data)
+    ankle_z = data.body("left_ankle_roll_link").xpos[2]
     for side in ("left", "right"):
         data.joint(f"{side}_hip_pitch_joint").qpos = -knee / 2
         data.joint(f"{side}_knee_joint").qpos = knee
         data.joint(f"{side}_ankle_pitch_joint").qpos = -knee / 2
+    mujoco.mj_kinematics(model, data)
+    data.qpos[2] -= data.body("left_ankle_roll_link").xpos[2] - ankle_z
     return data.qpos.copy()
 
 
@@ -183,16 +188,25 @@ def export_mjlab_csv(qpos, path):
     return path
 
 
-if __name__ == "__main__":
-    # Smoke test: keep the feet planted, lower the pelvis 25 cm and back up, i.e. a squat.
-    rt = G1Retargeter()
+def synthetic_squat(rt: G1Retargeter, depth=0.25, reps=2, fps=30, hold_s=1.0, rep_s=2.0):
+    """A motion the G1 can certainly do, for testing training independently of video:
+    stand still, `reps` smooth squats of `depth` metres with the feet planted, stand still."""
     feet = {k: rt.frame_position(k) for k in ("left_foot", "right_foot")}
     pelvis0 = rt.frame_position("pelvis")
-    depth = 0.25 * np.sin(np.linspace(0, np.pi, 60))
-    seq = [{**feet, "pelvis": pelvis0 - [0, 0, d]} for d in depth]
+    phase = np.linspace(0, 2 * np.pi * reps, int(rep_s * reps * fps), endpoint=False)
+    still = np.zeros(int(hold_s * fps))
+    dz = np.concatenate([still, depth * (1 - np.cos(phase)) / 2, still, [0.0]])
+    return [{**feet, "pelvis": pelvis0 - [0, 0, d]} for d in dz]
+
+
+if __name__ == "__main__":
+    # Smoke test and training sanity check: a grounded synthetic squat, exported for mjlab.
+    rt = G1Retargeter()
+    seq = synthetic_squat(rt)
     qpos = rt.retarget_sequence(seq)
     report = tracking_report(rt, qpos, seq)
     print({k: f"{v[1]:.1f} cm max" for k, v in report.items()})
+    print(f"{len(qpos)} frames at 30 fps, pelvis height {qpos[:, 2].min():.2f}-{qpos[:, 2].max():.2f} m")
     out = render.save_video(render.render_qpos_sequence(rt.model, qpos), config.OUTPUT_DIR / "g1_ik_squat.mp4")
     export_mjlab_csv(qpos, config.OUTPUT_DIR / "g1_ik_squat.csv")
-    print(f"saved {out}")
+    print(f"saved {out} and g1_ik_squat.csv")
