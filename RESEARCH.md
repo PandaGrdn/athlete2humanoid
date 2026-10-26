@@ -31,3 +31,18 @@ Background: [Eureka](https://arxiv.org/abs/2310.12931), [DrEureka](https://arxiv
 1. **Unseen targets:** jump-height and box-height sweeps beyond the clip; report success rate.
 2. **Push recovery:** the largest impulse survived in each phase.
 3. **Two-axis plot:** skill success and invariant pass rate against frame-matching error (MPJPE). Ablations: tracking only, skill only, both, and no Muse revision.
+
+## Result: V-JEPA 2 feasibility probe (2026-10-26, A100)
+`experiments/vjepa_probe.py`, ViT-L `facebook/vjepa2-vitl-fpc64-256`, 64 frames per clip, mean-pooled, cosine similarity after subtracting the clip set's mean embedding. All clips are the same G1 rendered identically.
+
+| Clip vs. reference squat | Group | V-JEPA (centred) | Joint-angle distance |
+|---|---|---|---|
+| fast squat (3 reps) | same | 0.913 | 0.059 |
+| trained policy rollout (physics) | same | 0.786 | 0.046 |
+| shallow squat | same | 0.734 | 0.028 |
+| march in place | different | 0.087 | 0.077 |
+| arm raise | different | -0.343 | 0.311 |
+| stand still | different | -0.413 | 0.078 |
+| bedroom jumps | different | -0.546 | 0.310 |
+
+Margin (worst same minus best different): **+0.647**. V-JEPA rates the fast squat as the closest match despite different timing; joint distance barely separates it from standing still. Caveats: 7 synthetic clips; raw cosine is about 0.87–1.0 for everything (shared appearance), so a reward needs a fixed, diverse motion bank to centre against.
