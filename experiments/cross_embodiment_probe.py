@@ -40,6 +40,7 @@ def _processed(path):
         import pipeline
         out = config.OUTPUT_DIR / path.stem.lower()
         if not (out / "masks.npz").exists():
+            config.get_secret("HF_TOKEN")  # SAM 3.1's subprocess downloads gated weights
             # 30 fps like the robot renders (phones often record 60), 720p for SAM and MediaPipe.
             out.mkdir(parents=True, exist_ok=True)
             clip = out / "clip30.mp4"
