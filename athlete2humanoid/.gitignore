@@ -1,0 +1,8 @@
+outputs/
+clips/*.mp4
+clips/*.mov
+assets/mujoco_menagerie/
+*.task
+.env
+__pycache__/
+.ipynb_checkpoints/
