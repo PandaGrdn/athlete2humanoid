@@ -49,7 +49,8 @@ def job_spec(a):
     if a.job == "robust":
         out, inp = f"{REMOTE}/outputs/robust" + (f"_{a.tag}" if a.tag else ""), f"{REMOTE}/inputs"
         return ("--with-main", f"python3 experiments/robustness_eval.py --runs {inp} --out {out} --target {a.target} {a.args}",
-                {"robust.json": f"{out}/robust.json", "rollouts.npz": f"{out}/rollouts.npz"})
+                {"robust.json": f"{out}/robust.json", "robust_summary.md": f"{out}/robust_summary.md",
+                 "rollouts.npz": f"{out}/rollouts.npz"})
     if a.job == "relevance":  # experiments/goal_relevance.py: V-JEPA importance + the counterfactual policies
         out, inp = f"{REMOTE}/outputs/relevance" + (f"_{a.tag}" if a.tag else ""), f"{REMOTE}/inputs"
         return ("--with-main", f"python3 experiments/goal_relevance.py --inputs {inp} --target {a.target} --out {out} "
@@ -130,8 +131,9 @@ def pack_reuse(src, policies=False, checkpoints=None):
         if policies:  # the robust job: the trained policies themselves, and their eval
             for q in [*src.glob("policy_*/model_*.pt"), *src.glob("policy_*/motion.npz")]:
                 tar.add(q, f"{q.parent.name}/{q.name}")
-            if (src / "eval.json").exists():
-                tar.add(src / "eval.json", "eval.json")
+            for name in ("eval.json", "task_spec.json", "importance.json"):  # task-first policies need the spec
+                if (src / name).exists():
+                    tar.add(src / name, name)
     return f
 
 
