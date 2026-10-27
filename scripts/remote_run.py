@@ -100,9 +100,9 @@ def pack_reuse(src):
         tar.add(src / "clips", "clips")
         for q in src.glob("policy_*/policy_qpos.npy"):
             tar.add(q, f"{q.parent.name}/{q.name}")
-        for f in ("reward.pt", "distill_report.json"):  # used only with --args "--reward ..."
-            if (src / f).exists():
-                tar.add(src / f, f)
+        for name in ("reward.pt", "distill_report.json"):  # used only with --args "--reward ..."
+            if (src / name).exists():
+                tar.add(src / name, name)
     return f
 
 
