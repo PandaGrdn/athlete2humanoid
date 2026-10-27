@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "tests" / "data" / "remote_latent"
 TRACKING = ("motion_global_root_pos", "motion_global_root_ori", "motion_body_pos",
             "motion_body_ori", "motion_body_lin_vel", "motion_body_ang_vel")
-HYBRID, LATENT = "A2H-Hybrid-Flat-Unitree-G1", "A2H-Latent-Flat-Unitree-G1"
+HYBRID, LATENT, PHASE = "A2H-Hybrid-Flat-Unitree-G1", "A2H-Latent-Flat-Unitree-G1", "A2H-LatentPhase-Flat-Unitree-G1"
 
 
 class RewardTermCfg:
@@ -37,16 +37,18 @@ def stub_env_cfg(play=False):
     """The parts of mjlab's G1 tracking env cfg that mjlab_tasks edits; tracking weights 1, thresholds 0.25."""
     actor = {k: None for k in ("command", "motion_anchor_pos_b", "motion_anchor_ori_b", "joint_pos")}
     return SimpleNamespace(observations={"actor": SimpleNamespace(terms=actor)},
-                           rewards={k: SimpleNamespace(weight=1.0) for k in TRACKING},
+                           rewards={k: SimpleNamespace(weight=1.0) for k in (*TRACKING, "action_rate_l2")},
                            terminations={k: SimpleNamespace(params={"threshold": 0.25})
-                                         for k in ("anchor_pos", "anchor_ori", "ee_body_pos")})
+                                         for k in ("anchor_pos", "anchor_ori", "ee_body_pos")},
+                           events={} if play else {"push_robot": None}, curriculum={})
 
 
 def import_mjlab_tasks(reward_config=None):
     """-> (module, {task_id: env_cfg}) with mjlab, torch, numpy and latent.reward_net stubbed."""
     registered = {}
     mods = {n: types.ModuleType(n) for n in (
-        "torch", "numpy", "latent.reward_net", "mjlab", "mjlab.tasks", "mjlab.managers",
+        "torch", "numpy", "latent.reward_net", "mjlab", "mjlab.tasks", "mjlab.managers", "mjlab.envs",
+        "mjlab.envs.mdp", "mjlab.managers.curriculum_manager", "mjlab.managers.termination_manager",
         "mjlab.managers.reward_manager", "mjlab.managers.observation_manager", "mjlab.tasks.registry", "mjlab.tasks.tracking",
         "mjlab.tasks.tracking.config", "mjlab.tasks.tracking.config.g1", "mjlab.tasks.tracking.config.g1.env_cfgs",
         "mjlab.tasks.tracking.config.g1.rl_cfg", "mjlab.tasks.tracking.rl")}
@@ -54,9 +56,15 @@ def import_mjlab_tasks(reward_config=None):
     rn.BODIES, rn.FPS, rn.WINDOW, rn.load_bundle, rn.window_center_step = (), 30.0, 32, None, None
     mods["mjlab.managers.reward_manager"].RewardTermCfg = RewardTermCfg
     mods["mjlab.managers.observation_manager"].ObservationTermCfg = lambda **kw: SimpleNamespace(**kw)
-    mods["mjlab.tasks.registry"].register_mjlab_task = lambda task_id, env_cfg, **kw: registered.update({task_id: env_cfg})
+    mods["mjlab.managers.termination_manager"].TerminationTermCfg = lambda **kw: SimpleNamespace(**kw)
+    mods["mjlab.managers.curriculum_manager"].CurriculumTermCfg = lambda **kw: SimpleNamespace(**kw)
+    mods["mjlab.envs"].mdp = mods["mjlab.envs.mdp"]
+    for f in ("is_alive", "is_terminated", "joint_acc_l2"):
+        setattr(mods["mjlab.envs.mdp"], f, f)
+    mods["mjlab.tasks.registry"].register_mjlab_task = lambda task_id, env_cfg, play_env_cfg, **kw: registered.update(
+        {task_id: env_cfg, task_id + "/play": play_env_cfg})
     mods["mjlab.tasks.tracking.config.g1.env_cfgs"].unitree_g1_flat_tracking_env_cfg = stub_env_cfg
-    mods["mjlab.tasks.tracking.config.g1.rl_cfg"].unitree_g1_tracking_ppo_runner_cfg = lambda: None
+    mods["mjlab.tasks.tracking.config.g1.rl_cfg"].unitree_g1_tracking_ppo_runner_cfg = lambda: SimpleNamespace(num_steps_per_env=24)
     mods["mjlab.tasks.tracking.rl"].MotionTrackingOnPolicyRunner = object
     env = {"A2H_REWARD_CONFIG": str(reward_config)} if reward_config else {}
     with mock.patch.dict(sys.modules, mods), mock.patch.dict(os.environ, env):
@@ -69,12 +77,26 @@ def import_mjlab_tasks(reward_config=None):
 
 
 def summary(cfg):
-    """An env cfg in reward_agent's config format (minus iterations)."""
+    """An env cfg in reward_agent's config format (minus iterations and stability)."""
     tracking = {cfg.rewards[k].weight for k in TRACKING if k in cfg.rewards}
     latent = cfg.rewards["latent"]
     return {"latent_weight": latent.weight, "sigma": latent.params["sigma"],
             "tracking_scale": tracking.pop() if tracking else 0.0,
-            "terminations": {k: t.params["threshold"] for k, t in cfg.terminations.items()}}
+            "terminations": {k: t.params["threshold"] for k, t in cfg.terminations.items() if "threshold" in t.params}}
+
+
+def stability(cfg):
+    """The env cfg's stability terms in reward_agent's format, or None if it has none."""
+    if "fallen" not in cfg.terminations:
+        return None
+    r, fallen = cfg.rewards, cfg.terminations["fallen"].params
+    weights = {k: r[k].weight if k in r else 0.0 for k in ("alive", "termination", "upright", "height", "feet_slip", "joint_acc")}
+    push = cfg.curriculum.get("push")
+    return weights | {"tilt_margin": r["upright"].params["margin"], "height_margin": r["height"].params["margin"],
+                      "fall_tilt": fallen["tilt_margin"], "fall_height": fallen["height_margin"],
+                      "action_rate": r["action_rate_l2"].weight,
+                      "push_scale": push.params["scale"] if push else 1.0,
+                      "push_ramp_iters": push.params["ramp_steps"] / 24 if push else None}
 
 
 class RewardConfigTest(unittest.TestCase):
@@ -88,8 +110,15 @@ class RewardConfigTest(unittest.TestCase):
             want = {k: v for k, v in ra.DEFAULTS[variant].items() if k != "iterations"}
             if variant == "latent":
                 want["terminations"] = {k: v for k, v in want["terminations"].items() if k != "ee_body_pos"}
+            want.pop("stability")
             self.assertEqual(summary(tasks[task]), want, task)
         self.assertEqual(mt.reward_config(0.2), {k: v for k, v in ra.DEFAULTS["hybrid"].items() if k != "iterations"})
+        self.assertEqual(mt.STABILITY, ra.STABILITY)
+        want = {k: v for k, v in ra.DEFAULTS["latent"]["stability"].items() if k != "hybrid"}
+        for task in (LATENT, PHASE):  # every stability term in the latent-only tasks, at its default
+            self.assertEqual(stability(tasks[task]), want, task)
+            self.assertNotIn("push", tasks[task + "/play"].curriculum)  # play: no pushes to scale
+        self.assertIsNone(stability(tasks[HYBRID]))  # opt-in for the hybrid
         src = (ROOT / "experiments" / "latent_policy.py").read_text()
         iters = int(re.search(r'"--iters", type=int, default=(\d+)', src).group(1))
         self.assertEqual(ra.DEFAULTS["hybrid"]["iterations"], iters)
@@ -102,11 +131,22 @@ class RewardConfigTest(unittest.TestCase):
         (self.tmp / "next_reward_config.json").write_text(json.dumps(nxt))
         _, tasks = import_mjlab_tasks(self.tmp / "next_reward_config.json")
         got = summary(tasks[HYBRID])
-        self.assertEqual(got, {k: v for k, v in nxt.items() if k != "iterations"})
+        self.assertEqual(got, {k: v for k, v in nxt.items() if k not in ("iterations", "stability")})
+        self.assertIsNone(stability(tasks[HYBRID]))  # the proposal's stability.hybrid is false
         self.assertEqual((got["tracking_scale"], got["sigma"]), (0.5, 0.2))
         latent = summary(tasks[LATENT])  # same weight, sigma, thresholds; still latent-only
         self.assertEqual((latent["tracking_scale"], latent["sigma"], latent["terminations"]["anchor_pos"]), (0.0, 0.2, 0.8))
         self.assertNotIn("ee_body_pos", latent["terminations"])
+
+    def test_stability_config_reaches_env_cfg(self):
+        rc = self.tmp / "rc.json"
+        rc.write_text(json.dumps({"stability": {"hybrid": True, "alive": 2.0, "fall_tilt": 0.5, "feet_slip": 0}}))
+        _, tasks = import_mjlab_tasks(rc)
+        for task in (HYBRID, LATENT, PHASE):
+            st = stability(tasks[task])
+            self.assertEqual((st["alive"], st["fall_tilt"], st["upright"]), (2.0, 0.5, -2.0), task)
+            self.assertNotIn("feet_slip", tasks[task].rewards)  # weight 0: left out
+        self.assertEqual(summary(tasks[HYBRID])["tracking_scale"], 0.2)  # still tracks, at 1/5
 
     def test_latent_reward_uses_sigma_param(self):
         mt, tasks = import_mjlab_tasks()
