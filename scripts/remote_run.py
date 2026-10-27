@@ -7,6 +7,8 @@
         # an earlier run's processed clips (no SAM) and its policies' rollouts (DAgger data)
     python3 scripts/remote_run.py robust --reuse outputs/remote_latent   # that run's policies under
         # perturbation (experiments/robustness_eval.py) -> outputs/remote_robust/robust.json
+    python3 scripts/remote_run.py relevance --reuse outputs/remote_latent_v2 --target squat_jump --iters 1000
+        # goal relevance (experiments/goal_relevance.py): V-JEPA importance + with/without --importance
 
 1. waits until at least --min-clips videos sit in clips/ and stop changing (copy finished)
 2. checks the HF token in .env before spending GPU time
@@ -43,6 +45,10 @@ def job_spec(a):
         out, inp = f"{REMOTE}/outputs/robust" + (f"_{a.tag}" if a.tag else ""), f"{REMOTE}/inputs"
         return ("--with-main", f"python3 experiments/robustness_eval.py --runs {inp} --out {out} --target {a.target} {a.args}",
                 {"robust.json": f"{out}/robust.json", "rollouts.npz": f"{out}/rollouts.npz"})
+    if a.job == "relevance":  # experiments/goal_relevance.py: V-JEPA importance + the counterfactual policies
+        out, inp = f"{REMOTE}/outputs/relevance" + (f"_{a.tag}" if a.tag else ""), f"{REMOTE}/inputs"
+        return ("--with-main", f"python3 experiments/goal_relevance.py --inputs {inp} --target {a.target} --out {out} "
+                f"--iters {a.iters} {a.args}", {"results.tar.gz": f"{out}/results.tar.gz"})
     out = f"{REMOTE}/outputs/latent_{'smoke' if a.smoke else a.tag or a.target}"
     cmd = f"python3 experiments/latent_policy.py {{clips}} --target {a.target} --out {out} --iters {a.iters} {a.args}"
     if a.reuse:
@@ -204,8 +210,8 @@ def main(a):
     OUT.mkdir(parents=True, exist_ok=True)
     setup, cmd, fetch = job_spec(a)
     found = [] if a.smoke or a.reuse else wait_for_clips(a.min_clips, a.max_wait_h)
-    if a.job == "robust" and not a.reuse:
-        raise SystemExit("robust needs --reuse <a latent run's results folder>")
+    if a.job in ("robust", "relevance") and not a.reuse:
+        raise SystemExit(f"{a.job} needs --reuse <a latent run's results folder>")
     inputs = pack_reuse(a.reuse, policies=a.job == "robust") if a.reuse else None
     if found:
         log(f"clips ready: {', '.join(p.name for p in found)}")
@@ -237,7 +243,7 @@ def main(a):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("job", choices=["probe", "latent", "robust"])
+    ap.add_argument("job", choices=["probe", "latent", "robust", "relevance"])
     ap.add_argument("--min-clips", type=int, default=6)
     ap.add_argument("--max-wait-h", type=float, default=8)
     ap.add_argument("--target", default="squat")

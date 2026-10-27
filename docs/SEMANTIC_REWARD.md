@@ -66,7 +66,7 @@ A person's clip has movements that don't serve the goal. For example, waving the
 
 - **The stage reward already ignores them.** A test checks that arm waving before the jump doesn't change success.
 - **The style terms still imitate them.** The `TimeWeighted` wrapper multiplies the latent and tracking terms by `A2H_IMPORTANCE`: per reference frame, how much that moment matters for the goal. Without it, every weight is 1.
-- **Producing `importance.json` is a separate piece of work** (the goal-relevance session):
+- **Producing `importance.json`**: `python -m skill.importance <clip>`; method and validation in `docs/GOAL_RELEVANCE.md`:
   - V-JEPA 2's predictor as a world model: mask time windows or body regions and measure how much harder the goal-event latents (takeoff, apex, landing) become to predict.
   - Checked by counterfactual ablations in simulation.
 
