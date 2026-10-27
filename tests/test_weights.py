@@ -95,6 +95,23 @@ class PickCheckpointTest(unittest.TestCase):
         self.assertIsNone(init_checkpoint("latent", [run]))
         self.assertEqual(init_checkpoint("task", [run, "task=/w/model_5.pt"]), Path("/w/model_5.pt"))
 
+    def test_mirror_lists_newest_settled_checkpoint(self):
+        import os
+        import time
+        from experiments.latent_policy import mirror_checkpoints
+        out = self.tmp / "out"
+        logs = out / "policy_task" / "logs" / "e" / "r"
+        logs.mkdir(parents=True)
+        for i in (250, 500):
+            (logs / f"model_{i}.pt").write_text(str(i))
+            os.utime(logs / f"model_{i}.pt", (time.time() - 60,) * 2)
+        (logs / "model_750.pt").write_text("still being written")  # too fresh to copy
+        self.assertEqual(mirror_checkpoints(out), {"policy_task": "policy_task/latest/model_500.pt"})
+        os.utime(logs / "model_750.pt", (time.time() - 60,) * 2)
+        mirror_checkpoints(out)
+        self.assertEqual([p.name for p in (out / "policy_task" / "latest").iterdir()], ["model_750.pt"])
+        self.assertEqual(json.loads((out / "checkpoints.json").read_text())["policy_task"], "policy_task/latest/model_750.pt")
+
     def test_resume_seeds_the_log_folder(self):
         from experiments.latent_policy import seed_checkpoint
         d = self.tmp / "new" / "policy_hybrid"
@@ -102,6 +119,29 @@ class PickCheckpointTest(unittest.TestCase):
         seed_checkpoint(d, "hybrid", self.tmp / "run")
         self.assertEqual([p.name for p in d.glob("logs/*/*/model_*.pt")], ["model_1999.pt"])
         seed_checkpoint(d, "phase", None)  # nothing to resume from: no-op
+
+
+class SyncTest(unittest.TestCase):
+    def test_sync_downloads_listed_checkpoints_once(self):
+        from types import SimpleNamespace
+        from scripts import remote_run as rr
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp)
+        calls = []
+
+        def colab(*args, timeout=600, check=True):
+            calls.append(args)
+            remote, local = args[3], Path(args[4])
+            local.write_text(json.dumps({"policy_task": "policy_task/latest/model_500.pt"})
+                             if remote.endswith("checkpoints.json") else "w")
+        with mock.patch.object(rr, "colab", colab), mock.patch.object(rr, "OUT", tmp), \
+                mock.patch.object(rr, "SESSION", "latent_x"), mock.patch.object(rr, "log"):
+            a = SimpleNamespace(job="latent", smoke=False, tag="x", target="squat")
+            rr.sync_checkpoints(a)
+            rr.sync_checkpoints(a)  # already there: only the index is fetched again
+        self.assertEqual([p.name for p in (tmp / "checkpoints" / "policy_task").iterdir()], ["model_500.pt"])
+        self.assertEqual(sum(c[3].endswith("model_500.pt") for c in calls), 1)
+        self.assertTrue(all(c[0] == "download" for c in calls))  # never exec: the kernel is busy
 
 
 if __name__ == "__main__":

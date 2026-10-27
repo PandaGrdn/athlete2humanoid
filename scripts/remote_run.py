@@ -22,7 +22,6 @@ Progress goes to outputs/remote_<job>/runner.log. Needs `colab` logged in (oauth
 
 import argparse
 import json
-import shutil
 import subprocess
 import sys
 import tarfile
@@ -203,30 +202,29 @@ def pull_log():
 
 def sync_checkpoints(a):
     """Newest checkpoint of every policy still training -> OUT/checkpoints/policy_*/ (a few MB each),
-    so a lost VM costs at most the last sync interval of training, not the run."""
+    so a lost VM costs at most the last sync interval of training, not the run. Plain downloads of
+    the paths experiments/latent_policy.py lists in checkpoints.json: the kernel is busy (keeper)."""
     if a.job != "latent":
         return
-    tar = f"{REMOTE}/ckpt_sync.tar"
+    out = latent_out(a)
     try:
-        _exec(f"""
-import glob, os, tarfile
-out = "{latent_out(a)}"
-with tarfile.open("{tar}", "w") as t:
-    for d in glob.glob(out + "/policy_*"):
-        c = sorted(glob.glob(d + "/logs/*/*/model_*.pt"), key=lambda p: int(p.rsplit("_", 1)[1][:-3]))
-        if c:
-            t.add(c[-1], os.path.basename(d) + "/" + os.path.basename(c[-1]))
-""")
-        colab("download", "-s", SESSION, tar, str(OUT / "ckpt_sync.tar"), timeout=600)
-        with tarfile.open(OUT / "ckpt_sync.tar") as t:
-            names = t.getnames()
-            if names:
-                shutil.rmtree(OUT / "checkpoints", ignore_errors=True)
-                t.extractall(OUT / "checkpoints", filter="data")
-        if names:
-            log("synced checkpoints: " + ", ".join(names))
+        colab("download", "-s", SESSION, f"{out}/checkpoints.json", str(OUT / "checkpoints.json"), timeout=120)
+        got = []
+        for name, rel in json.loads((OUT / "checkpoints.json").read_text()).items():
+            dst = OUT / "checkpoints" / name / Path(rel).name
+            if dst.exists():
+                continue
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            part = dst.with_suffix(".part")
+            colab("download", "-s", SESSION, f"{out}/{rel}", str(part), timeout=600)
+            for old in dst.parent.glob("model_*.pt"):
+                old.unlink()
+            part.rename(dst)
+            got.append(f"{name}/{dst.name}")
+        if got:
+            log("synced checkpoints: " + ", ".join(got))
     except Exception as e:
-        log(f"checkpoint sync failed: {e}")
+        log(f"checkpoint sync skipped: {str(e)[-200:]}")
 
 
 def fetch_results(fetch):

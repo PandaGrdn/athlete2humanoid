@@ -194,9 +194,14 @@ def main(a):
             cmd += ["--reward-config", Path(a.reward_config).resolve()]
         procs[name] = subprocess.Popen(list(map(str, cmd)), stdout=open(d / "train.log", "w"), stderr=subprocess.STDOUT)
         log(f"training {name} ({task}), log: {d / 'train.log'}")
-    for name, p in procs.items():
-        rc = p.wait()
-        log(f"{name} finished with code {rc}")
+    while procs:  # wait, keeping each policy's newest checkpoint where remote_run.py can sync it
+        for name, p in list(procs.items()):
+            if p.poll() is not None:
+                log(f"{name} finished with code {p.returncode}")
+                del procs[name]
+        mirror_checkpoints(out)
+        if procs:
+            time.sleep(60)
 
     # 5. evaluation with the real V-JEPA, in its dense embedding (comparable across runs), plus how
     # the reward network and the real centred embedding score each rollout in the reward's space
@@ -275,6 +280,31 @@ def init_checkpoint(name, specs):
             if c:
                 return c
     return None
+
+
+def mirror_checkpoints(out, settle_s=20):
+    """Each policy's newest finished checkpoint, copied to policy_<name>/latest/ and listed in
+    checkpoints.json: fixed paths that scripts/remote_run.py syncs with plain downloads while the
+    job runs (the Colab kernel is busy then, so it can't be asked to find them)."""
+    import os
+    import shutil
+    index = {}
+    for d in sorted(out.glob("policy_*")):
+        c = [p for p in d.glob("logs/*/*/model_*.pt") if time.time() - p.stat().st_mtime > settle_s]
+        if not c:
+            continue
+        newest = max(c, key=lambda p: int(p.stem.split("_")[1]))
+        dst = d / "latest" / newest.name
+        if not dst.exists():
+            dst.parent.mkdir(exist_ok=True)
+            shutil.copy(newest, dst.with_suffix(".tmp"))
+            os.replace(dst.with_suffix(".tmp"), dst)
+            for old in dst.parent.glob("model_*.pt"):
+                if old != dst:
+                    old.unlink()
+        index[d.name] = str(dst.relative_to(out))
+    (out / "checkpoints.json").write_text(json.dumps(index, indent=1))
+    return index
 
 
 def seed_checkpoint(d, name, resume_from):
