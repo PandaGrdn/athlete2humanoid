@@ -2,7 +2,7 @@
 
 
 def run_pipeline(video_path):
-    """track -> pose -> retarget -> coach -> render.side_by_side. Returns output video path."""
+    """track -> pose -> retarget -> motion brief -> render.side_by_side. Returns output video path."""
     raise NotImplementedError("Day 5")
 
 

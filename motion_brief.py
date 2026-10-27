@@ -1,7 +1,10 @@
-"""Muse Spark via the Meta Model API: phases, coaching notes, reward weights.
+"""Muse Spark via the Meta Model API: a motion brief for the robot (phases, key joints, reward weights).
+
+Everything here describes the motion for the G1 to learn; nothing addresses the person in the video.
+For the full training spec from video, see muse/skill_reader.py.
 
 The API is OpenAI-compatible, so we use the `openai` SDK with Meta's base URL.
-The key comes from config.get_secret("META_API_KEY"): env var, a2h/env/META_API_KEY on Drive, or .env.
+The key comes from config.get_secret("MUSE_API_KEY") (or META_API_KEY): env var, a2h/env/ on Drive, or .env.
 """
 
 import base64
@@ -14,7 +17,8 @@ import config
 
 
 def get_api_key():
-    return config.get_secret(config.META_API_KEY_ENV)
+    from muse.client import api_key
+    return api_key()
 
 
 _client = None
@@ -47,8 +51,9 @@ def ask(prompt, system=None, images=(), json_mode=False, **kwargs):
 # ---- Day 4+ ---------------------------------------------------------------------------
 
 PHASE_SYSTEM = (
-    "You are a biomechanics coach. You receive per-frame joint angles of an athlete. "
-    "Return JSON: {\"phases\": [{\"name\", \"start_frame\", \"end_frame\", \"key_joints\", \"coaching\"}]}."
+    "You segment a human motion into phases for a Unitree G1 humanoid robot to learn in simulation. "
+    "You receive per-frame joint angles of the person in the video. Describe the motion, not the person. "
+    "Return JSON: {\"phases\": [{\"name\", \"start_frame\", \"end_frame\", \"key_joints\", \"description\"}]}."
 )
 
 

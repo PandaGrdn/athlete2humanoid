@@ -1,0 +1,74 @@
+{
+ "retarget": {
+  "aligned": 0.7261001467704773,
+  "dtw": 0.7261000949572893,
+  "chamfer": 0.7545694708824158,
+  "dtw_rank_vs_bank": 1,
+  "reward_net_aligned": 0.39030081033706665,
+  "real_aligned_in_reward_space": 0.7614249587059021
+ },
+ "tracking": {
+  "aligned": 0.7143540382385254,
+  "dtw": 0.7388463043699078,
+  "chamfer": 0.7643183469772339,
+  "dtw_rank_vs_bank": 1,
+  "reward_net_aligned": 0.3184569180011749,
+  "real_aligned_in_reward_space": 0.7592911720275879,
+  "steps": 508,
+  "fps": 50,
+  "falls": 0,
+  "mean_joint_error_rad": 0.11132009334744901,
+  "mean_torso_position_error_m": 0.07110212854272181,
+  "max_torso_position_error_m": 0.10830732434988022
+ },
+ "hybrid": {
+  "aligned": 0.5792810320854187,
+  "dtw": 0.5976774302962559,
+  "chamfer": 0.6787461042404175,
+  "dtw_rank_vs_bank": 1,
+  "reward_net_aligned": 0.33429154753685,
+  "real_aligned_in_reward_space": 0.6142949461936951,
+  "steps": 508,
+  "fps": 50,
+  "falls": 0,
+  "mean_joint_error_rad": 0.30848968016555695,
+  "mean_torso_position_error_m": 0.13345000374714813,
+  "max_torso_position_error_m": 0.3618805408477783
+ },
+ "latent": {
+  "aligned": 0.5321536064147949,
+  "dtw": 0.548566913293078,
+  "chamfer": 0.6503192782402039,
+  "dtw_rank_vs_bank": 1,
+  "reward_net_aligned": 0.3070366382598877,
+  "real_aligned_in_reward_space": 0.5684542655944824,
+  "steps": 508,
+  "fps": 50,
+  "falls": 0,
+  "mean_joint_error_rad": 0.32876722404630637,
+  "mean_torso_position_error_m": 0.16596796171948008,
+  "max_torso_position_error_m": 0.549087643623352
+ },
+ "_bank_top5_dtw": [
+  [
+   "bend",
+   0.518
+  ],
+  [
+   "kick_left",
+   0.508
+  ],
+  [
+   "squat_d10_r1",
+   0.504
+  ],
+  [
+   "lunge_left",
+   0.497
+  ],
+  [
+   "lunge_right",
+   0.489
+  ]
+ ]
+}

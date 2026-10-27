@@ -1,0 +1,11 @@
+{
+ "state": "done",
+ "cmd": [
+  "bash",
+  "-c",
+  "cd /content/athlete2humanoid && bash scripts/setup_colab.sh --with-sam && python3 experiments/latent_policy.py '/content/a2h/clips/arms.mov' '/content/a2h/clips/front_kick.mov' '/content/a2h/clips/jumping_jacks.mov' '/content/a2h/clips/lunge.mov' '/content/a2h/clips/punches.mov' '/content/a2h/clips/squat.mov' '/content/a2h/clips/squat_jump.mov' --target squat --out /content/a2h/outputs/latent_squat --iters 2000"
+ ],
+ "started": "2026-10-27T03:40:46",
+ "returncode": 0,
+ "finished": "2026-10-27T06:32:25"
+}

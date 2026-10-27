@@ -168,6 +168,8 @@ def main(a):
         d.mkdir(exist_ok=True)
         cmd = [sys.executable, ROOT / "train_motion.py", "--csv", tgt["csv"], "--fps", 30, "--out", d,
                "--iters", a.iters, "--num-envs", a.num_envs, "--task", task, "--bundle", bundle]
+        if a.reward_config and name != "tracking":
+            cmd += ["--reward-config", Path(a.reward_config).resolve()]
         procs[name] = subprocess.Popen(list(map(str, cmd)), stdout=open(d / "train.log", "w"), stderr=subprocess.STDOUT)
         log(f"training {name} ({task}), log: {d / 'train.log'}")
     for name, p in procs.items():
@@ -282,6 +284,8 @@ if __name__ == "__main__":
     ap.add_argument("--policies", nargs="+", default=["tracking", "hybrid", "latent"], choices=list(TASKS))
     ap.add_argument("--iters", type=int, default=1500)
     ap.add_argument("--num-envs", type=int, default=4096)
+    ap.add_argument("--reward-config", help="hybrid/latent reward settings, e.g. muse/reward_agent.py's "
+                                            "next_reward_config.json (its iterations override --iters)")
     ap.add_argument("--smoke", action="store_true")
     a = ap.parse_args()
     if a.smoke:

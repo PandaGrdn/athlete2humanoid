@@ -2,6 +2,7 @@
 
     python pipeline.py clips/squat.mp4                # SAM 3.1 tracking (needs a GPU)
     python pipeline.py clips/squat.mp4 --no-sam       # whole frame, single person (any machine)
+    python pipeline.py clips/squat.mp4 --skill live   # then Muse Spark writes skill_spec.json
 """
 
 import argparse
@@ -62,5 +63,12 @@ if __name__ == "__main__":
     ap.add_argument("--no-sam", action="store_true")
     ap.add_argument("--prompt", default=config.SAM_PROMPT)
     ap.add_argument("--out")
+    ap.add_argument("--skill", choices=["live", "dry-run"],
+                    help="last stage: Muse Spark reads the clip -> skill_spec.json (muse/skill_reader.py)")
     a = ap.parse_args()
-    print(video_to_motion(a.video, a.out, use_sam=not a.no_sam, prompt=a.prompt))
+    res = video_to_motion(a.video, a.out, use_sam=not a.no_sam, prompt=a.prompt)
+    if a.skill:
+        from muse import client, skill_reader
+        skill_reader.read_skill(a.video, res["out_dir"],
+                                client.make_client(a.skill == "dry-run", default_fixture="skill_spec_squat.json"))
+    print(res)
