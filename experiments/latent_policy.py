@@ -254,6 +254,7 @@ def retarget_bundle(bundle, tgt, g1, bucket, name):
     (how well this target's retarget scores) change."""
     from latent.reward_net import load_bundle
     net, _, b = load_bundle(bundle)
+    net.kwargs = b["net_kwargs"]  # kept by save_bundle, so the network reloads with its own shape
     if int(round(b["azimuth"])) != bucket:
         raise SystemExit(f"--reward was distilled at {b['azimuth']:.0f} deg; {name} renders at {bucket}")
     target = distill.video_target(tgt["centred"], b["h_mean"], b["basis"])
