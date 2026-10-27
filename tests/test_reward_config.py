@@ -35,7 +35,9 @@ class RewardTermCfg:
 
 def stub_env_cfg(play=False):
     """The parts of mjlab's G1 tracking env cfg that mjlab_tasks edits; tracking weights 1, thresholds 0.25."""
-    return SimpleNamespace(rewards={k: SimpleNamespace(weight=1.0) for k in TRACKING},
+    actor = {k: None for k in ("command", "motion_anchor_pos_b", "motion_anchor_ori_b", "joint_pos")}
+    return SimpleNamespace(observations={"actor": SimpleNamespace(terms=actor)},
+                           rewards={k: SimpleNamespace(weight=1.0) for k in TRACKING},
                            terminations={k: SimpleNamespace(params={"threshold": 0.25})
                                          for k in ("anchor_pos", "anchor_ori", "ee_body_pos")})
 
@@ -45,12 +47,13 @@ def import_mjlab_tasks(reward_config=None):
     registered = {}
     mods = {n: types.ModuleType(n) for n in (
         "torch", "numpy", "latent.reward_net", "mjlab", "mjlab.tasks", "mjlab.managers",
-        "mjlab.managers.reward_manager", "mjlab.tasks.registry", "mjlab.tasks.tracking",
+        "mjlab.managers.reward_manager", "mjlab.managers.observation_manager", "mjlab.tasks.registry", "mjlab.tasks.tracking",
         "mjlab.tasks.tracking.config", "mjlab.tasks.tracking.config.g1", "mjlab.tasks.tracking.config.g1.env_cfgs",
         "mjlab.tasks.tracking.config.g1.rl_cfg", "mjlab.tasks.tracking.rl")}
     rn = mods["latent.reward_net"]
     rn.BODIES, rn.FPS, rn.WINDOW, rn.load_bundle, rn.window_center_step = (), 30.0, 32, None, None
     mods["mjlab.managers.reward_manager"].RewardTermCfg = RewardTermCfg
+    mods["mjlab.managers.observation_manager"].ObservationTermCfg = lambda **kw: SimpleNamespace(**kw)
     mods["mjlab.tasks.registry"].register_mjlab_task = lambda task_id, env_cfg, **kw: registered.update({task_id: env_cfg})
     mods["mjlab.tasks.tracking.config.g1.env_cfgs"].unitree_g1_flat_tracking_env_cfg = stub_env_cfg
     mods["mjlab.tasks.tracking.config.g1.rl_cfg"].unitree_g1_tracking_ppo_runner_cfg = lambda: None
