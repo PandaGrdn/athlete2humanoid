@@ -29,7 +29,8 @@ class VJepa:
         one vector per V-JEPA time step (2 frames)."""
         torch = self.torch
         videos = [torch.from_numpy(np.ascontiguousarray(c)).permute(0, 3, 1, 2) for c in clips]
-        inputs = self.processor(videos, return_tensors="pt").to(self.model.device)
+        # Resize/crop/normalise on the GPU: on the CPU this dominated the time to embed renders.
+        inputs = self.processor(videos, return_tensors="pt", device=self.model.device).to(self.model.device)
         inputs = {k: v.to(self.model.dtype) if v.is_floating_point() else v for k, v in inputs.items()}
         with torch.no_grad():
             feats = self.model.get_vision_features(**inputs)  # (N, steps * patches, D), time-major

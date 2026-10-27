@@ -1,0 +1,108 @@
+"""mjlab tasks that learn from the video's V-JEPA latent instead of (only) copying the retarget.
+Runs inside mjlab's virtualenv; takes the same flags as mjlab's `train`:
+
+    A2H_LATENT_BUNDLE=reward.pt $MJLAB_PY mjlab_tasks.py A2H-Hybrid-Flat-Unitree-G1 \
+        --env.commands.motion.motion-file motion.npz ...
+
+- A2H-Hybrid-Flat-Unitree-G1: latent reward + the tracking rewards at 1/5 weight, relaxed
+  terminations: the robot may deviate from the retarget where that looks more like the video.
+- A2H-Latent-Flat-Unitree-G1: latent reward only; the retarget is still the policy's input
+  (it says what to do next) and its starting states, but is never scored.
+"""
+
+import os
+import sys
+from pathlib import Path
+
+import numpy as np
+import torch
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from latent.reward_net import BODIES, FPS, WINDOW, load_bundle, window_center_step  # noqa: E402
+
+import mjlab.tasks  # noqa: E402,F401  (registers mjlab's own tasks)
+from mjlab.managers.reward_manager import RewardTermCfg  # noqa: E402
+from mjlab.tasks.registry import register_mjlab_task  # noqa: E402
+from mjlab.tasks.tracking.config.g1.env_cfgs import unitree_g1_flat_tracking_env_cfg  # noqa: E402
+from mjlab.tasks.tracking.config.g1.rl_cfg import unitree_g1_tracking_ppo_runner_cfg  # noqa: E402
+from mjlab.tasks.tracking.rl import MotionTrackingOnPolicyRunner  # noqa: E402
+
+SIGMA = 0.1  # reward = exp(-max(0, cos_ref - cos) / SIGMA): 1 when the robot matches the video at
+             # least as well as the retarget does at that moment (cos_ref, from the bundle)
+
+
+class LatentReward:
+    """Per env: a ring buffer of the last ~1 s of body positions -> the distilled V-JEPA latent
+    -> cosine similarity with the video's latent at the same moment of the motion."""
+
+    def __init__(self, cfg, env):
+        self.cmd = env.command_manager.get_term("motion")
+        assert tuple(self.cmd.cfg.body_names) == BODIES, "reward net expects mjlab's G1 tracking bodies"
+        self.net, self.target, b = load_bundle(os.environ["A2H_LATENT_BUNDLE"], env.device)
+        self.video_fps, self.cos_ref, self.dt = b["video_fps"], b["cos_ref"], env.step_dt
+        self.origins = env.scene.env_origins
+        dev, n = env.device, env.num_envs
+        self.L = int(np.ceil((WINDOW - 1) / FPS / self.dt)) + 2
+        self.buf = torch.zeros(n, self.L, len(BODIES), 3, device=dev)
+        self.last_ts = torch.full((n,), -10, dtype=torch.long, device=dev)
+        # The 32 window frames (30 fps, ending now) as fractional positions in the 50 Hz buffer.
+        pos = (self.L - 1) - (WINDOW - 1 - torch.arange(WINDOW, device=dev)) / FPS / self.dt
+        self.i0 = pos.floor().long()
+        self.i1 = (self.i0 + 1).clamp(max=self.L - 1)
+        self.w = (pos - self.i0)[None, :, None, None]
+        self.back = torch.arange(self.L, 0, -1, device=dev)  # history steps ts - L ... ts - 1
+
+    def reset(self, env_ids=None):
+        self.last_ts[slice(None) if env_ids is None else env_ids] = -10
+
+    def __call__(self, env, **kwargs):
+        ts = self.cmd.time_steps
+        jumped = (ts != self.last_ts + 1).nonzero().squeeze(1)  # reset, or motion wrapped around
+        if len(jumped):
+            # Unknown past: assume the robot was on the reference until now.
+            hist = (ts[jumped, None] - self.back).clamp(min=0)
+            self.buf[jumped] = self.cmd.motion.body_pos_w[hist] + self.origins[jumped, None, None]
+        self.buf = torch.roll(self.buf, -1, 1)
+        self.buf[:, -1] = self.cmd.robot_body_pos_w
+        self.last_ts = ts.clone()
+
+        win = self.buf[:, self.i0] * (1 - self.w) + self.buf[:, self.i1] * self.w
+        with torch.no_grad():
+            pred = self.net(win)
+        step = torch.round(window_center_step(ts * self.dt * self.video_fps)).long()
+        valid = (step >= 0) & (step < len(self.target))
+        step = step.clamp(0, len(self.target) - 1)
+        cos = torch.nn.functional.cosine_similarity(pred, self.target[step], dim=-1)
+        return torch.exp(-(self.cos_ref[step] - cos).clamp(min=0) / SIGMA) * valid
+
+
+TRACKING_TERMS = ("motion_global_root_pos", "motion_global_root_ori", "motion_body_pos",
+                  "motion_body_ori", "motion_body_lin_vel", "motion_body_ang_vel")
+
+
+def latent_env_cfg(tracking_scale, play=False):
+    cfg = unitree_g1_flat_tracking_env_cfg(play=play)
+    for k in TRACKING_TERMS:
+        if tracking_scale:
+            cfg.rewards[k].weight *= tracking_scale
+        else:
+            del cfg.rewards[k]
+    cfg.rewards["latent"] = RewardTermCfg(func=LatentReward, weight=3.0)
+    # Relaxed: end an episode when the robot has fallen, not when it leaves the retarget.
+    cfg.terminations["anchor_pos"].params["threshold"] = 0.5
+    cfg.terminations["anchor_ori"].params["threshold"] = 1.2
+    if tracking_scale:
+        cfg.terminations["ee_body_pos"].params["threshold"] = 0.6
+    else:
+        del cfg.terminations["ee_body_pos"]
+    return cfg
+
+
+for task, scale in (("A2H-Hybrid-Flat-Unitree-G1", 0.2), ("A2H-Latent-Flat-Unitree-G1", 0.0)):
+    register_mjlab_task(task_id=task, env_cfg=latent_env_cfg(scale), play_env_cfg=latent_env_cfg(scale, play=True),
+                        rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
+
+
+if __name__ == "__main__":
+    from mjlab.scripts.train import main
+    main()

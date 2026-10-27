@@ -1,29 +1,45 @@
-"""Unattended cross-embodiment probe on a Colab GPU, driven from this Mac with the Colab CLI.
+"""Unattended GPU jobs on Colab, driven from this Mac with the Colab CLI.
 
-    python3 scripts/remote_probe.py --min-clips 6
+    python3 scripts/remote_run.py probe --min-clips 7       # cross-embodiment probe
+    python3 scripts/remote_run.py latent --target squat     # video -> latent reward -> policies
+    python3 scripts/remote_run.py latent --smoke            # the same, tiny, no clips: plumbing test
 
 1. waits until at least --min-clips videos sit in clips/ and stop changing (copy finished)
 2. checks the HF token in .env before spending GPU time
-3. creates an A100, uploads clips + token, launches the probe via scripts/job.py
-4. keeps the VM busy, polls status every 2 min, recreates the VM and retries once if it's lost
-5. downloads results to outputs/remote_probe/ and stops the VM
+3. creates an A100, uploads clips + token, launches the job via scripts/job.py
+4. keeps the VM busy, polls status every 2 min (and pulls the job log every 10), recreates the VM
+   and retries once if it's lost
+5. downloads results to outputs/remote_<job>/ and stops the VM
 
-Progress goes to outputs/remote_probe/runner.log. Needs `colab` logged in (oauth2).
+Progress goes to outputs/remote_<job>/runner.log. Needs `colab` logged in (oauth2).
 """
 
 import argparse
 import json
 import subprocess
 import sys
+import tarfile
 import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-OUT = REPO / "outputs" / "remote_probe"
-SESSION = "probe"
 VIDEO_EXT = {".mp4", ".mov", ".m4v"}
 SKIP = {"bedroom"}  # test footage, not an action clip
 REMOTE = "/content/a2h"
+OUT = SESSION = None  # set in main()
+
+
+def job_spec(a):
+    """(setup flag, command run in the repo after setup, {local name: remote path} to fetch)."""
+    if a.job == "probe":
+        out = f"{REMOTE}/outputs/cross_embodiment"
+        return ("--with-sam", f"python3 experiments/cross_embodiment_probe.py {{clips}} --out {out}",
+                {"cross_embodiment.json": f"{out}/cross_embodiment.json"})
+    out = f"{REMOTE}/outputs/latent_{'smoke' if a.smoke else a.target}"
+    cmd = f"python3 experiments/latent_policy.py {{clips}} --target {a.target} --out {out} --iters {a.iters}"
+    if a.smoke:
+        return "--with-main", cmd + " --smoke", {"results.tar.gz": f"{out}/results.tar.gz"}
+    return "--with-sam", cmd, {"results.tar.gz": f"{out}/results.tar.gz"}
 
 
 def log(msg):
@@ -70,7 +86,7 @@ def check_token():
         raise SystemExit("HF token in .env is invalid or lacks SAM 3.1 access; update .env and rerun.")
 
 
-def launch(found):
+def launch(found, setup, cmd):
     colab("new", "-s", SESSION, "--gpu", "A100", timeout=900)
     log("A100 ready; uploading clips")
     _exec(f"import os; [os.makedirs(d, exist_ok=True) for d in ('{REMOTE}/clips', '{REMOTE}/env')]")
@@ -78,8 +94,7 @@ def launch(found):
         colab("upload", "-s", SESSION, str(p), f"{REMOTE}/clips/{p.name}", timeout=900)
     colab("upload", "-s", SESSION, str(REPO / ".env"), f"{REMOTE}/env/HF_TOKEN")
     paths = " ".join(f"'{REMOTE}/clips/{p.name}'" for p in found)
-    inner = (f"cd /content/athlete2humanoid && bash scripts/setup_colab.sh --with-sam && "
-             f"python3 experiments/cross_embodiment_probe.py {paths} --out {REMOTE}/outputs/cross_embodiment")
+    inner = f"cd /content/athlete2humanoid && bash scripts/setup_colab.sh {setup} && " + cmd.format(clips=paths)
     _exec(f"""
 import os, subprocess
 R = "/content/athlete2humanoid"
@@ -89,17 +104,21 @@ else:
     subprocess.run(["git", "-C", R, "pull", "-q"], check=True)
 env = dict(os.environ, MUJOCO_GL="egl", A2H_SAM_PYTHON="/content/sam_env/bin/python",
            A2H_OUTPUT_DIR="{REMOTE}/outputs", A2H_SECRETS_DIR="{REMOTE}/env", A2H_ASSETS_DIR=R + "/assets")
-subprocess.Popen(["python3", R + "/scripts/job.py", "probe", "--", "bash", "-c", {inner!r}], env=env,
-                 start_new_session=True, cwd="/content", stdout=open("{REMOTE}/job_probe.out", "w"),
+subprocess.Popen(["python3", R + "/scripts/job.py", "{SESSION}", "--", "bash", "-c", {inner!r}], env=env,
+                 start_new_session=True, cwd="/content", stdout=open("{REMOTE}/job_{SESSION}.out", "w"),
                  stderr=subprocess.STDOUT)
 print("launched")
 """)
-    log("probe job launched")
-    # Keeper: a cell that stays busy until the job ends, so Colab doesn't reclaim an "idle" VM.
+    log(f"{SESSION} job launched")
+    return keep_busy()
+
+
+def keep_busy():
+    """A cell that stays busy until the job ends, so Colab doesn't reclaim an "idle" VM."""
     keeper = OUT / "keeper.py"
     keeper.write_text(f"""
 import json, time
-f = "{REMOTE}/jobs/probe/status.json"
+f = "{REMOTE}/jobs/{SESSION}/status.json"
 time.sleep(20)
 while json.load(open(f))["state"] == "running":
     print(".", end="", flush=True); time.sleep(60)
@@ -116,40 +135,61 @@ def _exec(code):
 
 def status():
     try:
-        colab("download", "-s", SESSION, f"{REMOTE}/jobs/probe/status.json", str(OUT / "status.json"), timeout=120)
+        colab("download", "-s", SESSION, f"{REMOTE}/jobs/{SESSION}/status.json", str(OUT / "status.json"), timeout=120)
         return json.loads((OUT / "status.json").read_text())["state"]
     except Exception as e:
         return "lost" if "No active" in str(e) or "lost" in str(e) or "404" in str(e) else "unknown"
 
 
-def fetch_results():
-    for remote, local in [(f"{REMOTE}/jobs/probe/log", "job.log"),
-                          (f"{REMOTE}/outputs/cross_embodiment/cross_embodiment.json", "cross_embodiment.json")]:
+def pull_log():
+    try:
+        colab("download", "-s", SESSION, f"{REMOTE}/jobs/{SESSION}/log", str(OUT / "job.log"), timeout=300)
+    except Exception as e:
+        log(f"could not download job.log: {e}")
+
+
+def fetch_results(fetch):
+    pull_log()
+    for local, remote in fetch.items():
         try:
-            colab("download", "-s", SESSION, remote, str(OUT / local), timeout=300)
+            colab("download", "-s", SESSION, remote, str(OUT / local), timeout=900)
         except Exception as e:
             log(f"could not download {local}: {e}")
+            continue
+        if local.endswith(".tar.gz"):
+            with tarfile.open(OUT / local) as tar:
+                tar.extractall(OUT, filter="data")
+            log(f"unpacked {local}")
 
 
 def main(a):
+    global OUT, SESSION
+    SESSION = a.job + ("_smoke" if a.smoke else "")
+    OUT = REPO / "outputs" / f"remote_{SESSION}"
     OUT.mkdir(parents=True, exist_ok=True)
-    found = wait_for_clips(a.min_clips, a.max_wait_h)
-    log(f"clips ready: {', '.join(p.name for p in found)}")
-    check_token()
-    log("HF token OK")
+    setup, cmd, fetch = job_spec(a)
+    found = [] if a.smoke else wait_for_clips(a.min_clips, a.max_wait_h)
+    if found:
+        log(f"clips ready: {', '.join(p.name for p in found)}")
+        check_token()
+        log("HF token OK")
     for attempt in (1, 2):
-        keeper = launch(found)
-        state, unknown = "running", 0
+        keeper = launch(found, setup, cmd)
+        state, unknown, polls = "running", 0, 0
         while state in ("running", "unknown"):
             time.sleep(120)
-            state = status()
+            state, polls = status(), polls + 1
             unknown = unknown + 1 if state == "unknown" else 0
             if unknown >= 5:
                 state = "lost"
+            if state == "running" and keeper.poll() is not None:
+                keeper = keep_busy()  # the exec connection dropped; keep the VM busy again
+            if state == "running" and polls % 5 == 0:
+                pull_log()
         keeper.kill()
         log(f"job state: {state} (attempt {attempt})")
         if state in ("done", "failed"):
-            fetch_results()
+            fetch_results(fetch)
             break
         log("VM lost; retrying on a fresh one")
         colab("stop", "-s", SESSION, check=False)
@@ -159,6 +199,10 @@ def main(a):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
+    ap.add_argument("job", choices=["probe", "latent"])
     ap.add_argument("--min-clips", type=int, default=6)
     ap.add_argument("--max-wait-h", type=float, default=8)
+    ap.add_argument("--target", default="squat")
+    ap.add_argument("--iters", type=int, default=1500)
+    ap.add_argument("--smoke", action="store_true")
     main(ap.parse_args())

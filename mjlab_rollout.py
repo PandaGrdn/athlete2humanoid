@@ -14,6 +14,7 @@ import numpy as np
 import torch
 
 import mjlab.tasks  # noqa: F401  (registers the tasks)
+import mjlab_tasks  # noqa: F401  (and ours)
 from mjlab.envs import ManagerBasedRlEnv
 from mjlab.rl import MjlabOnPolicyRunner, RslRlVecEnvWrapper
 from mjlab.tasks.registry import load_env_cfg, load_rl_cfg, load_runner_cls
@@ -21,15 +22,15 @@ from mjlab.tasks.registry import load_env_cfg, load_rl_cfg, load_runner_cls
 TASK = "Mjlab-Tracking-Flat-Unitree-G1"
 
 
-def rollout(checkpoint, motion_file, out_dir):
+def rollout(checkpoint, motion_file, out_dir, task=TASK):
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    env_cfg = load_env_cfg(TASK, play=True)  # play config: starts at frame 0, no episode timeout
-    agent_cfg = load_rl_cfg(TASK)
+    env_cfg = load_env_cfg(task, play=True)  # play config: starts at frame 0, no episode timeout
+    agent_cfg = load_rl_cfg(task)
     env_cfg.commands["motion"].motion_file = str(motion_file)
     env_cfg.scene.num_envs = 1
     env = ManagerBasedRlEnv(cfg=env_cfg, device=device, render_mode="rgb_array")
     venv = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
-    runner = (load_runner_cls(TASK) or MjlabOnPolicyRunner)(venv, asdict(agent_cfg), device=device)
+    runner = (load_runner_cls(task) or MjlabOnPolicyRunner)(venv, asdict(agent_cfg), device=device)
     runner.load(str(checkpoint), load_cfg={"actor": True}, strict=True, map_location=device)
     policy = runner.get_inference_policy(device=device)
     motion = env.command_manager.get_term("motion")
@@ -69,5 +70,6 @@ if __name__ == "__main__":
     ap.add_argument("--checkpoint", required=True)
     ap.add_argument("--motion", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--task", default=TASK)
     a = ap.parse_args()
-    rollout(a.checkpoint, a.motion, a.out)
+    rollout(a.checkpoint, a.motion, a.out, a.task)
