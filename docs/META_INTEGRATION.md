@@ -439,6 +439,60 @@ Merged with the milestones in `PLAN.md`. Cut order if behind: #3 fine-tune → #
 
 ---
 
+## 5. Implemented: `muse/` (Oct 27)
+
+The top two integrations are built as the `muse/` package. They differ from the §3 sketches in two ways:
+- Each call is a single Chat Completions request with a strict `json_schema`.
+- The agent is a CLI that loops over finished runs rather than a multi-turn tool loop, so no training happens inside the agent.
+
+Everything runs offline against fixture responses until the key arrives.
+
+| File | What it does |
+|---|---|
+| `muse/client.py` | `MuseClient`, with two modes. **Live:** OpenAI SDK pointed at `config.META_API_BASE`, model `config.MUSE_MODEL` (now `muse-spark-1.3`), key `MUSE_API_KEY` via `config.get_secret` (`META_API_KEY` still accepted). **Fixture:** no network and no key. Every response is validated against the schema and a semantic check; on failure Muse sees the errors and gets one retry. `record_dir` saves live exchanges in fixture format. |
+| `muse/schema.py` | Strict-mode schema helpers, a stdlib validator, and `strict_errors()`, which flags schemas Muse would reject with HTTP 400. |
+| `muse/media.py` | Clip → small silent H.264 MP4 (480 px, via ffmpeg / `imageio-ffmpeg`). Rollout video → PNG contact sheet (OpenCV). Both are optional imports. |
+| `muse/skill_reader.py` | Video → `skill_spec.json` next to the clip's pipeline outputs. Contents: action label and nearest bank motions, tempo, phases (time, keyframe, `pose`/`style`/`free`, key bodies), weighted key bodies, and success criteria in simulator metrics. |
+| `muse/reward_agent.py` | Run folder (`eval.json`, `distill_report.json`, contact sheets of `comparison.mp4` and `policy_<variant>/policy.mp4`, optional `skill_spec.json`) → `reward_proposal.json` (diagnosis + RFC 6902 patch) and `next_reward_config.json`. Patches are bounded per path, with at most 3 ops and no no-ops. Each proposal is appended to `agent_log.jsonl`, which the next proposal reads as history. |
+| `muse/fixtures/*.json` | Hand-written stand-in responses in the API's shape. Replace them with `--record` output. |
+| `tests/test_muse.py` | 22 stdlib `unittest` tests, using real run data copied from `outputs/remote_latent` into `tests/data/`. |
+
+```bash
+python -m unittest discover -s tests -t .
+```
+
+**Now, without a key:**
+
+```bash
+python -m muse.skill_reader clips/squat.mov --out outputs/squat --dry-run
+```
+
+```bash
+python -m muse.reward_agent outputs/remote_latent --dry-run --out-dir /tmp/agent
+```
+
+**When the key arrives** (save it as `a2h/env/MUSE_API_KEY` on Drive, or `MUSE_API_KEY=` in `.env`):
+
+```bash
+python -m muse.skill_reader clips/*.mov --out-root outputs/remote_latent/clips --record muse/fixtures/recorded
+```
+
+```bash
+python -m muse.reward_agent outputs/latent_squat --record muse/fixtures/recorded
+```
+
+```bash
+python -m muse.reward_agent outputs/ --watch 300 --log outputs/agent_log.jsonl
+```
+
+`pipeline.py ... --skill live` (or `--skill dry-run`) runs the skill reader as the last pipeline stage.
+
+**Still to wire, in files this branch didn't touch:**
+- Training doesn't read `next_reward_config.json` yet. `mjlab_tasks.latent_env_cfg` needs to take `latent_weight`, `sigma`, `tracking_scale` and `terminations` from it, and `train_motion.py --iters` needs to take `iterations`. The suggested route is a `reward_config.json` copied into the run folder plus an env var such as `A2H_REWARD_CONFIG`. `reward_agent.DEFAULTS` mirrors the values hard-coded at commit 3ddc84c.
+- The success-criteria metrics (`METRICS` in `skill_reader.py`) are defined, but nothing computes them from a rollout yet.
+
+---
+
 ## Sources
 
 Meta Model API docs (fetched 2026-10-26; `ai.developer.meta.com/docs/*` redirects to `dev.meta.ai/docs/*`):

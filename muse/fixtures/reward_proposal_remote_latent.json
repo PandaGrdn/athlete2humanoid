@@ -1,0 +1,19 @@
+{
+ "_note": "Hand-written stand-in for a Muse Spark response, in the API's chat-completion shape; no API key existed when it was made. Replace it with a real recording (--record DIR) once the key works.",
+ "responses": [
+  {
+   "object": "chat.completion",
+   "model": "muse-spark-1.3",
+   "choices": [
+    {
+     "index": 0,
+     "finish_reason": "stop",
+     "message": {
+      "role": "assistant",
+      "content": "{\"diagnosis\": \"The hybrid policy scores well below plain tracking on the real V-JEPA metric (aligned 0.579 vs 0.714, retarget 0.726) while drifting further from the retarget (joint error 0.31 vs 0.11 rad, torso up to 0.36 m). Its reward-network score (0.334) is also below the retarget's own (cos_ref_mean 0.390), so it is not even maximising the latent reward. The reward network is a noisy guide on held-out motions (val cosine mean 0.62, p10 0.31), and with sigma 0.1 a small cosine gap already zeroes the reward, so the policy gets little useful signal from it and the weak tracking term (0.2) is not enough to keep it near the reference.\", \"patch\": [{\"op\": \"replace\", \"path\": \"/tracking_scale\", \"value\": 0.5, \"reason\": \"Lean more on the retarget, which already matches the video best (aligned 0.726), until the latent reward is reliable.\"}, {\"op\": \"replace\", \"path\": \"/sigma\", \"value\": 0.2, \"reason\": \"A softer latent reward gives a gradient when the robot is close but not above cos_ref, instead of near-zero reward for a noisy net.\"}], \"expected_effect\": \"Aligned rises toward the tracking policy's 0.71 with joint error under 0.2 rad, while the latent term still lets the timing and arm swing follow the video; no falls.\", \"confidence\": \"medium\", \"stop\": false}"
+     }
+    }
+   ]
+  }
+ ]
+}

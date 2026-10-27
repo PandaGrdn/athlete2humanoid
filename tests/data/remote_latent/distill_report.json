@@ -1,0 +1,16 @@
+{
+ "samples": 14785,
+ "motions": 253,
+ "val_motions": 25,
+ "pca_k": 64,
+ "pca_explained_variance": 0.9505289793014526,
+ "val_cosine_mean": 0.624338686466217,
+ "val_cosine_p10": 0.30745020508766174,
+ "cos_ref_mean": 0.39030081033706665,
+ "pca_own_retarget_dtw_rank": 1,
+ "pca_dtw_top3": [
+  "(own retarget)",
+  "bend",
+  "kick_left"
+ ]
+}

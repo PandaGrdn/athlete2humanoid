@@ -1,7 +1,7 @@
 """Muse Spark via the Meta Model API: phases, coaching notes, reward weights.
 
 The API is OpenAI-compatible, so we use the `openai` SDK with Meta's base URL.
-The key comes from config.get_secret("META_API_KEY"): env var, a2h/env/META_API_KEY on Drive, or .env.
+The key comes from config.get_secret("MUSE_API_KEY") (or META_API_KEY): env var, a2h/env/ on Drive, or .env.
 """
 
 import base64
@@ -14,7 +14,8 @@ import config
 
 
 def get_api_key():
-    return config.get_secret(config.META_API_KEY_ENV)
+    from muse.client import api_key
+    return api_key()
 
 
 _client = None
