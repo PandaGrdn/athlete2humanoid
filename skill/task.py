@@ -184,11 +184,41 @@ class StageMachine:
         self.hold, self.phi, self.apex, self.z_prev, self.p = z(), z(), z(), z(), z()
         self.done = z(torch.bool)
         self.stats = {"advances": z(torch.long), "jump_q": z()}
+        # Per env goals: the spec's unless set_goals() commands others (skill/commands.py).
+        self.goals = self.goal.expand(num_envs, self.S).clone()
+        self.jump_goals = self.jump_goal.expand(num_envs, self.S).clone()
+        self.n_stages = torch.full((num_envs,), self.S, dtype=torch.long, device=device)
+        self.rep_ends = rep_ends(spec)
+        self.nominal = nominal_command(spec)
+        self.command = torch.tensor([self.nominal[k] for k in COMMANDS], device=device).expand(num_envs, -1).clone()
+        self.extra_depth = z()  # m a commanded squat goes below the spec's deepest (stability margins)
+        self.q_min, self.steps = torch.ones(num_envs, device=device), z(torch.long)
 
-    def _eval(self, stage, z, lo, hi, up, vz):
+    def set_goals(self, env_ids, depth=None, clearance=None, reps=None):
+        """Command other targets for env_ids (tensors of len(env_ids), or None to keep): squat depth
+        (m below standing; the predicate asks for 3/4 of it, as compile_spec does), jump clearance (m)
+        and number of reps (the episode's sequence ends after that many). Same as command_spec()."""
+        kind = self.kind
+        if depth is not None:
+            depth = torch.as_tensor(depth, dtype=torch.float32, device=self.dev)
+            sq = (kind == SQUAT)[None]
+            self.goals[env_ids] = torch.where(sq, self.spec["h0"] - 0.75 * depth[:, None], self.goals[env_ids])
+            self.command[env_ids, 0] = depth
+            self.extra_depth[env_ids] = (depth - self.nominal["depth_max"]).clamp(min=0)
+        if clearance is not None:
+            c = torch.as_tensor(clearance, dtype=torch.float32, device=self.dev)[:, None]
+            self.goals[env_ids] = torch.where((kind == JUMP)[None], c, self.goals[env_ids])
+            self.jump_goals[env_ids] = torch.where((self.jump_goal > 0)[None], c, self.jump_goals[env_ids])
+            self.command[env_ids, 1] = c[:, 0]
+        if reps is not None:
+            reps = torch.as_tensor(reps, dtype=torch.long, device=self.dev).clamp(1, len(self.rep_ends))
+            self.n_stages[env_ids] = torch.tensor(self.rep_ends, device=self.dev)[reps - 1]
+            self.command[env_ids, 2] = reps.float()
+
+    def _eval(self, stage, goals, z, lo, hi, up, vz):
         """Progress in [0, 1] toward, and whether the predicate holds for, each env's stage."""
         s = self.spec
-        k, a = self.kind[stage], self.goal[stage]
+        k, a = self.kind[stage], goals.gather(1, stage[:, None]).squeeze(1)
         feet_down = hi < s["down"]
         h0, zl = s["h0"], s["z_low"]
         p = torch.stack([((z - zl) / (a - zl).clamp(min=1e-3)).clamp(0, 1),
@@ -210,16 +240,22 @@ class StageMachine:
         """Episodes of env_ids (re)start at reference time t (s) with bodies at pos (len(env_ids), B, 3)."""
         z, lo, hi, up = features(pos, self.spec["foot0"])
         stage = self.stage_at(torch.as_tensor(t, device=self.dev).expand(len(env_ids)))
-        p, _ = self._eval(stage, z, lo, hi, up, torch.zeros_like(z))
-        self.stage[env_ids], self.p[env_ids], self.phi[env_ids] = stage, p, stage + p
-        for buf in (self.hold, self.apex, self.completed):
+        # Fewer reps commanded than the reference is into: the sequence is already over.
+        n = self.n_stages[env_ids]
+        over = stage >= n
+        stage = torch.minimum(stage, n - 1)
+        p, _ = self._eval(stage, self.goals[env_ids], z, lo, hi, up, torch.zeros_like(z))
+        self.stage[env_ids], self.p[env_ids] = stage, p
+        self.phi[env_ids] = torch.where(over, n.float(), stage + p)
+        for buf in (self.hold, self.apex, self.completed, self.steps):
             buf[env_ids] = 0
-        self.done[env_ids], self.z_prev[env_ids] = False, z
+        self.q_min[env_ids] = 1.0
+        self.done[env_ids], self.z_prev[env_ids] = over, z
 
     def step(self, pos):
         z, lo, hi, up = features(pos, self.spec["foot0"])
         vz, self.z_prev = (z - self.z_prev) / self.dt, z
-        p, sat = self._eval(self.stage, z, lo, hi, up, vz)
+        p, sat = self._eval(self.stage, self.goals, z, lo, hi, up, vz)
         k = self.kind[self.stage]
         self.apex = torch.where((k == JUMP) | (k == LAND), torch.maximum(self.apex, lo), torch.zeros_like(lo))
         self.hold = torch.where(sat & ~self.done, self.hold + self.dt, torch.zeros_like(self.hold))
@@ -227,32 +263,82 @@ class StageMachine:
 
         # Jump quality, paid when the landing after it completes: 1 inside [goal, 1.5 goal], less
         # below it, and less again for overshooting (no reward for launching itself out of control).
-        jg = self.jump_goal[self.stage]
+        jg = self.jump_goals.gather(1, self.stage[:, None]).squeeze(1)
         ratio = self.apex / jg.clamp(min=1e-3)
         q = torch.where(jg > 0, ratio.clamp(0, 1) - (ratio - 1.5).clamp(0, 1), torch.zeros_like(ratio))
         bonus = adv * (self.w["stage"] + self.w["jump"] * q)
 
         self.completed += adv.long()
         new_stage = self.stage + adv.long()
-        just_done = new_stage >= self.S
+        just_done = new_stage >= self.n_stages
         self.done |= just_done
-        self.stage = new_stage.clamp(max=self.S - 1)
+        self.stage = torch.minimum(new_stage, self.n_stages - 1)
         self.p = torch.where(adv, torch.zeros_like(p), p)
         self.hold = torch.where(adv, torch.zeros_like(self.hold), self.hold)
-        bonus = bonus + just_done * self.w["done"] * self.completed / self.S
+        bonus = bonus + just_done * self.w["done"] * self.completed / self.n_stages
 
-        phi = torch.where(self.done, torch.full_like(p, float(self.S)), self.stage + self.p)
+        phi = torch.where(self.done, self.n_stages.float(), self.stage + self.p)
         d, self.phi = phi - self.phi, phi
         gate = ((up - 0.6) / 0.3).clamp(0, 1)
         prog = torch.where(d > 0, d * gate, d) * self.w["progress"]
         self.stats["advances"] += adv.long()
         self.stats["jump_q"] = torch.where(adv & (jg > 0), q, self.stats["jump_q"])
+        self.q_min = torch.where(adv & (jg > 0), torch.minimum(self.q_min, q), self.q_min)
+        self.steps += 1
         return (prog + bonus) / self.dt
 
     def obs(self):
         """(n, MAX_STAGES + 2): one-hot stage, progress in it, finished."""
         one = torch.nn.functional.one_hot(self.stage, MAX_STAGES).float()
         return torch.cat([one, self.p[:, None], self.done.float()[:, None]], -1)
+
+    def command_obs(self):
+        """(n, 3): the commanded depth, clearance and reps, normalised to [-1, 1] over COMMAND_RANGES
+        (fixed G1 ranges, not the clip's, so the numbers mean the same thing for every clip)."""
+        lo = torch.tensor([COMMAND_RANGES[k][0] for k in COMMANDS], device=self.dev)
+        hi = torch.tensor([COMMAND_RANGES[k][1] for k in COMMANDS], device=self.dev)
+        return (2 * (self.command - lo) / (hi - lo) - 1).clamp(-1, 1)
+
+
+COMMANDS = ("depth", "clearance", "reps")
+# What a G1 can be asked for (m below standing / of foot clearance / reps): the commanded-target
+# task samples inside these, and they normalise the command observation.
+COMMAND_RANGES = {"depth": (0.10, 0.32), "clearance": (0.08, MAX_CLEARANCE), "reps": (1, 4)}
+
+
+def rep_ends(spec):
+    """Number of stages that make 1, 2, ... reps: a rep ends with its landing (or, without jumps,
+    its squat) and the stand after it; the last rep keeps the rest of the sequence."""
+    kinds = [s["kind"] for s in spec["stages"]]
+    key = "land" if "jump" in kinds else "squat"
+    ends = [i + 1 + (i + 1 < len(kinds) and kinds[i + 1] == "stand") for i, k in enumerate(kinds) if k == key]
+    return (ends[:-1] + [len(kinds)]) if ends else [len(kinds)]
+
+
+def nominal_command(spec):
+    """The clip's own targets: mean squat depth (and the deepest), mean jump clearance, its reps."""
+    st = spec["stages"]
+    d = [s["depth"] for s in st if s["kind"] == "squat" and "depth" in s]
+    c = [s["clearance"] for s in st if s["kind"] == "jump"]
+    return {"depth": float(np.mean(d)) if d else 0.0, "depth_max": max(d, default=0.0),
+            "clearance": float(np.mean(c)) if c else 0.0, "reps": len(rep_ends(spec))}
+
+
+def command_spec(spec, depth=None, clearance=None, reps=None):
+    """The spec with commanded targets in place of the clip's (for evaluate()): every squat to
+    `depth`, every jump to `clearance`, and the sequence cut after `reps` reps."""
+    out = json.loads(json.dumps(spec))
+    for s in out["stages"]:
+        if s["kind"] == "squat" and depth is not None:
+            s["depth"], s["z_goal"] = round(float(depth), 4), round(spec["h0"] - 0.75 * float(depth), 4)
+        if s["kind"] == "jump" and clearance is not None:
+            s["clearance"] = round(float(clearance), 4)
+    if reps is not None:
+        ends = rep_ends(spec)
+        out["stages"] = out["stages"][: ends[int(np.clip(reps, 1, len(ends))) - 1]]
+    out["summary"] = summarize(out["stages"])
+    out["command"] = {"depth": depth, "clearance": clearance, "reps": reps}
+    return out
 
 
 def fallen(pos):
@@ -281,13 +367,33 @@ def measure(spec, pos, fps):
             "falls": int(fallen(torch.as_tensor(pos)).any())}
 
 
+FALL_ONSET = 0.3  # s before the fall rule fires that are the collapse, not the movement
+
+
+def achieved(spec, pos, trace):
+    """What the rollout actually did per rep: each squat's depth (standing pelvis height minus the
+    lowest pelvis while in that squat or the stage after it, so the countermovement's bottom) and
+    each jump's clearance (highest lower foot during the jump and its landing). Only stages the
+    rollout completed count; trace (stage per frame) stops at the fall's onset."""
+    z, lo, _, _ = (x.numpy() for x in features(pos, spec["foot0"]))
+    trace, kinds = np.asarray(trace), [s["kind"] for s in spec["stages"]]
+    out = {"squat_depths": [], "jump_clearances": []}
+    for i, k in enumerate(kinds):
+        f = (trace == i) | (trace == i + 1)
+        if k in ("squat", "jump") and (trace == i).any() and (trace > i).any():
+            out["squat_depths" if k == "squat" else "jump_clearances"].append(
+                round(float(spec["h0"] - z[f].min() if k == "squat" else lo[f].max()), 3))
+    return out
+
+
 def evaluate(spec, pos, fps):
     """A rollout's body positions (T, bodies, 3) from the start of the motion -> semantic success."""
     m = StageMachine(spec, 1, dt=1.0 / fps)
     pos_t = torch.as_tensor(np.asarray(pos), dtype=torch.float32)
     m.reset(torch.tensor([0]), 0.0, pos_t[:1])
-    done_at, jump_q, fell_at = [], [], None
+    done_at, jump_q, fell_at, trace = [], [], None, [int(m.stage[0])]
     for t in range(1, len(pos_t)):
+        trace.append(int(m.stage[0]))  # the stage this frame is scored against
         before = int(m.completed[0])
         m.step(pos_t[t:t + 1])
         if int(m.completed[0]) > before:
@@ -299,6 +405,8 @@ def evaluate(spec, pos, fps):
             break
     n = int(m.completed[0])
     met = measure(spec, pos_t[: (len(pos_t) if fell_at is None else int(fell_at * fps) + 1)].numpy(), fps)
+    n_ok = len(trace) if fell_at is None else max(0, int(round((fell_at - FALL_ONSET) * fps)))
+    met |= achieved(spec, pos_t[:n_ok], trace[:n_ok])
     kinds = [s["kind"] for s in spec["stages"]]
     met["reps"] = kinds[:n].count("jump" if "jump" in kinds else "squat")
     met["cycle_s"] = (len(pos_t) / fps) / max(met["reps"], 1)

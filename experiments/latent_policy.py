@@ -10,7 +10,8 @@
 4. policies on the target clip, in parallel: tracking (copy the retarget), hybrid (latent reward
    + weak tracking), latent (latent reward only), phase (latent reward only, and the policy sees
    only its own state and a clock, not the retarget); task / taskphase: task first, the semantic
-   stage reward from skill/task.py's spec of the target (task_spec.json) leads, the latent is style
+   stage reward from skill/task.py's spec of the target (task_spec.json) leads, the latent is style;
+   taskcmd: taskphase asked for its own squat depth and jump height every episode (skill/commands.py)
 5. evaluation with the real V-JEPA (not the distilled network): each rollout re-rendered as a
    silhouette and compared with the video, time-aligned and with DTW, against the bank
 
@@ -40,8 +41,9 @@ from latent.distill import unit  # noqa: E402
 
 TASKS = {"tracking": "Mjlab-Tracking-Flat-Unitree-G1", "hybrid": "A2H-Hybrid-Flat-Unitree-G1",
          "latent": "A2H-Latent-Flat-Unitree-G1", "phase": "A2H-LatentPhase-Flat-Unitree-G1",
-         "task": "A2H-Task-Flat-Unitree-G1", "taskphase": "A2H-TaskPhase-Flat-Unitree-G1"}
-TASK_FIRST = ("task", "taskphase")  # trained on the semantic task spec (skill/task.py)
+         "task": "A2H-Task-Flat-Unitree-G1", "taskphase": "A2H-TaskPhase-Flat-Unitree-G1",
+         "taskcmd": "A2H-TaskCmd-Flat-Unitree-G1"}
+TASK_FIRST = ("task", "taskphase", "taskcmd")  # trained on the semantic task spec (skill/task.py)
 
 
 def log(msg):
@@ -253,7 +255,7 @@ def eval_bank(bank, bucket, vj, g1, out, smoke):
 
 
 # A task-first policy can build off these when no weights of its own name are given.
-INIT_FALLBACK = {"task": ("hybrid", "tracking"), "taskphase": ("phase",)}
+INIT_FALLBACK = {"task": ("hybrid", "tracking"), "taskphase": ("phase",), "taskcmd": ("taskphase", "phase")}
 
 
 def _newest(d):
@@ -372,7 +374,8 @@ if __name__ == "__main__":
                                          "task-first policies' style terms")
     ap.add_argument("--init", nargs="*", default=[],
                     help="build policies off saved weights: name=model_*.pt, or a run folder (policy_<name>/"
-                         "model_*.pt; task <- hybrid/tracking, taskphase <- phase if it has none of its own)")
+                         "model_*.pt; task <- hybrid/tracking, taskphase <- phase, taskcmd <- taskphase/phase "
+                         "if it has none of its own)")
     ap.add_argument("--resume-from", help="a run folder whose policy_<name>/model_*.pt checkpoints these policies "
                                           "continue from (same task and motion); --iters is the new total")
     ap.add_argument("--max-clearance", type=float, default=0.30, help="most jump clearance (m) asked of the G1")

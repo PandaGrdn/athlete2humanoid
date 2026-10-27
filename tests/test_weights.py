@@ -92,6 +92,10 @@ class PickCheckpointTest(unittest.TestCase):
         self.assertEqual(init_checkpoint("hybrid", [run]).name, "model_1999.pt")
         self.assertEqual(init_checkpoint("task", [run]).parent.name, "policy_hybrid")  # fallback
         self.assertEqual(init_checkpoint("taskphase", [run]).parent.name, "policy_phase")
+        self.assertEqual(init_checkpoint("taskcmd", [run]).parent.name, "policy_phase")  # 2nd fallback
+        (self.tmp / "run" / "policy_taskphase").mkdir()
+        (self.tmp / "run" / "policy_taskphase" / "model_1499.pt").write_text("x")
+        self.assertEqual(init_checkpoint("taskcmd", [run]).parent.name, "policy_taskphase")
         self.assertIsNone(init_checkpoint("latent", [run]))
         self.assertEqual(init_checkpoint("task", [run, "task=/w/model_5.pt"]), Path("/w/model_5.pt"))
 

@@ -17,6 +17,10 @@ Runs inside mjlab's virtualenv; takes the same flags as mjlab's `train`:
   doing them in order, however and whenever. The latent (and, for Task, 0.1x tracking) is a weak
   style term, optionally weighted in time by A2H_IMPORTANCE; both get the stability terms below
   and episodes end on their fall rule only.
+- A2H-TaskCmd-Flat-Unitree-G1: TaskPhase with commanded targets (skill/commands.py): each episode
+  asks for its own squat depth and jump clearance (optionally reps) inside the G1's ranges, under a
+  curriculum that widens them as the task succeeds; the targets are the last actor/critic inputs,
+  so a TaskPhase checkpoint warm-starts it unchanged (policy_weights.py).
 
 A2H_REWARD_CONFIG=next_reward_config.json (muse/reward_agent.py's format; train_motion.py
 --reward-config sets it) overrides the latent weight, SIGMA, tracking scale and termination
@@ -37,6 +41,7 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from latent.reward_net import BODIES, FPS, WINDOW, load_bundle, window_center_step  # noqa: E402
+from skill import commands as skill_commands  # noqa: E402
 from skill import task as skill_task  # noqa: E402
 
 import mjlab.tasks  # noqa: E402,F401  (registers mjlab's own tasks)
@@ -148,14 +153,20 @@ def torso_lean_excess(env, margin):
     return (tilt - max_tilt - margin).clamp(min=0)
 
 
+def _extra_depth(env):
+    """How much deeper than the clip's deepest squat this episode is commanded to go (TaskCmd)."""
+    m = getattr(env, "a2h_task", None)
+    return 0.0 if m is None else m.extra_depth
+
+
 def torso_height_deficit(env, margin):
     _, z, _, min_z = _torso(env)
-    return (min_z - margin - z).clamp(min=0)
+    return (min_z - margin - _extra_depth(env) - z).clamp(min=0)
 
 
 def torso_fallen(env, tilt_margin, height_margin):
     tilt, z, max_tilt, min_z = _torso(env)
-    return (tilt > max_tilt + tilt_margin) | (z < min_z - height_margin)
+    return (tilt > max_tilt + tilt_margin) | (z < min_z - height_margin - _extra_depth(env))
 
 
 def feet_slip(env, contact_height=0.06):
@@ -287,6 +298,47 @@ class TaskReward:
         return self.m.step(pos)
 
 
+class TaskCmdReward(TaskReward):
+    """TaskReward with commanded targets: every episode samples its own squat depth and jump
+    clearance (skill/commands.py CommandSampler, params["command"] = its curriculum settings), and
+    finished episodes (end, fall, or the motion wrapping around) drive the curriculum."""
+
+    def __init__(self, cfg, env):
+        super().__init__(cfg, env)
+        self.env = env
+        self.sampler = skill_commands.CommandSampler(self.m, seed=getattr(env.cfg, "seed", None),
+                                                     **cfg.params.get("command", {}))
+        self.sampler.sample()
+        env.a2h_cmd = self.sampler
+
+    def reset(self, env_ids=None):
+        ids = torch.arange(self.m.n, device=self.m.dev) if env_ids is None else torch.as_tensor(env_ids, device=self.m.dev)
+        self.sampler.record(ids, self.env.termination_manager.terminated[ids])
+        self.sampler.sample(ids)
+        super().reset(env_ids)
+
+    def __call__(self, env, **kwargs):
+        ts = self.cmd.time_steps
+        wrapped = ((ts != self.last_ts + 1) & (self.last_ts >= 0)).nonzero().squeeze(1)
+        if len(wrapped):  # the reference ran out mid-episode: the stage sequence restarts, same targets
+            self.sampler.record(wrapped, False)
+        return super().__call__(env, **kwargs)
+
+
+def task_command(env):
+    """The commanded targets (depth, clearance, reps), normalised to [-1, 1]."""
+    m = getattr(env, "a2h_task", None)
+    if m is None:
+        return torch.zeros(env.num_envs, len(skill_task.COMMANDS), device=env.device)
+    return m.command_obs()
+
+
+def command_curriculum(env, env_ids):
+    """Logs the command curriculum (CommandSampler updates itself as episodes end)."""
+    s = getattr(env, "a2h_cmd", None)
+    return {} if s is None else {k: torch.tensor(float(v)) for k, v in s.log().items()}
+
+
 def task_stage(env):
     """The policy's view of the task: which stage it is in (one-hot), its progress, finished."""
     m = getattr(env, "a2h_task", None)
@@ -319,16 +371,19 @@ class TimeWeighted:
 
 def task_config():
     """Weights of the task-first tasks: the stage reward leads, V-JEPA latent style follows (both in
-    seconds of unit reward; see skill/task.py WEIGHTS). Overridable via A2H_REWARD_CONFIG."""
+    seconds of unit reward; see skill/task.py WEIGHTS), and the command curriculum (skill/commands.py
+    CURRICULUM). Overridable via A2H_REWARD_CONFIG ("command": {...} for the curriculum)."""
     tc = {"task_weight": 2.0, "style_weight": 1.0}
+    cmd = {}
     path = os.environ.get(REWARD_CONFIG_ENV)
     if path:
         user = json.loads(Path(path).read_text())
         tc |= {k: float(user[k]) for k in tc if k in user}
-    return tc
+        cmd = {k: v for k, v in user.get("command", {}).items() if k in skill_commands.CURRICULUM or k == "ranges"}
+    return tc | {"command": cmd}
 
 
-def task_env_cfg(tracking_scale, play=False, phase_only=False):
+def task_env_cfg(tracking_scale, play=False, phase_only=False, commanded=False):
     """Task-first hybrid: the semantic stage reward leads; the V-JEPA latent and (when
     tracking_scale > 0) the tracking terms are weak style terms, weighted in time by goal importance
     when A2H_IMPORTANCE is set. "Without falling" is part of the task, so both get stability_terms();
@@ -337,7 +392,8 @@ def task_env_cfg(tracking_scale, play=False, phase_only=False):
     if "alive" not in cfg.rewards and "fallen" not in cfg.terminations:  # the hybrid path skipped them
         stability_terms(cfg, reward_config(tracking_scale))
     tc = task_config()
-    cfg.rewards["task"] = RewardTermCfg(func=TaskReward, weight=tc["task_weight"])
+    cfg.rewards["task"] = RewardTermCfg(func=TaskCmdReward if commanded else TaskReward, weight=tc["task_weight"],
+                                        params={"command": tc["command"]} if commanded else {})
     if tc["style_weight"] and os.environ.get("A2H_LATENT_BUNDLE"):
         cfg.rewards["latent"].weight = tc["style_weight"]
     else:
@@ -351,6 +407,10 @@ def task_env_cfg(tracking_scale, play=False, phase_only=False):
     for group in ("actor", "critic"):
         if group in cfg.observations:
             cfg.observations[group].terms["task_stage"] = ObservationTermCfg(func=task_stage)
+            if commanded:  # last, so TaskPhase weights warm-start it (policy_weights.py)
+                cfg.observations[group].terms["task_command"] = ObservationTermCfg(func=task_command)
+    if commanded:
+        cfg.curriculum["command"] = CurriculumTermCfg(func=command_curriculum, params={})
     for k in ("anchor_pos", "anchor_ori", "ee_body_pos"):
         cfg.terminations.pop(k, None)
     return cfg
@@ -363,9 +423,12 @@ for task, scale, phase in (("A2H-Hybrid-Flat-Unitree-G1", 0.2, False), ("A2H-Lat
                         rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
 # Task-first: Task keeps the retarget as the policy's input and a 0.1x tracking style term;
 # TaskPhase sees only its own body, the clock and the task stage, and is never scored on the retarget.
-for task, scale, phase in (("A2H-Task-Flat-Unitree-G1", 0.1, False), ("A2H-TaskPhase-Flat-Unitree-G1", 0.0, True)):
-    register_mjlab_task(task_id=task, env_cfg=task_env_cfg(scale, phase_only=phase),
-                        play_env_cfg=task_env_cfg(scale, play=True, phase_only=phase),
+# TaskCmd is TaskPhase asked for other squat depths and jump heights every episode.
+for task, scale, phase, cmd in (("A2H-Task-Flat-Unitree-G1", 0.1, False, False),
+                                ("A2H-TaskPhase-Flat-Unitree-G1", 0.0, True, False),
+                                ("A2H-TaskCmd-Flat-Unitree-G1", 0.0, True, True)):
+    register_mjlab_task(task_id=task, env_cfg=task_env_cfg(scale, phase_only=phase, commanded=cmd),
+                        play_env_cfg=task_env_cfg(scale, play=True, phase_only=phase, commanded=cmd),
                         rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
 
 
