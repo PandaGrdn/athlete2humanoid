@@ -17,6 +17,12 @@ Runs inside mjlab's virtualenv; takes the same flags as mjlab's `train`:
   doing them in order, however and whenever. The latent (and, for Task, 0.1x tracking) is a weak
   style term, optionally weighted in time by A2H_IMPORTANCE; both get the stability terms below
   and episodes end on their fall rule only.
+- A2H-TaskCmd-Flat-Unitree-G1: TaskPhase with commanded targets (skill/commands.py): each episode
+  asks for its own squat depth and jump clearance (optionally reps) inside the G1's ranges, under a
+  curriculum that widens them as the task succeeds; the targets are the last actor/critic inputs,
+  so a TaskPhase checkpoint warm-starts it unchanged (policy_weights.py). It also starts episodes
+  with the feet on the floor (ground_starts), pays for soft landings (LandingImpact) and
+  penalises the latent reward's uncertainty (LatentReward, lambda 4): docs/PIPELINE_IMPROVEMENTS.md.
 
 A2H_REWARD_CONFIG=next_reward_config.json (muse/reward_agent.py's format; train_motion.py
 --reward-config sets it) overrides the latent weight, SIGMA, tracking scale and termination
@@ -31,12 +37,15 @@ import json
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from latent import reward_net  # noqa: E402
 from latent.reward_net import BODIES, FPS, WINDOW, load_bundle, window_center_step  # noqa: E402
+from skill import commands as skill_commands  # noqa: E402
 from skill import task as skill_task  # noqa: E402
 
 import mjlab.tasks  # noqa: E402,F401  (registers mjlab's own tasks)
@@ -56,13 +65,26 @@ SIGMA = 0.1  # reward = exp(-max(0, cos_ref - cos) / SIGMA): 1 when the robot ma
 
 class LatentReward:
     """Per env: a ring buffer of the last ~1 s of body positions -> the distilled V-JEPA latent
-    -> cosine similarity with the video's latent at the same moment of the motion."""
+    -> cosine similarity with the video's latent at the same moment of the motion.
+
+    params["uncertainty"] = {"lambda": l, "mc": m} (A2H_REWARD_CONFIG "latent_uncertainty"; l = 0,
+    the default, leaves the reward as it was): the cosine minus l x how much more uncertain the
+    network is here than on the reference at the same moment (latent/reward_net.py uncertainty();
+    an ensemble bundle's members, or m MC-dropout samples), so motions the network was never shown
+    can't be scored up by its errors."""
 
     def __init__(self, cfg, env):
         self.cmd = env.command_manager.get_term("motion")
         assert tuple(self.cmd.cfg.body_names) == BODIES, "reward net expects mjlab's G1 tracking bodies"
         self.net, self.target, b = load_bundle(os.environ["A2H_LATENT_BUNDLE"], env.device)
         self.video_fps, self.cos_ref, self.dt = b["video_fps"], b["cos_ref"], env.step_dt
+        unc = cfg.params.get("uncertainty") or {}
+        self.lam, self.mc = float(unc.get("lambda", 0.0)), int(unc.get("mc", 8))
+        if self.lam:  # the reference's own uncertainty at every step: the penalty's zero
+            ref, steps = self.cmd.motion.body_pos_w, torch.arange(self.cmd.motion.time_step_total, device=env.device)
+            with torch.no_grad():
+                self.u_ref = torch.cat([reward_net.uncertainty(reward_net.member_predictions(
+                    self.net, reward_net.reference_windows(ref, ts, self.dt), self.mc)) for ts in steps.split(256)])
         self.origins = env.scene.env_origins
         dev, n = env.device, env.num_envs
         self.L = int(np.ceil((WINDOW - 1) / FPS / self.dt)) + 2
@@ -78,7 +100,7 @@ class LatentReward:
     def reset(self, env_ids=None):
         self.last_ts[slice(None) if env_ids is None else env_ids] = -10
 
-    def __call__(self, env, sigma=SIGMA, **kwargs):
+    def __call__(self, env, sigma=SIGMA, **kwargs):  # kwargs: params["uncertainty"], read at __init__
         ts = self.cmd.time_steps
         jumped = (ts != self.last_ts + 1).nonzero().squeeze(1)  # reset, or motion wrapped around
         if len(jumped):
@@ -96,6 +118,10 @@ class LatentReward:
         valid = (step >= 0) & (step < len(self.target))
         step = step.clamp(0, len(self.target) - 1)
         cos = torch.nn.functional.cosine_similarity(pred, self.target[step], dim=-1)
+        if self.lam:
+            with torch.no_grad():
+                u = reward_net.uncertainty(reward_net.member_predictions(self.net, win, self.mc))
+            cos = cos - self.lam * (u - self.u_ref[ts.clamp(max=len(self.u_ref) - 1)]).clamp(min=0)
         return torch.exp(-(self.cos_ref[step] - cos).clamp(min=0) / sigma) * valid
 
 
@@ -148,14 +174,20 @@ def torso_lean_excess(env, margin):
     return (tilt - max_tilt - margin).clamp(min=0)
 
 
+def _extra_depth(env):
+    """How much deeper than the clip's deepest squat this episode is commanded to go (TaskCmd)."""
+    m = getattr(env, "a2h_task", None)
+    return 0.0 if m is None else m.extra_depth
+
+
 def torso_height_deficit(env, margin):
     _, z, _, min_z = _torso(env)
-    return (min_z - margin - z).clamp(min=0)
+    return (min_z - margin - _extra_depth(env) - z).clamp(min=0)
 
 
 def torso_fallen(env, tilt_margin, height_margin):
     tilt, z, max_tilt, min_z = _torso(env)
-    return (tilt > max_tilt + tilt_margin) | (z < min_z - height_margin)
+    return (tilt > max_tilt + tilt_margin) | (z < min_z - height_margin - _extra_depth(env))
 
 
 def feet_slip(env, contact_height=0.06):
@@ -164,6 +196,75 @@ def feet_slip(env, contact_height=0.06):
     ids = [robot.body_names.index(n) for n in FEET]
     on_floor = robot.data.body_link_pos_w[:, ids, 2] - env.scene.env_origins[:, None, 2] < contact_height
     return (robot.data.body_link_lin_vel_w[:, ids, :2].square().sum(-1) * on_floor).sum(-1)
+
+
+FEET_CONTACT = "feet_ground_contact"
+
+
+def feet_contact_sensor():
+    """mjlab's G1 foot-floor contact sensor (as its velocity task's): net force per foot."""
+    from mjlab.sensor import ContactMatch, ContactSensorCfg
+    return ContactSensorCfg(
+        name=FEET_CONTACT, primary=ContactMatch(mode="subtree", pattern=r"^(left_ankle_roll_link|right_ankle_roll_link)$",
+                                                entity="robot"),
+        secondary=ContactMatch(mode="body", pattern="terrain"), fields=("found", "force"), reduce="netforce",
+        num_slots=1, track_air_time=True)
+
+
+def impact_excess(force, weight, threshold):
+    """(B, feet, 3) foot contact forces -> (B,) how far their total is above threshold x body
+    weight, in body weights (0 while standing, walking or landing softly)."""
+    return (force.norm(dim=-1).sum(-1) / weight - threshold).clamp(min=0)
+
+
+class LandingImpact:
+    """Hard landings: the feet's total contact force above `threshold` body weights, every step it
+    lasts (mjlab's soft_landing only sees the first contact step). A jump's touchdown is where the
+    G1's knees and ankles take their peak loads; a stiff landing is also where the task policies
+    fall (A2H-TaskPhase, 750 iterations: every play rollout falls ~0.1 s after its first landing)."""
+
+    def __init__(self, cfg, env):
+        self.sensor = env.scene[FEET_CONTACT]
+        self.weight = float(env.sim.mj_model.body_mass.sum()) * 9.81
+
+    def __call__(self, env, threshold):
+        f = self.sensor.data.force
+        env.extras.setdefault("log", {})["Metrics/foot_force_peak_bw"] = (f.norm(dim=-1).sum(-1) / self.weight).max()
+        return impact_excess(f, self.weight, threshold)
+
+
+def ground_offsets(ankle_z, floor, hover_max, keep_out=(), fps=50.0):
+    """Per reference frame, how far to lower a start state so its lower foot is on the floor:
+    the lower ankle's height above `floor` (the robot's standing ankle height), where that is at
+    most hover_max (the retarget's feet hover, e.g. ~5 cm in squat_jump's first frame), outside the
+    keep_out windows (s; take-offs and flights, which really are in the air); 0 elsewhere."""
+    lift = ankle_z.min(-1).values - floor
+    off = torch.where(lift <= hover_max, lift.clamp(min=0), torch.zeros_like(lift))
+    t = torch.arange(len(off), device=off.device) / fps
+    for a, b in keep_out:
+        off = torch.where((t >= a) & (t <= b), torch.zeros_like(off), off)
+    return off
+
+
+def ground_starts(cmd, spec, dt, keep_margin=(0.15, 0.1)):
+    """Reference-state init with the feet on the floor: mjlab puts the robot at the reference's
+    root pose, so a hovering retarget frame starts the episode with a fall (squat_jump from t=0:
+    4 control steps in the air, then a 3.8-4.6 body-weight impact). The motion command's start
+    states are lowered by ground_offsets(), from the task spec's standing ankle height, hover level
+    (down_ref) and jump stages (kept out, keep_margin s before / after). -> the offsets."""
+    keep = [(st["start_s"] - keep_margin[0], st["end_s"] + keep_margin[1])
+            for st in spec["stages"] if st["kind"] == "jump"]
+    ankles = cmd.motion.body_pos_w[:, [skill_task.L_ANKLE, skill_task.R_ANKLE], 2]
+    off = ground_offsets(ankles, spec["foot0"], max(spec.get("down_ref", 0.1), 0.05), keep, 1 / dt)
+    write = cmd._write_reference_state_to_sim
+
+    def write_grounded(env_ids, root_pos, *rest):
+        root_pos = root_pos.clone()
+        root_pos[:, 2] -= off[cmd.time_steps[env_ids].clamp(max=len(off) - 1)]
+        write(env_ids, root_pos, *rest)
+
+    cmd._write_reference_state_to_sim = write_grounded
+    return off
 
 
 class PushCurriculum:
@@ -232,6 +333,24 @@ def reward_config(tracking_scale):
     return rc
 
 
+UNCERTAINTY = {"lambda": 0.0, "mc": 8}  # latent reward uncertainty penalty (LatentReward); 0: off
+# TaskCmd's default lambda. On the v2 squat bundle (8 MC-dropout samples) it takes the hacked
+# policies' distilled-minus-real gap from +0.115/+0.101 to +0.023/-0.027 and moves in-distribution
+# rollouts by <= 0.017 (docs/PIPELINE_IMPROVEMENTS.md).
+UNCERTAINTY_CMD = 4.0
+
+
+def uncertainty_config(default_lambda=None):
+    """LatentReward's uncertainty penalty: UNCERTAINTY, overridden by A2H_REWARD_CONFIG's
+    "latent_uncertainty": {"lambda": ..., "mc": ...} (or just a number, the lambda)."""
+    u = dict(UNCERTAINTY) | ({} if default_lambda is None else {"lambda": default_lambda})
+    path = os.environ.get(REWARD_CONFIG_ENV)
+    if path:
+        user = json.loads(Path(path).read_text()).get("latent_uncertainty", {})
+        u |= {"lambda": float(user)} if isinstance(user, (int, float)) else {k: float(v) for k, v in user.items() if k in u}
+    return u
+
+
 def latent_env_cfg(tracking_scale, play=False, phase_only=False):
     rc = reward_config(tracking_scale)
     tracking_scale, th = rc["tracking_scale"], rc["terminations"]
@@ -246,7 +365,8 @@ def latent_env_cfg(tracking_scale, play=False, phase_only=False):
             cfg.rewards[k].weight *= tracking_scale
         else:
             del cfg.rewards[k]
-    cfg.rewards["latent"] = RewardTermCfg(func=LatentReward, weight=rc["latent_weight"], params={"sigma": rc["sigma"]})
+    cfg.rewards["latent"] = RewardTermCfg(func=LatentReward, weight=rc["latent_weight"],
+                                          params={"sigma": rc["sigma"], "uncertainty": uncertainty_config()})
     cfg.terminations["anchor_pos"].params["threshold"] = th["anchor_pos"]
     cfg.terminations["anchor_ori"].params["threshold"] = th["anchor_ori"]
     if tracking_scale:
@@ -271,6 +391,8 @@ class TaskReward:
         assert tuple(self.cmd.cfg.body_names) == BODIES, "skill/task.py indexes mjlab's G1 tracking bodies"
         spec = json.loads(Path(os.environ[TASK_SPEC_ENV]).read_text())
         self.m = skill_task.StageMachine(spec, env.num_envs, env.device, env.step_dt)
+        if cfg.params.get("grounded_rsi"):  # before the first reset (managers are built first)
+            env.a2h_ground_offset = ground_starts(self.cmd, spec, env.step_dt)
         self.dt = env.step_dt
         self.last_ts = torch.full((env.num_envs,), -10, dtype=torch.long, device=env.device)
         env.a2h_task = self.m  # for the task_stage observation
@@ -288,6 +410,47 @@ class TaskReward:
         return self.m.step(pos, fell=env.termination_manager.terminated)
 
 
+class TaskCmdReward(TaskReward):
+    """TaskReward with commanded targets: every episode samples its own squat depth and jump
+    clearance (skill/commands.py CommandSampler, params["command"] = its curriculum settings), and
+    finished episodes (end, fall, or the motion wrapping around) drive the curriculum."""
+
+    def __init__(self, cfg, env):
+        super().__init__(cfg, env)
+        self.env = env
+        self.sampler = skill_commands.CommandSampler(self.m, seed=getattr(env.cfg, "seed", None),
+                                                     **cfg.params.get("command", {}))
+        self.sampler.sample()
+        env.a2h_cmd = self.sampler
+
+    def reset(self, env_ids=None):
+        ids = torch.arange(self.m.n, device=self.m.dev) if env_ids is None else torch.as_tensor(env_ids, device=self.m.dev)
+        self.sampler.record(ids, self.env.termination_manager.terminated[ids])
+        self.sampler.sample(ids)
+        super().reset(env_ids)
+
+    def __call__(self, env, **kwargs):
+        ts = self.cmd.time_steps
+        wrapped = ((ts != self.last_ts + 1) & (self.last_ts >= 0)).nonzero().squeeze(1)
+        if len(wrapped):  # the reference ran out mid-episode: the stage sequence restarts, same targets
+            self.sampler.record(wrapped, False)
+        return super().__call__(env, **kwargs)
+
+
+def task_command(env):
+    """The commanded targets (depth, clearance, reps), normalised to [-1, 1]."""
+    m = getattr(env, "a2h_task", None)
+    if m is None:
+        return torch.zeros(env.num_envs, len(skill_task.COMMANDS), device=env.device)
+    return m.command_obs()
+
+
+def command_curriculum(env, env_ids):
+    """Logs the command curriculum (CommandSampler updates itself as episodes end)."""
+    s = getattr(env, "a2h_cmd", None)
+    return {} if s is None else {k: torch.tensor(float(v)) for k, v in s.log().items()}
+
+
 def task_stage(env):
     """The policy's view of the task: which stage it is in (one-hot), its progress, finished."""
     m = getattr(env, "a2h_task", None)
@@ -303,7 +466,9 @@ class TimeWeighted:
 
     def __init__(self, cfg, env):
         inner = cfg.params["inner"]
-        self.inner = inner(cfg, env) if isinstance(inner, type) else inner
+        # a class term is built with its own params (e.g. LatentReward's uncertainty settings)
+        inner_cfg = SimpleNamespace(params=cfg.params.get("inner_params") or {}, weight=cfg.weight)
+        self.inner = inner(inner_cfg, env) if isinstance(inner, type) else inner
         imp = json.loads(Path(os.environ[IMPORTANCE_ENV]).read_text())
         self.w = torch.tensor(imp["weight"], dtype=torch.float32, device=env.device)
         self.fps, self.dt = float(imp["fps"]), env.step_dt
@@ -320,16 +485,24 @@ class TimeWeighted:
 
 def task_config():
     """Weights of the task-first tasks: the stage reward leads, V-JEPA latent style follows (both in
-    seconds of unit reward; see skill/task.py WEIGHTS). Overridable via A2H_REWARD_CONFIG."""
-    tc = {"task_weight": 2.0, "style_weight": 1.0}
+    seconds of unit reward; see skill/task.py WEIGHTS), and the command curriculum (skill/commands.py
+    CURRICULUM). Overridable via A2H_REWARD_CONFIG ("command": {...} for the curriculum)."""
+    tc = {"task_weight": 2.0, "style_weight": 1.0, "landing_weight": None, "landing_threshold": LANDING_BW,
+          "grounded_rsi": None}
+    cmd = {}
     path = os.environ.get(REWARD_CONFIG_ENV)
     if path:
         user = json.loads(Path(path).read_text())
-        tc |= {k: float(user[k]) for k in tc if k in user}
-    return tc
+        tc |= {k: (bool(user[k]) if k == "grounded_rsi" else float(user[k])) for k in tc if k in user}
+        cmd = {k: v for k, v in user.get("command", {}).items() if k in skill_commands.CURRICULUM or k == "ranges"}
+    return tc | {"command": cmd}
 
 
-def task_env_cfg(tracking_scale, play=False, phase_only=False):
+LANDING_BW = 3.0  # landing penalty above this many body weights (the clip's own landing: ~1.9 BW)
+LANDING_CMD = -5.0  # TaskCmd: per s per body weight above LANDING_BW (a 3-step 5 BW landing: -0.6; a jump pays 4)
+
+
+def task_env_cfg(tracking_scale, play=False, phase_only=False, commanded=False):
     """Task-first hybrid: the semantic stage reward leads; the V-JEPA latent and (when
     tracking_scale > 0) the tracking terms are weak style terms, weighted in time by goal importance
     when A2H_IMPORTANCE is set. "Without falling" is part of the task, so both get stability_terms();
@@ -338,9 +511,14 @@ def task_env_cfg(tracking_scale, play=False, phase_only=False):
     if "alive" not in cfg.rewards and "fallen" not in cfg.terminations:  # the hybrid path skipped them
         stability_terms(cfg, reward_config(tracking_scale))
     tc = task_config()
-    cfg.rewards["task"] = RewardTermCfg(func=TaskReward, weight=tc["task_weight"])
+    grounded = tc["grounded_rsi"] if tc["grounded_rsi"] is not None else commanded
+    cfg.rewards["task"] = RewardTermCfg(func=TaskCmdReward if commanded else TaskReward, weight=tc["task_weight"],
+                                        params=({"command": tc["command"]} if commanded else {})
+                                        | ({"grounded_rsi": True} if grounded else {}))
     if tc["style_weight"] and os.environ.get("A2H_LATENT_BUNDLE"):
         cfg.rewards["latent"].weight = tc["style_weight"]
+        if commanded:  # new targets take it off the clip the network was distilled on: penalise its guesses
+            cfg.rewards["latent"].params["uncertainty"] = uncertainty_config(default_lambda=UNCERTAINTY_CMD)
     else:
         del cfg.rewards["latent"]
     if os.environ.get(IMPORTANCE_ENV):
@@ -352,6 +530,16 @@ def task_env_cfg(tracking_scale, play=False, phase_only=False):
     for group in ("actor", "critic"):
         if group in cfg.observations:
             cfg.observations[group].terms["task_stage"] = ObservationTermCfg(func=task_stage)
+            if commanded:  # last, so TaskPhase weights warm-start it (policy_weights.py)
+                cfg.observations[group].terms["task_command"] = ObservationTermCfg(func=task_command)
+    if commanded:
+        cfg.curriculum["command"] = CurriculumTermCfg(func=command_curriculum, params={})
+    # Landing (TaskCmd by default; the other task tasks via A2H_REWARD_CONFIG "landing_weight").
+    landing = tc["landing_weight"] if tc["landing_weight"] is not None else (LANDING_CMD if commanded else 0.0)
+    if landing:
+        cfg.scene.sensors = (cfg.scene.sensors or ()) + (feet_contact_sensor(),)
+        cfg.rewards["landing"] = RewardTermCfg(func=LandingImpact, weight=landing,
+                                               params={"threshold": tc["landing_threshold"]})
     for k in ("anchor_pos", "anchor_ori", "ee_body_pos"):
         cfg.terminations.pop(k, None)
     return cfg
@@ -364,9 +552,12 @@ for task, scale, phase in (("A2H-Hybrid-Flat-Unitree-G1", 0.2, False), ("A2H-Lat
                         rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
 # Task-first: Task keeps the retarget as the policy's input and a 0.1x tracking style term;
 # TaskPhase sees only its own body, the clock and the task stage, and is never scored on the retarget.
-for task, scale, phase in (("A2H-Task-Flat-Unitree-G1", 0.1, False), ("A2H-TaskPhase-Flat-Unitree-G1", 0.0, True)):
-    register_mjlab_task(task_id=task, env_cfg=task_env_cfg(scale, phase_only=phase),
-                        play_env_cfg=task_env_cfg(scale, play=True, phase_only=phase),
+# TaskCmd is TaskPhase asked for other squat depths and jump heights every episode.
+for task, scale, phase, cmd in (("A2H-Task-Flat-Unitree-G1", 0.1, False, False),
+                                ("A2H-TaskPhase-Flat-Unitree-G1", 0.0, True, False),
+                                ("A2H-TaskCmd-Flat-Unitree-G1", 0.0, True, True)):
+    register_mjlab_task(task_id=task, env_cfg=task_env_cfg(scale, phase_only=phase, commanded=cmd),
+                        play_env_cfg=task_env_cfg(scale, play=True, phase_only=phase, commanded=cmd),
                         rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
 
 

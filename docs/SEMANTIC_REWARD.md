@@ -79,8 +79,8 @@ A person's clip has movements that don't serve the goal. For example, waving the
   - Stages done, jump apex and quality, squat depth, and DTW to the clip, next to falls, tracking errors and V-JEPA.
   - `robust_summary.md` is the table for the write-up.
   - Task-first policies need their `task_spec.json` in the run folder (or `A2H_TASK_SPEC`); without it they refuse to load.
+- **Commanded targets** (`A2H-TaskCmd`): every episode samples its own squat depth and jump clearance, under a curriculum. `experiments/command_eval.py` checks whether the policy follows them; see `docs/PIPELINE_IMPROVEMENTS.md`.
 - **Next steps:**
-  - Sample depth and apex targets as commands, so the policy can't memorise one trajectory.
   - Have Muse judge rendered robot rollouts phase by phase.
   - Check specs from other squat-jump videos agree.
 

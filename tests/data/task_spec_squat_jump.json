@@ -1,0 +1,79 @@
+{
+ "name": "squat_jump",
+ "fps": 30.0,
+ "duration_s": 9.033,
+ "h0": 0.854,
+ "foot0": 0.033,
+ "z_low": 0.598,
+ "down": 0.05,
+ "air": 0.06,
+ "down_ref": 0.15,
+ "air_ref": 0.16,
+ "weights": {
+  "progress": 1.0,
+  "stage": 1.0,
+  "jump": 2.0,
+  "done": 4.0
+ },
+ "stages": [
+  {
+   "kind": "stand",
+   "start_s": 0.0,
+   "end_s": 1.833
+  },
+  {
+   "kind": "squat",
+   "start_s": 1.9,
+   "end_s": 2.733,
+   "depth": 0.248,
+   "z_goal": 0.668
+  },
+  {
+   "kind": "jump",
+   "start_s": 2.833,
+   "end_s": 3.267,
+   "clearance": 0.3,
+   "ref_clearance": 0.399,
+   "min_air_s": 0.12
+  },
+  {
+   "kind": "land",
+   "start_s": 3.267,
+   "end_s": 4.2,
+   "absorb_z": 0.582
+  },
+  {
+   "kind": "stand",
+   "start_s": 4.333,
+   "end_s": 6.067
+  },
+  {
+   "kind": "squat",
+   "start_s": 6.133,
+   "end_s": 6.867,
+   "depth": 0.244,
+   "z_goal": 0.671
+  },
+  {
+   "kind": "jump",
+   "start_s": 6.967,
+   "end_s": 7.433,
+   "clearance": 0.3,
+   "ref_clearance": 0.382,
+   "min_air_s": 0.12
+  },
+  {
+   "kind": "land",
+   "start_s": 7.433,
+   "end_s": 8.433,
+   "absorb_z": 0.58
+  },
+  {
+   "kind": "stand",
+   "start_s": 8.6,
+   "end_s": 9.033
+  }
+ ],
+ "summary": "2 jumps: stand -> squat -> jump -> land -> stand -> squat -> jump -> land -> stand",
+ "warnings": []
+}
