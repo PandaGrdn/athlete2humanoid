@@ -21,7 +21,6 @@ the task? GPU job (scripts/remote_run.py relevance).
 
 import argparse
 import json
-import shutil
 import subprocess
 import sys
 import tarfile

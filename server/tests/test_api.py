@@ -73,7 +73,7 @@ def make_client(runs_dir, tmp_path):
     def make(**kw):
         s = Settings()
         s.runs_dir, s.data_dir = runs_dir, tmp_path / "data"
-        s.demo_seconds, s.demo_run, s.runners, s.enable_colab = 0.3, "latent", ["demo"], False
+        s.demo_seconds, s.demo_run, s.runners, s.enable_colab, s.hosted = 0.3, "latent", ["demo"], False, False
         for k, v in kw.items():
             setattr(s, k, v)
         return TestClient(create_app(s))
