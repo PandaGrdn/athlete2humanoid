@@ -26,7 +26,7 @@ DATA = ROOT / "tests" / "data" / "remote_latent"
 TRACKING = ("motion_global_root_pos", "motion_global_root_ori", "motion_body_pos",
             "motion_body_ori", "motion_body_lin_vel", "motion_body_ang_vel")
 HYBRID, LATENT, PHASE = "A2H-Hybrid-Flat-Unitree-G1", "A2H-Latent-Flat-Unitree-G1", "A2H-LatentPhase-Flat-Unitree-G1"
-TASK, TASK_PHASE = "A2H-Task-Flat-Unitree-G1", "A2H-TaskPhase-Flat-Unitree-G1"
+TASK, TASK_PHASE, TASK_CMD = "A2H-Task-Flat-Unitree-G1", "A2H-TaskPhase-Flat-Unitree-G1", "A2H-TaskCmd-Flat-Unitree-G1"
 
 
 class RewardTermCfg:
@@ -42,7 +42,8 @@ def stub_env_cfg(play=False):
                            rewards={k: SimpleNamespace(weight=1.0, func=k, params={}) for k in (*TRACKING, "action_rate_l2")},
                            terminations={k: SimpleNamespace(params={"threshold": 0.25})
                                          for k in ("anchor_pos", "anchor_ori", "ee_body_pos")},
-                           events={} if play else {"push_robot": None}, curriculum={})
+                           events={} if play else {"push_robot": None}, curriculum={},
+                           scene=SimpleNamespace(sensors=("self_collision",)))
 
 
 def import_mjlab_tasks(reward_config=None, extra_env=None):
@@ -53,13 +54,14 @@ def import_mjlab_tasks(reward_config=None, extra_env=None):
         "mjlab.envs.mdp", "mjlab.managers.curriculum_manager", "mjlab.managers.termination_manager",
         "mjlab.managers.reward_manager", "mjlab.managers.observation_manager", "mjlab.tasks.registry", "mjlab.tasks.tracking",
         "mjlab.tasks.tracking.config", "mjlab.tasks.tracking.config.g1", "mjlab.tasks.tracking.config.g1.env_cfgs",
-        "mjlab.tasks.tracking.config.g1.rl_cfg", "mjlab.tasks.tracking.rl")}
+        "mjlab.tasks.tracking.config.g1.rl_cfg", "mjlab.tasks.tracking.rl", "mjlab.sensor")}
     rn = mods["latent.reward_net"]
     rn.BODIES, rn.FPS, rn.WINDOW, rn.load_bundle, rn.window_center_step = (), 30.0, 32, None, None
     mods["mjlab.managers.reward_manager"].RewardTermCfg = RewardTermCfg
     mods["mjlab.managers.observation_manager"].ObservationTermCfg = lambda **kw: SimpleNamespace(**kw)
     mods["mjlab.managers.termination_manager"].TerminationTermCfg = lambda **kw: SimpleNamespace(**kw)
     mods["mjlab.managers.curriculum_manager"].CurriculumTermCfg = lambda **kw: SimpleNamespace(**kw)
+    mods["mjlab.sensor"].ContactMatch = mods["mjlab.sensor"].ContactSensorCfg = lambda **kw: SimpleNamespace(**kw)
     mods["mjlab.envs"].mdp = mods["mjlab.envs.mdp"]
     for f in ("is_alive", "is_terminated", "joint_acc_l2"):
         setattr(mods["mjlab.envs.mdp"], f, f)
@@ -200,6 +202,39 @@ class RewardConfigTest(unittest.TestCase):
         self.assertFalse(any(k in phase.observations["actor"].terms for k in mt.REFERENCE_OBS))
         self.assertIn("command", task.observations["actor"].terms)
 
+    def test_commanded_task(self):
+        mt, tasks = import_mjlab_tasks(extra_env={"A2H_LATENT_BUNDLE": "reward.pt"})
+        cmd, phase = tasks[TASK_CMD], tasks[TASK_PHASE]
+        for g in ("actor", "critic"):  # TaskPhase's inputs, then the command: warm-startable
+            self.assertEqual(list(cmd.observations[g].terms), list(phase.observations[g].terms) + ["task_command"])
+        self.assertIs(cmd.rewards["task"].func, mt.TaskCmdReward)
+        self.assertEqual(cmd.rewards["task"].params["grounded_rsi"], True)
+        self.assertIn("command", cmd.curriculum)
+        self.assertEqual(cmd.rewards["latent"].params["uncertainty"]["lambda"], mt.UNCERTAINTY_CMD)
+        self.assertEqual(cmd.rewards["landing"].weight, mt.LANDING_CMD)
+        self.assertEqual([getattr(x, "name", x) for x in cmd.scene.sensors], ["self_collision", mt.FEET_CONTACT])
+        self.assertEqual(set(cmd.rewards) - {"landing"}, set(phase.rewards))
+        # Task and TaskPhase are as before: no commands, landing term, sensor, penalty or grounding
+        for c in (tasks[TASK], phase):
+            self.assertNotIn("task_command", c.observations["actor"].terms)
+            self.assertNotIn("landing", c.rewards)
+            self.assertEqual(c.scene.sensors, ("self_collision",))
+            self.assertEqual(c.rewards["latent"].params["uncertainty"]["lambda"], 0.0)
+            self.assertEqual(c.rewards["task"].params, {})
+            self.assertNotIn("command", c.curriculum)
+
+    def test_commanded_task_config(self):
+        rc = self.tmp / "rc.json"
+        rc.write_text(json.dumps({"landing_weight": 0, "grounded_rsi": False, "latent_uncertainty": 1.5,
+                                  "command": {"up": 0.8, "reps": True, "bogus": 1}}))
+        mt, tasks = import_mjlab_tasks(rc, extra_env={"A2H_LATENT_BUNDLE": "reward.pt"})
+        cmd = tasks[TASK_CMD]
+        self.assertNotIn("landing", cmd.rewards)
+        self.assertNotIn("grounded_rsi", cmd.rewards["task"].params)
+        self.assertEqual(cmd.rewards["task"].params["command"], {"up": 0.8, "reps": True})
+        self.assertEqual(cmd.rewards["latent"].params["uncertainty"]["lambda"], 1.5)
+        self.assertEqual(tasks[LATENT].rewards["latent"].params["uncertainty"]["lambda"], 1.5)  # opt-in everywhere
+
     def test_task_without_latent_bundle_or_with_importance(self):
         _, tasks = import_mjlab_tasks()
         self.assertNotIn("latent", tasks[TASK].rewards)
@@ -210,6 +245,8 @@ class RewardConfigTest(unittest.TestCase):
         self.assertIs(r["motion_body_pos"].func, mt.TimeWeighted)
         self.assertAlmostEqual(r["motion_body_pos"].weight, 0.1)
         self.assertIs(r["task"].func, mt.TaskReward)  # the goal itself is never down-weighted
+        cmd = tasks[TASK_CMD].rewards["latent"]
+        self.assertEqual(cmd.params["inner_params"]["uncertainty"]["lambda"], mt.UNCERTAINTY_CMD)
 
     def test_latent_variant_cannot_add_tracking(self):
         c = mc.make_client(dry_run=True, default_fixture="reward_proposal_remote_latent.json")

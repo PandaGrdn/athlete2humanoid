@@ -74,8 +74,8 @@ A person's clip has movements that don't serve the goal. For example, waving the
 
 - **Semantic success rate** (`task_success`), including under the robustness suite's pushes, start noise and speed changes. Not just V-JEPA alignment.
 - **High success at a non-trivial distance from the clip.** Report joint-space DTW to the retarget alongside success.
+- **Commanded targets** (`A2H-TaskCmd`): every episode samples its own squat depth and jump clearance, under a curriculum. `experiments/command_eval.py` checks whether the policy follows them; see `docs/PIPELINE_IMPROVEMENTS.md`.
 - **Next steps:**
-  - Sample depth and apex targets as commands, so the policy can't memorise one trajectory.
   - Have Muse judge rendered robot rollouts phase by phase.
   - Check specs from other squat-jump videos agree.
 

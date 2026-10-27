@@ -158,7 +158,7 @@ def main(a):
         bank_c = {str(n)[5:]: Y[seq == i].astype(np.float32) for i, n in enumerate(names) if is_bank[i]}
         log("training the reward network")
         net, U, rep = distill.train_reward_net(ds["X"], Y, seq, r_mean, k=a.k, epochs=a.epochs,
-                                               hidden=a.hidden, depth=a.depth)
+                                               hidden=a.hidden, depth=a.depth, members=a.ensemble)
         target = distill.video_target(tgt["centred"], h_mean_c, U)
         pred = distill.predict(net, distill.body_positions(g1, tgt["qpos"]))
         n = min(len(pred), len(target))
@@ -362,6 +362,8 @@ if __name__ == "__main__":
     ap.add_argument("--hidden", type=int, default=1024)
     ap.add_argument("--depth", type=int, default=3)
     ap.add_argument("--every", type=int, default=2, help="distil at every n-th dense step")
+    ap.add_argument("--ensemble", type=int, default=1, help="reward networks to distil (bootstrap ensemble; its spread "
+                                                            "is the latent reward's uncertainty penalty)")
     ap.add_argument("--extra-motions", nargs="*", default=[],
                     help="earlier policies' policy_qpos.npy (50 Hz), added to the distillation data")
     ap.add_argument("--reward", help="reuse this reward bundle (reward.pt) instead of distilling one")

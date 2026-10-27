@@ -19,7 +19,7 @@ import numpy as np
 from scipy.ndimage import gaussian_filter1d
 
 from latent import silhouette
-from latent.reward_net import BODIES, WINDOW, LatentRewardNet
+from latent.reward_net import BODIES, WINDOW, LatentRewardEnsemble, LatentRewardNet, uncertainty
 
 FPS = 30
 LEGS = slice(7, 19)    # qpos columns: base xyz (0:3), base quat wxyz (3:7), 12 leg joints,
@@ -150,9 +150,11 @@ def unit(x):
 
 
 def train_reward_net(X, Y, seq, r_mean, k=64, epochs=80, val_frac=0.1, seed=0, device=None,
-                     hidden=1024, depth=3, features=2):
+                     hidden=1024, depth=3, features=2, members=1):
     """Fit the network on (window -> centred latent projected on its top-k principal components).
-    Validation holds out whole motions. Returns (net, basis (1024, k), report)."""
+    Validation holds out whole motions. members > 1: an ensemble, each member on a bootstrap
+    resample of the training motions with its own seed (its spread is the reward's uncertainty).
+    Returns (net, basis (1024, k), report)."""
     import torch
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     rng = np.random.default_rng(seed)
@@ -165,12 +167,43 @@ def train_reward_net(X, Y, seq, r_mean, k=64, epochs=80, val_frac=0.1, seed=0, d
     U = Vt[:k].T
     explained = float((S[:k] ** 2).sum() / (S ** 2).sum())
     Z = Yc @ U
+    report = {"samples": int(len(X)), "motions": int(len(motions)), "val_motions": int(len(val_m)),
+              "pca_k": k, "pca_explained_variance": explained}
+    if members > 1:
+        train_m = np.setdiff1d(motions, val_m)
+        nets = []
+        for i in range(members):
+            boot = rng.choice(train_m, len(train_m), replace=True)
+            counts = np.bincount(np.searchsorted(train_m, boot), minlength=len(train_m))
+            weight = np.zeros(int(seq.max()) + 1, np.int64)
+            weight[train_m] = counts  # how often each training motion was drawn
+            print(f"  member {i + 1}/{members}", flush=True)
+            torch.manual_seed(seed + i)
+            nets.append(_fit(X, Z, weight[seq], val, k, epochs, hidden, depth, features, device)[0])
+        net = LatentRewardEnsemble(nets)
+        net.kwargs = nets[0].kwargs
+        Xt = torch.as_tensor(X, dtype=torch.float32)
+        with torch.no_grad():
+            u_val = uncertainty(net.members(Xt[val][:20000])).mean()
+            u_tr = uncertainty(net.members(Xt[~val][:20000])).mean()
+            cos_v = torch.nn.functional.cosine_similarity(net(Xt[val]), torch.as_tensor(Z[val]), dim=-1)
+        report |= {"members": members, "uncertainty_train": float(u_tr), "uncertainty_val": float(u_val)}
+    else:
+        net, cos_v = _fit(X, Z, (~val).astype(np.int64), val, k, epochs, hidden, depth, features, device)
+    report |= {"val_cosine_mean": float(cos_v.mean()), "val_cosine_p10": float(cos_v.quantile(0.1)),
+               "net": net.kwargs, "epochs": epochs}
+    return net.cpu(), U.astype(np.float32), report
 
+
+def _fit(X, Z, repeat, val, k, epochs, hidden, depth, features, device):
+    """One network on the samples repeated `repeat` times each (0: not trained on) -> (net on the
+    cpu, held-out cosines)."""
+    import torch
     net = LatentRewardNet(k=k, hidden=hidden, depth=depth, features=features).to(device)
     net.kwargs = {"k": k, "hidden": hidden, "depth": depth, "features": features}
     Xt = torch.as_tensor(X, dtype=torch.float32, device=device)
     Zt = torch.as_tensor(Z, dtype=torch.float32, device=device)
-    tr, va = torch.as_tensor(~val, device=device), torch.as_tensor(val, device=device)
+    tr, va = torch.as_tensor(repeat > 0, device=device), torch.as_tensor(val, device=device)
     with torch.no_grad():
         feats = net.featurize(Xt[tr])
     net.in_mean.copy_(feats.mean(0))
@@ -179,7 +212,7 @@ def train_reward_net(X, Y, seq, r_mean, k=64, epochs=80, val_frac=0.1, seed=0, d
 
     opt = torch.optim.AdamW(net.parameters(), lr=1e-3, weight_decay=1e-3)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, epochs)
-    idx_tr = torch.nonzero(tr).squeeze(1)
+    idx_tr = torch.repeat_interleave(torch.arange(len(repeat), device=device), torch.as_tensor(repeat, device=device))
 
     def loss_fn(pred, z):
         cos = torch.nn.functional.cosine_similarity(pred, z, dim=-1)
@@ -203,11 +236,7 @@ def train_reward_net(X, Y, seq, r_mean, k=64, epochs=80, val_frac=0.1, seed=0, d
     net.eval()
     with torch.no_grad():
         _, cos_v = loss_fn(net(Xt[va]), Zt[va])
-    report = {"samples": int(len(X)), "motions": int(len(motions)), "val_motions": int(len(val_m)),
-              "pca_k": k, "pca_explained_variance": explained, "val_cosine_mean": float(cos_v.mean()),
-              "val_cosine_p10": float(cos_v.quantile(0.1))}
-    report |= {"net": net.kwargs, "epochs": epochs}
-    return net.cpu(), U.astype(np.float32), report
+    return net.cpu(), cos_v.cpu()
 
 
 def predict(net, pos):
@@ -227,7 +256,9 @@ def save_bundle(path, net, U, r_mean, h_mean, target, cos_ref, video_fps, report
     cos_ref, how well the retarget itself matches the video at each step (the reward's 'full
     marks' level)."""
     import torch
-    torch.save({"state_dict": net.state_dict(), "net_kwargs": getattr(net, "kwargs", {"k": U.shape[1]}), "target": target.astype(np.float32),
+    members = [n.state_dict() for n in net.nets] if isinstance(net, LatentRewardEnsemble) else None
+    torch.save({"state_dict": members[0] if members else net.state_dict(), "members": members,
+                "net_kwargs": getattr(net, "kwargs", {"k": U.shape[1]}), "target": target.astype(np.float32),
                 "cos_ref": cos_ref.astype(np.float32), "basis": U, "r_mean": r_mean, "h_mean": h_mean,
                 "video_fps": float(video_fps), "azimuth": float(azimuth), "report": report}, path)
     print(f"reward bundle -> {path}: {len(target)} target steps, {json.dumps(report)}")

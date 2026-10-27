@@ -277,6 +277,28 @@ class TaskCmdEnvTest(unittest.TestCase):
                 obs, *_ = self.venv_c.step(a)
         self.assertEqual(worst, 0.0)
 
+    def test_grounded_starts_and_landing_term(self):
+        import mjlab_tasks as mt
+        cmd_c = self.env_c.command_manager.get_term("motion")
+        cmd_p = self.env_p.command_manager.get_term("motion")
+        self.venv_c.reset()
+        self.venv_p.reset()
+        foot0 = json.loads((DATA / "task_spec_squat_jump.json").read_text())["foot0"]
+        low = lambda c: c.robot_body_pos_w[:, [T.L_ANKLE, T.R_ANKLE], 2].min(-1).values
+        self.assertGreater(float(low(cmd_p).min()), foot0 + 0.04)  # the retarget's first frame hovers
+        self.assertTrue(torch.allclose(low(cmd_c), torch.full((4,), foot0), atol=0.01))  # TaskCmd: on the floor
+        self.assertIn("landing", self.env_c.reward_manager.active_terms)
+        self.assertNotIn("landing", self.env_p.reward_manager.active_terms)
+        self.assertAlmostEqual(float(self.env_c.a2h_ground_offset[0]), float(low(cmd_p)[0] - foot0), delta=0.005)
+
+    def test_ground_offsets_and_impact(self):
+        import mjlab_tasks as mt
+        z = torch.tensor([[0.10, 0.20], [0.05, 0.05], [0.30, 0.40], [0.03, 0.30], [0.08, 0.08]])
+        off = mt.ground_offsets(z, 0.03, 0.12, keep_out=[(0.07, 0.09)], fps=50.0)  # frame 4 is at 0.08 s
+        self.assertTrue(torch.allclose(off, torch.tensor([0.07, 0.02, 0.0, 0.0, 0.0])))
+        f = torch.tensor([[[0, 0, -300.0], [0, 0, -300.0]], [[0, 0, -900.0], [0, 0, -900.0]]])
+        self.assertTrue(torch.allclose(mt.impact_excess(f, 300.0, 3.0), torch.tensor([0.0, 3.0])))
+
     def test_rollout_applies_commands(self):
         from mjlab.rl import MjlabOnPolicyRunner  # noqa: F401
         cmds = [{"depth": d, "clearance": 0.2, "reps": None} for d in (0.12, 0.18, 0.24, 0.3)]
