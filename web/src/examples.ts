@@ -36,7 +36,8 @@ export type ImportanceChart = {
 };
 export type RobustTable = {
   policies: { key: string; label: string; color: string }[];
-  conditions: { suite: string; suite_label: string; level: string; cells: Record<string, { fall_rate: number | null; vjepa: number | null }> }[];
+  conditions: { suite: string; suite_label: string; level: string; cells: Record<string, { fall_rate: number | null; vjepa: number | null; task_success?: number | null }> }[];
+  metric?: "task_success";
   reps: number;
 };
 

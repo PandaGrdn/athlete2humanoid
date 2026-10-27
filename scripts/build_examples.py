@@ -598,6 +598,62 @@ def ex_robustness(runs, videos):
     }
 
 
+def ex_robustness_final(runs, final):
+    """The final squat_jump policies under the task-aware robustness suite: task success per condition."""
+    rb = read_json(runs / "remote_robust_final" / "robust.json")
+    if not rb:
+        return {"id": "robustness-final", "status": "pending", "kicker": "Stress test", "title": "Squat jump under stress",
+                "tagline": "Waiting for outputs/remote_robust_final/robust.json.", "sources": []}
+    meta, summ = rb["meta"], rb["summary"]
+    pols = list(meta["policies"])
+    label = lambda k: POLICY_INFO.get(k, (k.title(),))[0]  # noqa: E731
+    names = {"clean": "As trained", "push": "Pushed (random)", "push_phase": "Pushed at a stage", "init": "Noisy start",
+             "start": "Start pose", "dynamics": "Friction & mass", "speed": "Tempo", "noref": "No reference"}
+    conditions = [{"suite": c["suite"], "suite_label": names.get(c["suite"], c["suite"]), "level": c["level"],
+                   "cells": {k: {"fall_rate": r(v["fall_rate"]), "vjepa": r(v.get("vjepa_aligned")),
+                                 "task_success": r(v.get("task_success"))} for k, v in c["policies"].items()}}
+                  for c in rb["conditions"]]
+    cond = lambda suite, **kw: next(c for c in rb["conditions"] if c["suite"] == suite  # noqa: E731
+                                    and all(c["params"].get(a) == b for a, b in kw.items()))["policies"]
+    hard, noref = cond("push", push_mps=1.5), cond("noref")
+    pct = lambda x: f"{x:.0%}"  # noqa: E731
+    vs = lambda d: " / ".join(pct(d[k]["task_success"]) for k in pols)  # noqa: E731
+    dtw = {k: summ[k]["clean"]["dtw_joint_rad"] for k in pols}
+    return {
+        "id": "robustness-final",
+        "kicker": "Stress test",
+        "title": "Squat jump, pushed and without its reference",
+        "tagline": (f"{meta['reps']} rollouts per condition. Under random shoves the task policy still finishes the squat "
+                    f"jump {pct(summ['task']['push']['task_success'])} of the time (tracking {pct(summ['tracking']['push']['task_success'])}); "
+                    f"with the reference frozen, tracking stands still ({pct(noref['tracking']['task_success'])}) while both task "
+                    f"policies complete it ({pct(noref['task']['task_success'])}, {pct(noref['taskphase']['task_success'])})."),
+        "story": {
+            "shown": ("The three final squat-jump policies under conditions they never trained on: random and "
+                      "stage-timed shoves, noisy and unusual start poses, friction and mass changes, tempo changes, "
+                      "and the reference clip frozen at its first frame."),
+            "learned": ("Whether the policy learned the action or memorised the clip. A clip-copier needs the clip; "
+                        "a policy that learned the squat jump does it anyway."),
+            "how": (f"Success is every stage of the task spec in order with no fall (torso below "
+                    f"{meta['fall_rule']['torso_z_m']:g} m or tilted past {meta['fall_rule']['tilt_rad']:g} rad). "
+                    f"Joint-space distance to the clip on the clean run: " + ", ".join(f"{label(k).lower()} {dtw[k]:.2f}" for k in pols)
+                    + f" rad (standing still scores {meta['dtw_joint_rad_still']:.2f}): the task policies do it their own way."),
+        },
+        "duration_s": None, "stages": None, "primary": None,
+        "grid": [v for v in (final or {}).get("grid", []) if v.get("policy") in pols],
+        "grid_caption": "The same three policies, as trained (no perturbation).",
+        "extra": [],
+        "metrics": [
+            {"label": "Success, random shoves", "display": " / ".join(pct(summ[k]["push"]["task_success"]) for k in pols), "note": " / ".join(pols)},
+            {"label": "Success, 1.5 m/s shove", "display": vs(hard), "note": " / ".join(pols)},
+            {"label": "Success, reference frozen", "display": vs(noref), "note": " / ".join(pols), "tone": "good"},
+        ],
+        "robust": {"policies": [{"key": k, "label": label(k), "color": POLICY_COLOR.get(k, "#8a96a3")} for k in pols],
+                   "conditions": conditions, "reps": meta["reps"], "metric": "task_success"},
+        "sources": [_rel(runs, runs / "remote_robust_final" / "robust.json")],
+        "notes": ["The final run trained before the fall-refund fix to the task reward (commit 883c6b7)."],
+    }
+
+
 def ex_final(runs, media):
     run = runs / "remote_latent_final"
     base = {"id": "squat-jump-final", "kicker": "The task policy", "title": "Squat jump: stand, squat, jump, land"}
@@ -694,7 +750,7 @@ def _sbs_panels(path):
 
 # --- build / check -------------------------------------------------------------------------------
 
-BUILDERS = ["squat-v1", "retarget", "goal-relevance", "robustness", "squat-jump-final"]
+BUILDERS = ["squat-v1", "retarget", "goal-relevance", "robustness", "squat-jump-final", "robustness-final"]
 
 
 def build(runs, out, force=False):
@@ -707,7 +763,8 @@ def build(runs, out, force=False):
               "retarget": lambda: ex_retarget(runs, media),
               "goal-relevance": lambda: ex_goal_relevance(runs, media),
               "robustness": lambda: ex_robustness(runs, built["squat-v1"]["grid"]),
-              "squat-jump-final": lambda: ex_final(runs, media)}[name]()
+              "squat-jump-final": lambda: ex_final(runs, media),
+              "robustness-final": lambda: ex_robustness_final(runs, built.get("squat-jump-final"))}[name]()
         built[name] = ex
         ex.setdefault("status", "ready")
         (out / ex["id"]).mkdir(parents=True, exist_ok=True)
@@ -715,7 +772,8 @@ def build(runs, out, force=False):
         exs.append(ex)
         print(f"  ok ({time.time() - t:.1f} s)")
     # The finished task policy leads once it exists; a pending slot goes last.
-    exs.sort(key=lambda e: (e["status"] != "ready", 0 if e["id"] == "squat-jump-final" else 1))
+    first = {"squat-jump-final": 0, "robustness-final": 1}
+    exs.sort(key=lambda e: (e["status"] != "ready", first.get(e["id"], 2)))
     index = {"version": 1, "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
              "examples": [{k: e.get(k) for k in ("id", "kicker", "title", "tagline", "status")}
                           | {"poster": _poster(e), "video": (e.get("primary") or {}).get("src")} for e in exs]}

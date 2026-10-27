@@ -303,12 +303,15 @@ function heat(fr: number | null) {
 
 function RobustView({ table }: { table: RobustTable }) {
   const pct = (v: number | null) => (v == null ? "—" : `${Math.round(v * 100)}%`);
+  const success = table.metric === "task_success";
   let lastSuite = "";
   return (
     <section className="ex-block">
       <div className="ex-block-head">
-        <h2>Fall rate under each condition</h2>
-        <span className="faint" style={{ fontSize: 13 }}>{table.reps} rollouts per cell · small number: V-JEPA 2 similarity</span>
+        <h2>{success ? "Task success under each condition" : "Fall rate under each condition"}</h2>
+        <span className="faint" style={{ fontSize: 13 }}>
+          {table.reps} rollouts per cell · small number: {success ? "fall rate" : "V-JEPA 2 similarity"}
+        </span>
       </div>
       <div className="table-wrap">
         <table className="data">
@@ -334,10 +337,17 @@ function RobustView({ table }: { table: RobustTable }) {
                     const cell = c.cells[p.key];
                     return (
                       <td key={p.key} className="num">
-                        <span className="heat" style={{ background: heat(cell?.fall_rate ?? null) }}>
-                          <span className="fr mono">{pct(cell?.fall_rate ?? null)}</span>
-                          <span className="vj mono">vj {cell?.vjepa == null ? "—" : cell.vjepa.toFixed(2)}</span>
-                        </span>
+                        {success ? (
+                          <span className="heat" style={{ background: heat(cell?.task_success == null ? null : 1 - cell.task_success) }}>
+                            <span className="fr mono">{pct(cell?.task_success ?? null)}</span>
+                            <span className="vj mono">fall {pct(cell?.fall_rate ?? null)}</span>
+                          </span>
+                        ) : (
+                          <span className="heat" style={{ background: heat(cell?.fall_rate ?? null) }}>
+                            <span className="fr mono">{pct(cell?.fall_rate ?? null)}</span>
+                            <span className="vj mono">vj {cell?.vjepa == null ? "—" : cell.vjepa.toFixed(2)}</span>
+                          </span>
+                        )}
                       </td>
                     );
                   })}

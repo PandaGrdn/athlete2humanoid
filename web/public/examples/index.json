@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generated_at": "2026-10-27T21:31:48+00:00",
+ "generated_at": "2026-10-27T22:01:42+00:00",
  "examples": [
   {
    "id": "squat-jump-final",
@@ -10,6 +10,15 @@
    "status": "ready",
    "poster": "squat-jump-final/source.jpg",
    "video": "squat-jump-final/source.mp4"
+  },
+  {
+   "id": "robustness-final",
+   "kicker": "Stress test",
+   "title": "Squat jump, pushed and without its reference",
+   "tagline": "64 rollouts per condition. Under random shoves the task policy still finishes the squat jump 94% of the time (tracking 65%); with the reference frozen, tracking stands still (0%) while both task policies complete it (100%, 100%).",
+   "status": "ready",
+   "poster": "squat-jump-final/policy_tracking.jpg",
+   "video": null
   },
   {
    "id": "squat-v1",
