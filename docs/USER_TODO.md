@@ -12,7 +12,7 @@ These need your accounts or logins. Everything else is automated or already done
    - Buy more at colab.research.google.com/signup if we need more runs. Pay-as-you-go: 100 units for about $10.
 3. **Stanford FarmShare**, as the fallback GPU.
    - Do the first SSH login with Duo yourself.
-   - Steps are in `docs/FARMSHARE.md`: add the SSH config block, run `ssh farmshare` once (password + Duo; the connection stays open), then `bash scripts/setup_farmshare.sh`.
+   - Steps are in `docs/FARMSHARE.md`: add the SSH config block (with your SUNetID), run `ssh farmshare` once (password + Duo; the connection stays open for 12 h), and run the one-line GPU partition check in its step 4. The first job sets up the environments on FarmShare by itself.
    - After that, any job runs there with `--backend farmshare` (4 L40S GPUs per node).
 4. **Deploy the web app.** Commands are in `docs/DEPLOY.md`.
    - Install Node 18+ (`brew install node`).
