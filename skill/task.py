@@ -37,9 +37,9 @@ WEIGHTS = {"progress": 1.0, "stage": 1.0, "jump": 2.0, "done": 4.0}  # in second
 MIN_FLIGHT = 0.15  # s
 LAND_WINDOW = 0.6  # s after touchdown in which a crouch is the landing, not a new squat
 DOWN, AIR = 0.05, 0.06  # m above standing ankle height: a foot on the ground / both feet in the air
-# The simulated G1 stands on bent knees, ~7 cm below the retarget's straight-legged stand: "standing"
-# is back above this fraction of the retarget's standing pelvis height.
-STAND_FRAC = 0.88
+# "Standing" is back above this fraction of the retarget's standing pelvis height. The simulated G1
+# stands on bent knees; the proportional retarget does too (the uniform one stood ~7 cm taller).
+STAND_FRAC = 0.92
 UPRIGHT = 0.85  # cos of torso lean from vertical (~32 deg) counted as upright
 HOLD = {STAND: 0.3, SQUAT: 0.05, LAND: 0.15}  # s a predicate must hold (a jump's is its min flight)
 

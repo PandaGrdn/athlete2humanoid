@@ -102,9 +102,11 @@ Code: `latent/predictor_relevance.py`.
 
 | Stage | stand | squat | jump (flight) | land | stand | squat | jump | land | stand |
 |---|---|---|---|---|---|---|---|---|---|
-| mean | 0.12 | 0.64 | 0.25 | 0.41 | 0.13 | 0.66 | 0.19 | 0.40 | 0.10 |
+| mean | 0.12 | 0.67 | 0.23 | 0.49 | 0.13 | 0.69 | 0.21 | 0.51 | 0.10 |
 
-- **Peaks.** The push before each takeoff (~2.6–2.8 s and 6.7–6.9 s) and the landing absorption (~3.3–3.6 s and 7.5–7.8 s) reach 0.9–1.0. A smaller peak (~0.65) is the countermovement descent.
+Recomputed on the proportional retarget (main, 2026-10-27).
+
+- **Peaks.** The push before each takeoff (~2.6–2.7 s and 6.7–6.9 s) and the landing absorption (~3.4–3.6 s and 7.5–7.7 s) reach 0.9–1.0. A smaller peak (~0.65) is the countermovement descent.
 - **Standing** stays at the floor.
 - **Flight** is low. The reference doesn't tuck its feet (flight coherence 0), so nothing in it moves the goal. The jump itself is the stage reward's job.
 
