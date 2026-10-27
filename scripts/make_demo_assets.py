@@ -7,6 +7,13 @@ cv2), and text and diagrams are drawn with Pillow.
     python3 -m venv ~/.venvs/a2h-demo && ~/.venvs/a2h-demo/bin/pip install imageio-ffmpeg pillow numpy
     ~/.venvs/a2h-demo/bin/python scripts/make_demo_assets.py --src outputs/remote_latent
 
+--render-robots first re-renders every robot motion in each run (the retarget and each policy's
+rollout) at 1280x720 with MuJoCo through the repo's render.py, into <renders>/<run name>/. That
+needs `pip install mujoco mediapy` and the Menagerie G1 (scripts/fetch_assets.sh, or point
+A2H_ASSETS_DIR at a checkout that has it). Clips use those renders wherever they exist, and fall
+back to the runs' own 320x240 videos. A second --src (e.g. outputs/remote_latent_v2) adds
+grid_compare.mp4: the same policies from both runs side by side.
+
 Every clip is 1920x1080, 30 fps, H.264, silent, written to outputs/demo/. rough_cut.mp4 strings
 them together at the storyboard's timings (SHOTS) with the captions burned in, as a timing guide
 for recording the voice. Metrics are read from <src>/eval.json, so a rerun after a new training
@@ -18,6 +25,7 @@ import functools
 import json
 import logging
 import math
+import sys
 from pathlib import Path
 
 import imageio_ffmpeg
@@ -25,6 +33,8 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 W, H, FPS = 1920, 1080, 30
+ROOT = Path(__file__).resolve().parent.parent
+POLICIES = ("tracking", "hybrid", "latent")
 
 # imageio-ffmpeg warns whenever the decode size differs from the source, which ours always does.
 logging.getLogger("imageio_ffmpeg").setLevel(logging.ERROR)
@@ -181,31 +191,121 @@ class Clip:
         self._frames.close()
 
 
-def render(path, seconds, frame_fn):
+def render(path, seconds, frame_fn, size=(W, H)):
     """Write frame_fn(t) for t in [0, seconds) at FPS. Returns the duration written."""
     writer = imageio_ffmpeg.write_frames(
-        str(path), (W, H), fps=FPS, codec="libx264", quality=None, macro_block_size=8,
+        str(path), size, fps=FPS, codec="libx264", quality=None, macro_block_size=8,
         output_params=["-crf", "18", "-preset", "medium", "-movflags", "+faststart"])
     writer.send(None)
     n = int(round(seconds * FPS))
     for i in range(n):
         img = frame_fn(i / FPS)
-        assert img.size == (W, H), img.size
+        assert img.size == size, img.size
         writer.send(img.tobytes())
     writer.close()
     return n / FPS
 
 
+# ---------------------------------------------------------------- 720p robot renders
+
+RENDER_SIZE = (1280, 720)
+SKY = (17, 23, 34)
+FLOOR = ((31, 40, 55), (24, 31, 43), (50, 64, 86))  # the two checker squares, the grid lines
+
+
+def robot_motions(src, motion):
+    """(name, qpos file, its fps) for the retarget and every policy rollout in a run."""
+    found, clip = [], src / "clips" / motion
+    if (clip / "qpos.npy").exists():
+        meta = clip / "meta.json"
+        found.append(("retarget", clip / "qpos.npy",
+                      json.loads(meta.read_text()).get("fps", 30.0) if meta.exists() else 30.0))
+    for k in POLICIES:
+        run = src / f"policy_{k}"
+        if (run / "policy_qpos.npy").exists():
+            metrics = run / "policy_metrics.json"
+            found.append((k, run / "policy_qpos.npy",
+                          json.loads(metrics.read_text()).get("fps", 50) if metrics.exists() else 50))
+    return found
+
+
+def style_scene(model, mujoco):
+    """Restyle the Menagerie scene in place (render.py stays untouched): a dark floor that fades
+    into a matching background, one shadow-casting key light from the camera side, a soft fill."""
+    sky = np.array(SKY) / 255
+    model.vis.rgba.haze[:] = [*sky, 1]
+    model.vis.headlight.ambient[:] = 0.22
+    model.vis.headlight.diffuse[:] = 0.2
+    model.vis.headlight.specular[:] = 0.05
+    model.vis.quality.offsamples = 8
+    model.vis.global_.offwidth, model.vis.global_.offheight = RENDER_SIZE
+    key = np.array([-0.45, 0.75, -1.0])
+    model.light_dir[0] = key / np.linalg.norm(key)
+    model.light_diffuse[0] = 0.6
+    model.light_specular[0] = 0.25
+    model.light_castshadow[0] = 1
+    for i in range(model.ntex):
+        w, h, c, adr = model.tex_width[i], model.tex_height[i], model.tex_nchannel[i], model.tex_adr[i]
+        if model.tex_type[i] == mujoco.mjtTexture.mjTEXTURE_SKYBOX:
+            img = np.broadcast_to(np.array(SKY, np.uint8), (h, w, 3))
+        elif model.tex(i).name == "groundplane":  # a 2x2 checker with grid lines, like the original
+            y, x = np.mgrid[:h, :w]
+            img = np.where(((x * 2 // w + y * 2 // h) % 2)[..., None], FLOOR[0], FLOOR[1]).astype(np.uint8)
+            img[(x % (w // 2) < 2) | (y % (h // 2) < 2)] = FLOOR[2]
+        else:
+            continue
+        model.tex_data[adr:adr + w * h * c] = img[..., :c].ravel()
+    model.mat_reflectance[model.mat("groundplane").id] = 0.1
+
+
+def render_robots(src, motion, dest, azimuth=145.0, force=False):
+    """Kinematic replay of each robot motion in `src` at 1280x720, 30 fps, into dest/<name>.mp4.
+    The camera follows the pelvis on the ground plane (smoothed, at a fixed height), so squats
+    read as motion instead of the camera bobbing with the robot."""
+    sys.path.insert(0, str(ROOT))
+    import mujoco
+    import render as a2h_render  # the repo's render.py
+
+    model, data = a2h_render.load_g1()
+    style_scene(model, mujoco)
+    cam = mujoco.MjvCamera()
+    cam.type = mujoco.mjtCamera.mjCAMERA_FREE
+    cam.distance, cam.azimuth, cam.elevation = 2.4, azimuth, -6.0  # 145 matches side_by_side.mp4
+    dest.mkdir(parents=True, exist_ok=True)
+    with mujoco.Renderer(model, height=RENDER_SIZE[1], width=RENDER_SIZE[0]) as renderer:
+        for name, path, fps in robot_motions(src, motion):
+            out = dest / f"{name}.mp4"
+            if out.exists() and not force:
+                print(f"{out}  (kept; --force-render to redo)")
+                continue
+            qpos = np.load(path)
+            k = max(1, int(fps))  # 1 s box filter on the camera target
+            pad = np.pad(qpos[:, :2], ((k // 2, k - 1 - k // 2), (0, 0)), mode="edge")
+            target = np.stack([np.convolve(pad[:, j], np.ones(k) / k, mode="valid") for j in (0, 1)], 1)
+
+            def frame(t):
+                i = min(int(round(t * fps)), len(qpos) - 1)
+                data.qpos[:] = qpos[i]
+                mujoco.mj_forward(model, data)
+                cam.lookat[:] = [*target[i], 0.6]
+                renderer.update_scene(data, camera=cam)
+                return Image.fromarray(renderer.render())
+
+            seconds = render(out, len(qpos) / fps, frame, size=RENDER_SIZE)
+            print(f"{out}  {seconds:6.2f} s")
+
+
 # ---------------------------------------------------------------- inputs
 
 class Inputs:
-    def __init__(self, src, raw, motion, bank_size):
+    def __init__(self, src, raw, motion, bank_size, renders=None):
         self.src, self.motion, self.bank_size = Path(src), motion, bank_size
+        self.renders = Path(renders) / self.src.name if renders else None
         clip = self.src / "clips" / motion
         self.silhouette = clip / "silhouette.mp4"
         self.side_by_side = clip / "side_by_side.mp4"
         self.comparison = self.src / "comparison.mp4"
-        self.policy = {k: self.src / f"policy_{k}" / "policy.mp4" for k in ("tracking", "hybrid", "latent")}
+        self.policies = [k for k in POLICIES if (self.src / f"policy_{k}").is_dir()]
         self.eval = json.loads((self.src / "eval.json").read_text())
         self.distill = json.loads((self.src / "distill_report.json").read_text())
         self.latent = np.load(clip / "video_latent.npz")["dense"]
@@ -223,6 +323,19 @@ class Inputs:
             return Clip(self.raw, size)
         return Clip(self.side_by_side, size, crop=self.sbs_human)
 
+    def rendered(self, key):
+        path = self.renders / f"{key}.mp4" if self.renders else None
+        return path if path and path.exists() else None
+
+    def robot(self, key, size, fill=False):
+        """The best footage of a robot motion ("retarget" or a policy): its 720p render if there
+        is one, else the run's own 320x240 policy video or side_by_side.mp4's robot half."""
+        if self.rendered(key):
+            return Clip(self.rendered(key), size, fill=fill)
+        if key == "retarget":
+            return Clip(self.side_by_side, size, crop=self.sbs_robot, fill=fill)
+        return Clip(self.src / f"policy_{key}" / "policy.mp4", size, fill=fill)
+
     def score(self, key):
         return self.eval[key]["aligned"]
 
@@ -232,7 +345,7 @@ class Inputs:
 def asset_hook(inp, out):
     """The human clip next to the latent-only policy."""
     half = (W // 2, H)
-    human, robot = inp.human(half), Clip(inp.policy["latent"], half, fill=True)
+    human, robot = inp.human(half), inp.robot("latent", half, fill=True)
 
     def frame(t):
         img = canvas()
@@ -352,7 +465,7 @@ def pipeline_card(inp, out, seconds, highlight=None, detail=()):
     and the `detail` lines are shown underneath."""
     box = (NODE_W, NODE_W)
     thumbs = {0: inp.human(box), 1: Clip(inp.silhouette, box),
-              2: Clip(inp.side_by_side, box, crop=inp.sbs_robot), 5: Clip(inp.policy["latent"], box)}
+              2: inp.robot("retarget", box, fill=True), 5: inp.robot("latent", box, fill=True)}
     build = highlight is None
     bottom = NODE_Y + NODE_W
 
@@ -431,6 +544,21 @@ def asset_sam_split(inp, out):
 
 
 def asset_retarget_split(inp, out):
+    if inp.rendered("retarget"):  # the human next to the 720p render
+        human, robot = inp.human((W // 3, H)), inp.robot("retarget", (W - W // 3, H), fill=True)
+
+        def frame(t):
+            img = canvas()
+            img.paste(human.at(t), (0, 0))
+            img.paste(robot.at(t), (W // 3, 0))
+            d = ImageDraw.Draw(img)
+            d.line([(W // 3, 0), (W // 3, H)], fill=BG, width=6)
+            chip(d, (24, 30), "human", fill=ACCENT)
+            chip(d, (W // 3 + 24, 30), "Unitree G1 · kinematic retarget", fill=ACCENT)
+            return img
+
+        return render(out, human.duration, frame)
+
     sbs = Clip(inp.side_by_side, (W, H))
     scale = min(W / inp.sbs_w, H / inp.sbs_h)
     left = (W - int(inp.sbs_w * scale)) // 2
@@ -475,8 +603,8 @@ def asset_strip(inp, out):
 
 def asset_grid(inp, out):
     cell = (W // 2, H // 2)
-    clips = [inp.human(cell), Clip(inp.side_by_side, cell, crop=inp.sbs_robot),
-             Clip(inp.policy["tracking"], cell, fill=True), Clip(inp.policy["latent"], cell, fill=True)]
+    clips = [inp.human(cell), inp.robot("retarget", cell, fill=True),
+             inp.robot("tracking", cell, fill=True), inp.robot("latent", cell, fill=True)]
     labels = ["human video", "retarget (kinematic)", "tracking policy · joint targets",
               "latent policy · V-JEPA reward only"]
     keys = [None, "retarget", "tracking", "latent"]
@@ -497,6 +625,41 @@ def asset_grid(inp, out):
         return img
 
     return render(out, max(c.duration for c in clips), frame)
+
+
+def asset_grid_compare(runs, labels, out):
+    """The human clip and the retarget in the first column, then one column per policy that
+    every run has, one row per run (e.g. v1 over v2)."""
+    first = runs[0]
+    keys = [k for k in first.policies if all(k in r.policies for r in runs[1:])]
+    cols, rows = 1 + len(keys), len(runs)
+    cw, ch = W // cols, H // rows
+    left = [first.human((cw, ch)), first.robot("retarget", (cw, ch), fill=True)]
+    cells = [[r.robot(k, (cw, ch), fill=True) for k in keys] for r in runs]
+    names = {"tracking": "tracking", "hybrid": "hybrid", "latent": "latent · V-JEPA only"}
+
+    def frame(t):
+        img = canvas()
+        d = ImageDraw.Draw(img)
+        for j in range(rows):
+            if j < len(left):
+                img.paste(left[j].at(t), (0, j * ch))
+                chip(d, (20, j * ch + 20), ["human video", "retarget"][j], size=26, fill=ACCENT)
+            for i, (key, clip) in enumerate(zip(keys, cells[j])):
+                x, y = (i + 1) * cw, j * ch
+                img.paste(clip.at(t), (x, y))
+                chip(d, (x + 20, y + 20), f"{labels[j]} · {names[key]}", size=26, fill=ACCENT)
+                e = runs[j].eval.get(key)
+                if e:
+                    s = f"V-JEPA {e['aligned']:.3f}" + (f" · {e['falls']} falls" if "falls" in e else "")
+                    chip(d, (x + 20, y + ch - 20), s, size=24, fill=GOOD, anchor="ld")
+        for i in range(1, cols):
+            d.line([(i * cw, 0), (i * cw, H)], fill=BG, width=6)
+        for j in range(1, rows):
+            d.line([(0, j * ch), (W, j * ch)], fill=BG, width=6)
+        return img
+
+    return render(out, max(c.duration for row in cells for c in row), frame)
 
 
 def asset_metrics(inp, out, seconds=15):
@@ -576,7 +739,7 @@ def asset_muse_loop(inp, out, seconds=25):
 
 
 def asset_end(inp, out, seconds=10):
-    robot = Clip(inp.policy["latent"], (W, H), fill=True)
+    robot = inp.robot("latent", (W, H), fill=True)
 
     def frame(t):
         img = dim(robot.at(t, loop=True), 0.18, blur=3)
@@ -635,23 +798,45 @@ def rough_cut(out_dir, path):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--src", default="outputs/remote_latent", help="experiments/latent_policy.py output dir")
+    p.add_argument("--src", nargs="+", default=["outputs/remote_latent"],
+                   help="experiments/latent_policy.py output dir(s); the first drives every clip, and "
+                        "a second adds grid_compare.mp4")
+    p.add_argument("--labels", nargs="+", help="row labels for grid_compare (default v1 v2 ...)")
+    p.add_argument("--renders", default="outputs/demo/renders",
+                   help="720p robot renders, one subfolder per run; used wherever they exist")
+    p.add_argument("--render-robots", action="store_true", help="(re)build the renders first (needs mujoco)")
+    p.add_argument("--force-render", action="store_true", help="redo renders that already exist")
+    p.add_argument("--azimuth", type=float, default=145.0, help="render camera azimuth, degrees")
     p.add_argument("--raw", default="clips/squat.mov",
                    help="original clip, sharper than side_by_side's left half (skipped if missing)")
     p.add_argument("--motion", default="squat")
     p.add_argument("--bank-size", type=int, default=26, help="motions the bank rank is taken over")
     p.add_argument("--out", default="outputs/demo")
-    p.add_argument("--only", nargs="+", choices=[*ASSETS, "rough_cut"], help="build just these")
+    p.add_argument("--only", nargs="+", choices=[*ASSETS, "grid_compare", "rough_cut"], help="build just these")
     p.add_argument("--no-rough-cut", action="store_true")
     args = p.parse_args()
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    inp = Inputs(args.src, args.raw, args.motion, args.bank_size)
+    if args.render_robots:
+        for src in map(Path, args.src):
+            render_robots(src, args.motion, Path(args.renders) / src.name, args.azimuth, args.force_render)
+    runs = [Inputs(src, args.raw, args.motion, args.bank_size, args.renders) for src in args.src]
+    labels = args.labels or [f"v{i + 1}" for i in range(len(runs))]
+    inp = runs[0]
     print(f"human clip: {inp.raw or 'side_by_side.mp4, left half'}")
-    for name in args.only or [*ASSETS, *([] if args.no_rough_cut else ["rough_cut"])]:
+    for r in runs:
+        print(f"{r.src.name}: renders for {[k for k in ['retarget', *r.policies] if r.rendered(k)] or 'none'}")
+    default = [*ASSETS, *(["grid_compare"] if len(runs) > 1 else []),
+               *([] if args.no_rough_cut else ["rough_cut"])]
+    for name in args.only or default:
         path = out / f"{name}.mp4"
-        seconds = rough_cut(out, path) if name == "rough_cut" else ASSETS[name](inp, path)
+        if name == "rough_cut":
+            seconds = rough_cut(out, path)
+        elif name == "grid_compare":
+            seconds = asset_grid_compare(runs, labels, path)
+        else:
+            seconds = ASSETS[name](inp, path)
         print(f"{path}  {seconds:6.2f} s")
 
 

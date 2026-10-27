@@ -6,13 +6,25 @@ with the captions burned in. Record the voice over the rough cut, then swap in c
 captions in the editor.
 
 ```bash
-python3 -m venv ~/.venvs/a2h-demo && ~/.venvs/a2h-demo/bin/pip install imageio-ffmpeg pillow numpy
-~/.venvs/a2h-demo/bin/python scripts/make_demo_assets.py --src outputs/remote_latent
+python3 -m venv ~/.venvs/a2h-demo && ~/.venvs/a2h-demo/bin/pip install imageio-ffmpeg pillow numpy mujoco mediapy
+~/.venvs/a2h-demo/bin/python scripts/make_demo_assets.py --src outputs/remote_latent --render-robots
 ```
+
+`--render-robots` replays every robot motion in the run (the retarget's `qpos.npy` and each policy's
+`policy_qpos.npy`) at 1280x720 in a restyled MuJoCo scene, through the repo's `render.py`. The renders
+go to `outputs/demo/renders/<run name>/`, which you can change with `--renders`. Once they exist,
+every clip uses them in place of the 320x240 `policy.mp4` files, and later runs reuse them unless you
+pass `--force-render`. The renders need the Menagerie G1: run `scripts/fetch_assets.sh` first, or set
+`A2H_ASSETS_DIR` to a checkout that already has it.
 
 The metric cards read `<src>/eval.json` and `<src>/distill_report.json`. When the refined run lands,
 rerun the script against its output folder and the numbers update. Then check the narration in
-shots 10 and 11, which quotes the numbers.
+shot 10, which quotes the numbers.
+
+To compare two runs, pass both: `--src outputs/remote_latent outputs/remote_latent_v2 --render-robots`.
+This adds `grid_compare.mp4`, with the human clip and the retarget in the first column and one column
+for each policy both runs have (hybrid and latent for v2), v1 on the top row and v2 below. Rows are
+labelled v1 and v2, which `--labels` overrides. Every other clip still comes from the first `--src`.
 
 ## Arc and rubric weighting
 
@@ -113,6 +125,8 @@ feedback and no "coach" wording.
 | `impact.mp4` | 15.0 s | 12 |
 | `end.mp4` | 10.0 s | 13 |
 | `rough_cut.mp4` | 180.0 s | the whole video, captions burned in |
+| `grid_compare.mp4` | ~10.2 s | only with a second `--src`: a v1 vs v2 alternative or insert for shot 9 |
+| `renders/<run>/{retarget,tracking,hybrid,latent}.mp4` | 10.2 s each | 1280x720 robot footage that the clips above are built from |
 
 To rebuild a single clip, pass `--only grid metrics`. If `clips/squat.mov` is missing, the human
 footage falls back to the left half of `side_by_side.mp4`.
@@ -120,4 +134,4 @@ footage falls back to the left half of `side_by_side.mp4`.
 ## Open items before the final cut
 - **Muse footage (shot 11):** this needs the agent's real run, either a screen capture or a rounds chart from `agent_log.jsonl`.
 - **Refined run:** rerun the script with `--src` set to the new output folder, then update the numbers in the shot 10 narration.
-- **Policy video resolution:** `policy_*/policy.mp4` is 320x240, so the hook and the grid upscale it and it looks soft. Re-rendering `policy_qpos.npy` at 1280x720 would sharpen shots 1, 4, 9 and 13.
+- **v1 vs v2:** once `outputs/remote_latent_v2` lands, build `grid_compare.mp4` and decide whether it replaces or follows the grid in shot 9.
