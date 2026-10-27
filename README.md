@@ -1,18 +1,16 @@
 # athlete2humanoid
 
-**Any video of a person moving becomes a physics RL policy for the Unitree G1 humanoid, trained to look like the move in the video rather than only copy its joint angles.**
+**Any video of a person moving becomes a physics RL policy for the Unitree G1 humanoid that learns the action, not the clip.** From one phone video of a squat jump, the robot learns to squat, jump, land and stand, and it still does it when shoved, started from odd poses, or when the reference clip is frozen.
 
 Meta Global AI Developer Hackathon · track: *Push the Frontier* (robotics).
 
-<!-- TODO(v2): demo GIF or MP4 (video | tracking policy | latent policy, side by side). -->
-<!-- ![demo](docs/media/demo.gif) -->
-> **Demo:** TODO(v2): add the demo GIF/MP4 and video link.
+> **Demo:** the `/examples` page of the web app ([`web/`](web), static, no backend needed) and the demo video ([`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md)).
 
 ## Why
 
 Humanoids learn new skills from motion capture or hand-written rewards. Both are slow and expensive, and neither scales to the thousands of moves people film every day. We want a robot to learn a skill from an ordinary phone video: no mocap suit, no markers, no reward engineering.
 
-Copying a video frame by frame is brittle. Monocular pose is noisy, human and robot bodies differ, and an exact copy can't adapt. So we also give the policy a reward for *what the motion looks like*, measured by Meta's video world model V-JEPA 2. That is the first step towards a policy that learns the action, not the clip.
+Copying a video frame by frame is brittle. Monocular pose is noisy, human and robot bodies differ, and a policy that copies the clip needs the clip: change the start, shove it, or take the reference away and it has nothing to fall back on. So we read off **what the action is** (its stages and their goals, in the robot's own proportions) and reward the robot for achieving that. Looking like the video, measured by Meta's V-JEPA 2, becomes a light style term.
 
 ## How it works
 
@@ -20,59 +18,78 @@ Copying a video frame by frame is brittle. Monocular pose is noisy, human and ro
 flowchart LR
     V[Phone video] --> SAM[SAM 3.1<br/>track the person]
     SAM --> POSE[MediaPipe 3D pose]
-    POSE --> IK[mink IK<br/>retarget to G1]
-    SAM --> SIL[Silhouette video]
-    SIL --> VJ[V-JEPA 2<br/>video latent = target]
-
-    IK --> DS[253 robot motions<br/>IK bank + retargets + variations]
-    DS --> REN[Robot silhouettes<br/>same viewpoint] --> VJ2[V-JEPA 2] --> NET[Distilled reward net<br/>body positions to latent]
-
-    IK --> RL[mjlab PPO on GPU<br/>4,096 G1s]
-    VJ --> RL
+    POSE --> IK[Proportion-aware retarget<br/>G1 bone lengths, planted feet]
+    SAM --> SIL[Silhouette video] --> VJ[V-JEPA 2<br/>video latent]
+    MUSE[Muse<br/>skill reader]:::wip -.-> SPEC
+    IK --> SPEC[Task spec<br/>stand / squat / jump / land<br/>G1-scaled goals]
+    IK --> IMP[Goal relevance<br/>which moments matter]
+    VJ --> NET[Distilled V-JEPA<br/>style reward]
+    SPEC --> RL[mjlab PPO, 4,096 G1s<br/>reward machine + stability<br/>warm-started]
     NET --> RL
-    RL --> EVAL[Eval with real V-JEPA 2<br/>vs 26-motion bank]
-
-    MUSE[Muse Spark<br/>skill reader + reward agent<br/>in progress]:::wip -.-> RL
-    EVAL -.-> MUSE
+    IMP --> RL
+    RL --> EVAL[Task success under<br/>pushes, odd starts,<br/>frozen reference]
     classDef wip stroke-dasharray: 5 5
 ```
 
-1. **Track.** SAM 3.1 segments the person from a text prompt ("athlete", falling back to "person") and keeps the main track. Masks give clean crops for pose and a silhouette video for V-JEPA ([`track.py`](track.py), [`sam_track.py`](sam_track.py)).
-2. **Retarget.** MediaPipe 3D pose plus 2D root motion gives a metric human trajectory. mink IK maps feet, knees, pelvis, elbows, hands and torso orientation onto the G1 and exports an mjlab motion CSV ([`pose.py`](pose.py), [`retarget.py`](retarget.py), [`pipeline.py`](pipeline.py)).
-3. **Embed.** Human and robot are both rendered as white-on-black silhouettes at the same scale and camera angle, so V-JEPA 2 compares motion rather than appearance. Each domain is centred on its own mean embedding ([`latent/silhouette.py`](latent/silhouette.py), [`latent/vjepa.py`](latent/vjepa.py)).
-4. **Distil.** V-JEPA is far too slow to run inside RL (4,096 robots at 50 Hz). We render 253 robot motions (26 IK bank motions, the 7 clip retargets and 220 randomised variations: speed changes, mixed bodies, noise, leaning, falling, freezing) and train a small MLP that maps ~1 s of G1 body positions to V-JEPA's latent, projected to 64 principal components ([`latent/distill.py`](latent/distill.py), [`latent/reward_net.py`](latent/reward_net.py)).
-5. **Train.** Three mjlab PPO policies on the same clip ([`mjlab_tasks.py`](mjlab_tasks.py), [`train_motion.py`](train_motion.py)):
-   - **tracking**: mjlab's standard motion-tracking reward (copy the retarget);
-   - **hybrid**: latent reward plus tracking at 1/5 weight, with relaxed terminations;
-   - **latent-only**: latent reward only, with the same relaxed terminations. The retarget is still an observation and a reset state, but it is never scored.
-6. **Evaluate.** Each rollout is re-rendered and scored with the *real* V-JEPA 2, not the distilled net. We report time-aligned cosine to the video, and DTW rank against all 26 bank motions ([`experiments/latent_policy.py`](experiments/latent_policy.py)).
+1. **Track.** SAM 3.1 segments the person from a text prompt and keeps the main track ([`track.py`](track.py), [`sam_track.py`](sam_track.py)).
+2. **Retarget, in the robot's proportions.** MediaPipe 3D pose is rebuilt on the G1's own bone lengths with the person's bone directions, so joint angles carry over, and planted feet stay pinned. Joint-angle error is 3–10× lower than uniform scaling and foot sliding drops from 29 to 0.4 cm/s ([`retarget.py`](retarget.py), [`docs/RETARGET.md`](docs/RETARGET.md)).
+3. **Read off the action.** The retarget's kinematics become an ordered **task spec**: stand → squat → jump → land → stand, with goals in G1 units (squat depth, jump clearance clipped to what the G1 can do). Muse's skill spec names the stages and is cross-checked ([`skill/task.py`](skill/task.py), [`docs/SEMANTIC_REWARD.md`](docs/SEMANTIC_REWARD.md)).
+4. **Reward the action.** A batched reward machine pays potential-based progress toward the current stage, a bonus when it's done (for a jump, scaled by a target height band) and a finish bonus, all gated on staying upright. The stage is part of the policy's observation. Timing and poses are free.
+5. **Look like the video, where it matters.** V-JEPA 2's latent, distilled into a fast reward net, is a weak style term, weighted in time by **goal relevance**: physics attribution of which moments and body parts change the outcome (the push before takeoff, the landing; not arm-waving for the crowd) ([`skill/importance.py`](skill/importance.py), [`docs/GOAL_RELEVANCE.md`](docs/GOAL_RELEVANCE.md)).
+6. **Stay up.** Stability terms (alive bonus, fall penalty, clip-relative fall termination, foot slip, push curriculum) and episodes that end only on a fall, never for leaving the retarget ([`mjlab_tasks.py`](mjlab_tasks.py)).
+7. **Train, building on what's there.** mjlab PPO on one A100, every policy warm-started from saved weights; a task policy whose inputs grew starts out acting exactly like its source ([`policy_weights.py`](policy_weights.py), [`scripts/weights.py`](scripts/weights.py)).
+8. **Test the claim.** 64 rollouts per condition, 18 conditions: random and stage-timed pushes, noisy and unusual starts, friction and mass, tempo, and the reference frozen ([`experiments/robustness_eval.py`](experiments/robustness_eval.py)).
+
+Policies on the same clip:
+- **tracking**: mjlab's standard motion-imitation reward (copy the retarget). The baseline.
+- **task**: the task reward leads; the policy still sees the retarget, with a 0.1× tracking style term.
+- **taskphase**: the task reward, and the policy never sees the retarget, only its own body, a clock and the current stage.
 
 ## Meta models
 
 | Model | Role | Why this model |
 |---|---|---|
-| **SAM 3.1** (`facebook/sam3.1`, open weights) | Text-prompted video tracking of the person | Gives one consistent identity across the clip with no clicks. The masks feed both pose and the silhouette latent, so SAM is in the reward path, not only preprocessing. |
-| **V-JEPA 2** (`facebook/vjepa2-vitl-fpc64-256`) | Motion embedding that becomes the reward target | Self-supervised video world model. On silhouettes it separates actions by motion and is robust to timing: a fast 3-rep squat is still the closest match to a slow one. Our probe found the human clip's own retarget ranked #1 by DTW for 6 of 7 clips. |
-| **Muse Spark** (Meta Model API) *(in progress)* | **Skill reader:** video to a strict-JSON training spec (phases, what matters). **Reward-design agent:** watches the comparison video, reads the real-V-JEPA metrics, edits reward weights and terminations, retrains. | Takes video natively and supports tool calling and strict schemas. The agent is scored by real V-JEPA, so it can't game the distilled reward net. |
+| **SAM 3.1** (`facebook/sam3.1`, open weights) | Text-prompted video tracking of the person | One consistent identity across the clip with no clicks. The masks feed both pose and the silhouette latent. |
+| **V-JEPA 2** (`facebook/vjepa2-vitl-fpc64-256`) | Style reward target (distilled), evaluation metric, and a predictor-masking diagnostic for goal relevance | Self-supervised video world model; on silhouettes it compares motion rather than appearance. |
+| **Muse Spark** (Meta Model API) | **Skill reader:** video to a strict-JSON spec that names the task stages and success criteria. **Reward-design agent:** reads a finished run and proposes the next reward config. | Takes video natively, supports strict schemas. *Integrated and tested against recorded fixtures; the live run is pending an API key.* |
 
 ## Results
 
-Target: one human squat clip (phone video). One A100, three policies trained in parallel, 2,000 PPO iterations × 4,096 envs each, about 2.3 h.
+### Squat jump (final run)
 
-| Robot motion | V-JEPA cosine to video (time-aligned) | DTW rank vs 26 bank motions | Falls | Torso error (mean) | Uses tracking reward |
-|---|---|---|---|---|---|
-| Retarget (kinematic, no physics) | 0.726 | #1 | n/a | n/a | n/a |
-| Tracking policy | **0.714** | #1 | 0 | 7.1 cm | yes |
-| Hybrid policy | 0.579 | #1 | 0 | 13.3 cm | 1/5 weight |
-| Latent-only policy | 0.532 | #1 | 0 | 16.6 cm | **no** |
-| Hybrid, DAgger reward net | TODO(v2) | TODO(v2) | TODO(v2) | TODO(v2) | 1/5 weight |
-| Latent-only, DAgger reward net | TODO(v2) | TODO(v2) | TODO(v2) | TODO(v2) | **no** |
+Target: one phone video of two squat jumps. Three policies, 1,200 PPO iterations × 4,096 envs each on one A100 (about 1.5 h), warm-started (tracking from the squat tracking policy, task from the squat hybrid policy, taskphase from an earlier squat-jump run). Evaluation rollout from the start of the clip ([`docs/results/squat_jump_eval.md`](docs/results/squat_jump_eval.md)):
 
-Reward net: distilled from 253 motions (14,785 windows), 0.62 mean cosine on 25 held-out motions (10th percentile 0.31). TODO(v2): DAgger reward net held-out cosine.
+| Robot motion | Task stages | Falls | Jump quality | Joint error vs clip | Torso distance vs clip | V-JEPA cosine to video |
+|---|---|---|---|---|---|---|
+| Retarget (kinematic) | 9/9 | n/a | 1.00 / 1.00 | n/a | n/a | 0.732 |
+| Tracking | 9/9 | 0 | 0.87 / 0.86 | 0.11 rad | 0.11 m | **0.696** |
+| Task | 9/9 | 0 | 0.51 / 0.68 | 0.42 rad | 0.41 m | 0.431 |
+| Task, no reference | 9/9 | 0 | 0.79 / 1.00 | 0.42 rad | 1.06 m | 0.312 |
 
-**What this shows.** A policy rewarded only by a video embedding learned a stable, recognisable squat: it never fell, and real V-JEPA ranks it closer to the video than every bank motion. It does not yet match tracking: tracking stays best on every metric, and the latent policy's DTW margin over the closest bank motion is small (0.549 vs 0.518, `bend`). The likely cause is the reward net: it was trained on IK motions, not on the states a policy actually visits during RL. The DAgger run, now training, adds the policies' own rollouts to its training set.
+**Robustness** (64 rollouts per condition; success = every stage in order, no fall; [`docs/results/squat_jump_robustness.md`](docs/results/squat_jump_robustness.md)):
 
-Earlier V-JEPA 2 probes: [`RESEARCH.md`](RESEARCH.md) (synthetic, same-vs-different margin +0.647) and [`experiments/cross_embodiment_probe.py`](experiments/cross_embodiment_probe.py) (human video vs robot, 7 clips).
+| Policy | Clean | Random pushes | Push 1.5 m/s | Start noise | Start pose | Tempo | Friction/mass | **Reference frozen** | Joint DTW to clip |
+|---|---|---|---|---|---|---|---|---|---|
+| Tracking | 100% | 65% | 14% | 54% | 100% | 97% | 100% | **0%** | 0.10 |
+| Task | 100% | **94%** | **81%** | **83%** | 100% | 100% | 99% | **100%** | 0.41 |
+| Task, no reference | 100% | 83% | 55% | 73% | 80% | 100% | 98% | **100%** | 0.41 |
+
+**What this shows.** Every policy can do the squat jump as trained. Take the reference away and the clip-copier just stands there (0%), while both task policies still squat, jump, land and stand (100%). Under shoves and noisy starts the task policy succeeds far more often than tracking (94% vs 65% under random pushes, 81% vs 14% at 1.5 m/s). And they do it their own way: joint-space distance to the clip is 0.41 rad, more than standing still scores (0.17). The price is style: they look less like the video (V-JEPA 0.43 / 0.31 vs 0.70), because style is deliberately a weak term.
+
+### How we got here (squat clip)
+
+| Run | Policy | V-JEPA cosine (time-aligned) | Falls | Note |
+|---|---|---|---|---|
+| v1 | Tracking | **0.714** | 0 | |
+| v1 | Hybrid (latent + 1/5 tracking) | 0.579 | 0 | |
+| v1 | Latent-only | 0.532 | 0 | barely above the closest wrong bank motion (`bend`, 0.518 DTW) |
+| v2 (DAgger reward net) | Hybrid | 0.585 | 0 | reward net held-out cosine 0.62 → 0.80 |
+| v2 (DAgger reward net) | Latent-only | 0.527 | 0 | the policy gamed the learned reward |
+
+- **A video-similarity reward alone wasn't enough.** V-JEPA cosine barely separates "the action" from "a person moving" (almost every humanoid motion scores ~0.5), and in v2 the distilled reward rose (0.35 → 0.49) while real V-JEPA stayed flat (0.35 → 0.37): reward hacking. Yet all five squat policies completed the squat under the semantic spec (5/5 stages): the metric, not the policies, was the problem.
+- **The first squat-jump task run plateaued** (episodes ~60 of 500 steps, most ending in falls) without stability terms or a warm start. CPU rollouts then showed the robot over-jumping and collapsing on landing, because the jump paid before the landing. Now a fall refunds the attempt (commit 883c6b7, after the final run trained).
+
+Earlier V-JEPA 2 probes: [`RESEARCH.md`](RESEARCH.md) and [`experiments/cross_embodiment_probe.py`](experiments/cross_embodiment_probe.py).
 
 ## Quickstart
 
@@ -87,7 +104,7 @@ python pipeline.py clips/squat.mp4 --no-sam       # outputs/squat/{motion.csv, s
 **Colab A100, unattended from your laptop** ([`scripts/remote_run.py`](scripts/remote_run.py)). You need the `colab` CLI logged in (oauth2) and a Hugging Face token with access to `facebook/sam3.1`, set as `HF_TOKEN` in `.env` (see `.env.example`). Name each clip after its action (`clips/squat.mov`); the target is the clip's file name.
 ```bash
 python3 scripts/remote_run.py latent --smoke                                  # plumbing test, no clips, minutes
-python3 scripts/remote_run.py latent --target squat --min-clips 7 --iters 2000 # the run above
+python3 scripts/remote_run.py latent --target squat --min-clips 7 --iters 2000 # first run: SAM, reward net, policies
 ```
 It waits for the clips, checks the token, creates an A100, clones this repo from GitHub (so push first), runs SAM, distillation, three trainings and the evaluation, then downloads `results.tar.gz` to `outputs/remote_latent/` and stops the VM.
 
@@ -107,6 +124,17 @@ python3 scripts/remote_run.py latent --reuse outputs/remote_latent_v2 --with-wei
     --args "--reward /content/a2h/inputs/reward.pt --policies task --init /content/a2h/inputs"   # Task <- Hybrid
 ```
 
+**The final squat-jump run** (reuses the processed clips and reward net, warm-starts every policy):
+```bash
+python3 scripts/remote_run.py latent --tag final --target squat_jump --reuse outputs/reuse_final --with-weights --iters 1200 \
+    --args "--reward /content/a2h/inputs/reward.pt --policies tracking task taskphase --init /content/a2h/inputs \
+            --importance /content/a2h/inputs/clips/squat_jump/importance.json"
+python3 scripts/remote_run.py robust --reuse outputs/remote_latent_final --target squat_jump --tag final
+```
+`--backend farmshare` runs the same jobs on Stanford FarmShare through Slurm ([`docs/FARMSHARE.md`](docs/FARMSHARE.md)).
+
+**Web app** ([`docs/DEPLOY.md`](docs/DEPLOY.md)): `make install && make dev`, then http://localhost:5173. The `/examples` page works with no backend.
+
 **Colab notebook, interactive:** [`notebooks/video_to_policy.ipynb`](notebooks/video_to_policy.ipynb) on an L4 or A100 (SAM 3.1 needs more than a T4) covers clip → SAM → retarget → tracking policy.
 
 ## Repo map
@@ -114,33 +142,32 @@ python3 scripts/remote_run.py latent --reuse outputs/remote_latent_v2 --with-wei
 | Path | What it does |
 |---|---|
 | [`pipeline.py`](pipeline.py) | Video to G1 motion CSV + side-by-side preview |
-| [`track.py`](track.py), [`sam_track.py`](sam_track.py) | SAM 3.1 tracking (runs in its own Python 3.12 env, since sam3 pins `numpy<2`) |
-| [`pose.py`](pose.py) | MediaPipe 3D pose to a metric, z-up human trajectory |
-| [`retarget.py`](retarget.py) | mink IK onto the G1, error report, mjlab CSV export |
-| [`latent/`](latent) | Silhouettes, V-JEPA 2 wrapper, 26-motion IK bank, distillation, reward net |
-| [`mjlab_tasks.py`](mjlab_tasks.py) | `A2H-Hybrid-…` and `A2H-Latent-Flat-Unitree-G1` tasks with the latent reward |
-| [`train_motion.py`](train_motion.py), [`mjlab_rollout.py`](mjlab_rollout.py) | CSV to PPO policy, headless rollout video + metrics |
-| [`experiments/`](experiments) | V-JEPA probes and the end-to-end latent-policy experiment |
-| [`scripts/`](scripts) | Asset fetch, Colab setup, unattended remote runner |
-| [`coach.py`](coach.py) | Muse Spark client (Meta Model API, OpenAI-compatible) |
-| [`PLAN.md`](PLAN.md), [`RESEARCH.md`](RESEARCH.md) | Plan, prior art, probe results |
+| [`track.py`](track.py), [`sam_track.py`](sam_track.py) | SAM 3.1 tracking (its own Python 3.12 env, since sam3 pins `numpy<2`) |
+| [`pose.py`](pose.py), [`retarget.py`](retarget.py) | MediaPipe 3D pose; proportion-aware mink IK onto the G1, mjlab CSV export |
+| [`skill/`](skill) | Task spec + reward machine (`task.py`), goal relevance (`importance.py`), commanded targets (`commands.py`) |
+| [`latent/`](latent) | Silhouettes, V-JEPA 2 wrapper and predictor diagnostic, motion bank, distillation, reward net |
+| [`mjlab_tasks.py`](mjlab_tasks.py) | A2H tasks: Hybrid, Latent, LatentPhase, Task, TaskPhase, TaskCmd; stability terms |
+| [`train_motion.py`](train_motion.py), [`mjlab_rollout.py`](mjlab_rollout.py), [`policy_weights.py`](policy_weights.py) | CSV to PPO policy (resume / warm start), headless rollout |
+| [`muse/`](muse) | Muse Spark client, skill reader, reward-design agent (fixture-backed until a key exists) |
+| [`experiments/`](experiments) | End-to-end run, robustness eval, goal relevance, command eval, V-JEPA probes |
+| [`scripts/`](scripts) | Colab / FarmShare runners, weights registry, demo assets, examples, Space build |
+| [`server/`](server), [`web/`](web) | FastAPI backend and React frontend ([`docs/DEPLOY.md`](docs/DEPLOY.md), [`docs/SECURITY.md`](docs/SECURITY.md), [`docs/SYSTEM_DESIGN.md`](docs/SYSTEM_DESIGN.md)) |
 
 ## Limitations
 
-- **One clip, one move.** Results are for a single squat video. Six more clips are processed but haven't been trained on.
-- **Latent-only is below tracking**, at 0.53 vs 0.71 cosine. The distilled reward net is the bottleneck: its held-out cosine is 0.62, and the trained policies score lower in its space than the retarget does.
-- **"Learns the action, not the clip" is the goal, not yet a measured result.** We haven't yet tested on variations the clip never showed (deeper squats, pushes, different heights).
-- **The latent policy still sees the retarget** as its observation and reset state. It just isn't rewarded for matching it.
-- **Single viewpoint.** The robot is rendered from the video's estimated camera azimuth, and depth ambiguity in monocular video remains.
-- **Simulation only**, with no sim-to-real transfer yet. The arm-raise clip fails the cross-embodiment probe: its own retarget ranks 20th of 27 by DTW.
+- **One action so far.** The final results are one squat-jump video (plus the squat). Six more clips are processed but haven't been trained on.
+- **Success vs style.** The task policies look less like the video (V-JEPA 0.43 / 0.31 vs 0.70 for tracking). Style is deliberately weak; stronger, goal-weighted style is the next lever.
+- **The final run trained before the landing fix** (fall refund, 883c6b7) and the grounded start states; its jump quality has room to improve.
+- **Muse runs on recorded fixtures** until a Meta Model API key exists; the skill reader and reward agent are wired in and tested.
+- **Goal relevance is physics-based.** V-JEPA 2 predictor masking was tested as a second signal and didn't pick out goal-relevant motion, so it's kept as a diagnostic.
+- **Simulation only**, no sim-to-real transfer yet; a single camera viewpoint and monocular depth ambiguity remain.
 
 ## Next steps
 
-1. DAgger-refined reward net (training now): TODO(v2) results.
-2. Muse Spark skill reader and reward-design agent loop (in progress on `claude/meta-tooling-plan-c004aa`).
-3. Train the other six clips (lunge, front kick, jumping jacks, punches, squat jump, arms).
-4. Generalisation tests: unseen depths and heights, push recovery.
-5. Open-weights rollout critic (Muse Glimmer), and sim-to-real on a physical G1.
+1. Commanded targets (`A2H-TaskCmd`, implemented): one policy for a range of squat depths and jump heights, under a curriculum.
+2. Live Muse: skill reader on new videos, and the reward-design agent closing the loop on real runs.
+3. More actions (lunge, kick, jumping jacks) and several videos of the same action into one policy.
+4. Sim-to-real on a physical G1: domain randomisation ranges, latency, ONNX export ([`docs/PIPELINE_IMPROVEMENTS.md`](docs/PIPELINE_IMPROVEMENTS.md)).
 
 ## Credits
 
