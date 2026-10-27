@@ -7,8 +7,9 @@
 2. distillation dataset at the target video's viewpoint: bank + retargets + earlier policies'
    rollouts (--extra-motions, DAgger-style) + random variations, rendered and embedded with V-JEPA
 3. reward network (robot body trajectory -> V-JEPA latent), bundled with the target's latent
-4. three policies on the target clip, in parallel: tracking (copy the retarget), hybrid (latent
-   reward + weak tracking), latent (latent reward only)
+4. policies on the target clip, in parallel: tracking (copy the retarget), hybrid (latent reward
+   + weak tracking), latent (latent reward only), phase (latent reward only, and the policy sees
+   only its own state and a clock, not the retarget)
 5. evaluation with the real V-JEPA (not the distilled network): each rollout re-rendered as a
    silhouette and compared with the video, time-aligned and with DTW, against the bank
 
@@ -37,7 +38,7 @@ from latent import bank as motion_bank  # noqa: E402
 from latent.distill import unit  # noqa: E402
 
 TASKS = {"tracking": "Mjlab-Tracking-Flat-Unitree-G1", "hybrid": "A2H-Hybrid-Flat-Unitree-G1",
-         "latent": "A2H-Latent-Flat-Unitree-G1"}
+         "latent": "A2H-Latent-Flat-Unitree-G1", "phase": "A2H-LatentPhase-Flat-Unitree-G1"}
 
 
 def log(msg):
@@ -111,9 +112,16 @@ def main(a):
     bucket = int(round(tgt["az"] / AZ_BUCKET) * AZ_BUCKET)
     log(f"target {a.target}: viewpoint {tgt['az']:.0f} deg (renders at {bucket}), {len(tgt['dense'])} latent steps")
 
+    bundle = out / "reward.pt"
+    if a.reward and not bundle.exists():  # an earlier run's reward network: skips stages 2 and 3
+        import shutil
+        shutil.copy(a.reward, bundle)
+        if (Path(a.reward).parent / "distill_report.json").exists():
+            shutil.copy(Path(a.reward).parent / "distill_report.json", out / "distill_report.json")
+
     # 2. distillation dataset
     ds_f = out / "distill_dataset.npz"
-    if not ds_f.exists():
+    if not ds_f.exists() and not bundle.exists():
         bank = bank_motions(config.OUTPUT_DIR / "cache")
         if a.smoke:
             bank = dict(list(bank.items())[:4])
@@ -123,15 +131,13 @@ def main(a):
         motions = base | {f"var/{i}": distill.variation(base, rng) for i in range(a.variations)}
         log(f"distillation dataset: {len(motions)} motions ({sum(len(q) for q in motions.values())} frames)")
         np.savez(ds_f, **distill.build_dataset(motions, bucket, vj, workers=a.workers, every=a.every))
-    ds = np.load(ds_f)
-    names, seq, Y = ds["names"], ds["seq"], ds["Y"]
-    is_bank = np.char.startswith(names.astype(str), "bank/")
-    r_mean = Y[is_bank[seq]].astype(np.float32).mean(0)
-    bank_c = {str(n)[5:]: Y[seq == i].astype(np.float32) for i, n in enumerate(names) if is_bank[i]}
-
     # 3. reward network
-    bundle = out / "reward.pt"
     if not bundle.exists():
+        ds = np.load(ds_f)
+        names, seq, Y = ds["names"], ds["seq"], ds["Y"]
+        is_bank = np.char.startswith(names.astype(str), "bank/")
+        r_mean = Y[is_bank[seq]].astype(np.float32).mean(0)
+        bank_c = {str(n)[5:]: Y[seq == i].astype(np.float32) for i, n in enumerate(names) if is_bank[i]}
         log("training the reward network")
         net, U, rep = distill.train_reward_net(ds["X"], Y, seq, r_mean, k=a.k, epochs=a.epochs,
                                                hidden=a.hidden, depth=a.depth)
@@ -172,7 +178,7 @@ def main(a):
     # the reward network and the real centred embedding score each rollout in the reward's space
     from latent.reward_net import load_bundle
     net, target_k, b = load_bundle(bundle)
-    U = b["basis"]
+    U, r_mean = b["basis"], b["r_mean"]
     H = unit(tgt["dense"] - h_mean)
     bank_d = eval_bank(bank_motions(config.OUTPUT_DIR / "cache"), bucket, vj, g1, out, a.smoke)
     r_mean_d = np.concatenate(list(bank_d.values())).mean(0)
@@ -272,7 +278,8 @@ if __name__ == "__main__":
     ap.add_argument("--every", type=int, default=2, help="distil at every n-th dense step")
     ap.add_argument("--extra-motions", nargs="*", default=[],
                     help="earlier policies' policy_qpos.npy (50 Hz), added to the distillation data")
-    ap.add_argument("--policies", nargs="+", default=list(TASKS), choices=list(TASKS))
+    ap.add_argument("--reward", help="reuse this reward bundle (reward.pt) instead of distilling one")
+    ap.add_argument("--policies", nargs="+", default=["tracking", "hybrid", "latent"], choices=list(TASKS))
     ap.add_argument("--iters", type=int, default=1500)
     ap.add_argument("--num-envs", type=int, default=4096)
     ap.add_argument("--smoke", action="store_true")

@@ -8,6 +8,9 @@ Runs inside mjlab's virtualenv; takes the same flags as mjlab's `train`:
   terminations: the robot may deviate from the retarget where that looks more like the video.
 - A2H-Latent-Flat-Unitree-G1: latent reward only; the retarget is still the policy's input
   (it says what to do next) and its starting states, but is never scored.
+- A2H-LatentPhase-Flat-Unitree-G1: latent reward only, and the policy never sees the retarget
+  either: its inputs are its own body state and a clock (the motion's phase). The retarget only
+  gives the starting states and, for the critic during training, privileged information.
 """
 
 import os
@@ -21,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from latent.reward_net import BODIES, FPS, WINDOW, load_bundle, window_center_step  # noqa: E402
 
 import mjlab.tasks  # noqa: E402,F401  (registers mjlab's own tasks)
+from mjlab.managers.observation_manager import ObservationTermCfg  # noqa: E402
 from mjlab.managers.reward_manager import RewardTermCfg  # noqa: E402
 from mjlab.tasks.registry import register_mjlab_task  # noqa: E402
 from mjlab.tasks.tracking.config.g1.env_cfgs import unitree_g1_flat_tracking_env_cfg  # noqa: E402
@@ -76,12 +80,26 @@ class LatentReward:
         return torch.exp(-(self.cos_ref[step] - cos).clamp(min=0) / SIGMA) * valid
 
 
+def motion_phase(env, command_name="motion", harmonics=4):
+    """A clock: how far through the motion the robot should be, as sin/cos of its phase."""
+    cmd = env.command_manager.get_term(command_name)
+    t = cmd.time_steps.float() / cmd.motion.time_step_total
+    k = torch.arange(1, harmonics + 1, device=t.device) * 2 * torch.pi * t[:, None]
+    return torch.cat([k.sin(), k.cos()], -1)
+
+
+REFERENCE_OBS = ("command", "motion_anchor_pos_b", "motion_anchor_ori_b")
 TRACKING_TERMS = ("motion_global_root_pos", "motion_global_root_ori", "motion_body_pos",
                   "motion_body_ori", "motion_body_lin_vel", "motion_body_ang_vel")
 
 
-def latent_env_cfg(tracking_scale, play=False):
+def latent_env_cfg(tracking_scale, play=False, phase_only=False):
     cfg = unitree_g1_flat_tracking_env_cfg(play=play)
+    if phase_only:
+        actor = cfg.observations["actor"].terms
+        for k in REFERENCE_OBS:
+            del actor[k]
+        actor["phase"] = ObservationTermCfg(func=motion_phase)
     for k in TRACKING_TERMS:
         if tracking_scale:
             cfg.rewards[k].weight *= tracking_scale
@@ -98,8 +116,10 @@ def latent_env_cfg(tracking_scale, play=False):
     return cfg
 
 
-for task, scale in (("A2H-Hybrid-Flat-Unitree-G1", 0.2), ("A2H-Latent-Flat-Unitree-G1", 0.0)):
-    register_mjlab_task(task_id=task, env_cfg=latent_env_cfg(scale), play_env_cfg=latent_env_cfg(scale, play=True),
+for task, scale, phase in (("A2H-Hybrid-Flat-Unitree-G1", 0.2, False), ("A2H-Latent-Flat-Unitree-G1", 0.0, False),
+                          ("A2H-LatentPhase-Flat-Unitree-G1", 0.0, True)):
+    register_mjlab_task(task_id=task, env_cfg=latent_env_cfg(scale, phase_only=phase),
+                        play_env_cfg=latent_env_cfg(scale, play=True, phase_only=phase),
                         rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
 
 
