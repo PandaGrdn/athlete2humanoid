@@ -367,7 +367,7 @@ def pack(out, hum):
             if (out / f).exists():
                 tar.add(out / f, f)
         for d in out.glob("policy_*"):
-            for f in ["policy.mp4", "policy_metrics.json", "policy_qpos.npy", "train.log", "motion.npz"]:
+            for f in ["policy.mp4", "policy_metrics.json", "policy_qpos.npy", "train.log", "motion.npz", "weights.json"]:
                 if (d / f).exists():
                     tar.add(d / f, f"{d.name}/{f}")
             ckpts = sorted(d.glob("logs/*/*/model_*.pt"), key=lambda p: int(p.stem.split("_")[1]))

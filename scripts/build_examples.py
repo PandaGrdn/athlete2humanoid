@@ -53,6 +53,21 @@ STAGE_LABEL = {"stand": "Stand", "squat": "Squat", "jump": "Jump", "land": "Land
 
 # --- helpers -------------------------------------------------------------------------------------
 
+
+def _and(names):
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def _distance_note(ev, succ):
+    """How far the task-first policies' torsos strayed from the clip's path while succeeding."""
+    far = [ev[k]["mean_torso_position_error_m"] for k in succ
+           if k.startswith("task") and ev.get(k, {}).get("mean_torso_position_error_m") is not None]
+    if not far:
+        return ""
+    lo, hi = min(far), max(far)
+    span = f"{lo:.1f} m" if abs(hi - lo) < 0.05 else f"{lo:.1f}–{hi:.1f} m"
+    return f"; the task policies did it {span} (mean torso distance) away from the clip's own path"
+
 def default_runs_dir():
     """outputs/ of this checkout, or of the main checkout when this is a git worktree (outputs/ is gitignored)."""
     here = REPO / "outputs"
@@ -629,10 +644,11 @@ def ex_final(runs, media):
     stage_txt = " → ".join(STAGE_LABEL.get(s["kind"], s["kind"]) for s in spec["stages"]) if spec else "the action's stages"
     return {**base, "status": "ready",
             "tagline": (f"Rewarded for the action, not for copying the clip: "
-                        + (f"the {' and '.join(POLICY_INFO.get(k, (k,))[0] for k in succ)} "
+                        + (f"the {_and([POLICY_INFO.get(k, (k,))[0] for k in succ])} "
                            f"polic{'y' if len(succ) == 1 else 'ies'} completed every stage ({e.get('task_stages')})"
                            if succ else f"the best policy completed {e.get('task_stages', '?')} stages")
-                        + (f" with {e['falls']} falls." if e.get("falls") is not None else ".")),
+                        + (f" with {e['falls']} falls" if e.get("falls") is not None else "")
+                        + _distance_note(ev, succ) + "."),
             "story": {
                 "shown": f"The {target.replace('_', ' ')} phone video, retargeted to G1 proportions. Its stages: {stage_txt}.",
                 "learned": ("A policy rewarded mainly for completing those stages in order, with V-JEPA 2 similarity "

@@ -1,7 +1,16 @@
 {
  "version": 1,
- "generated_at": "2026-10-27T20:02:58+00:00",
+ "generated_at": "2026-10-27T21:31:48+00:00",
  "examples": [
+  {
+   "id": "squat-jump-final",
+   "kicker": "The task policy",
+   "title": "Squat jump: stand, squat, jump, land",
+   "tagline": "Rewarded for the action, not for copying the clip: the Tracking, Task and Task (no reference) policies completed every stage (9/9) with 0 falls; the task policies did it 0.4–1.1 m (mean torso distance) away from the clip's own path.",
+   "status": "ready",
+   "poster": "squat-jump-final/source.jpg",
+   "video": "squat-jump-final/source.mp4"
+  },
   {
    "id": "squat-v1",
    "kicker": "Learning the action",
@@ -36,15 +45,6 @@
    "tagline": "64 simulated rollouts per condition: the squat policies barely notice friction and mass changes, and tracking is the sturdiest under shoves and noisy starts. Latent falls most, which is why the task reward only pays while the robot stays upright.",
    "status": "ready",
    "poster": "squat-v1/policy_tracking.jpg",
-   "video": null
-  },
-  {
-   "id": "squat-jump-final",
-   "kicker": "The task policy",
-   "title": "Squat jump: stand, squat, jump, land",
-   "tagline": "The final run: a policy rewarded for completing the squat jump's stages in order, without falling. Results appear here when training finishes.",
-   "status": "pending",
-   "poster": null,
    "video": null
   }
  ]
