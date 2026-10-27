@@ -16,7 +16,7 @@ Research done 2026-10-26, before the Model API key is approved. **Nothing here h
 ### 1.1 Access basics (Meta Model API)
 
 - **Base URL:** `https://api.meta.ai/v1`. It is OpenAI-SDK compatible (Chat Completions and Responses) and also Anthropic-Messages compatible. The auth header is `Authorization: Bearer <key>`.
-  - Meta's examples read the key from `MODEL_API_KEY`. `coach.py` reads `META_API_KEY` through `config.get_secret`, and either works.
+  - Meta's examples read the key from `MODEL_API_KEY`. `motion_brief.py` and `muse/` read `MUSE_API_KEY` (or `META_API_KEY`) through `config.get_secret`.
 - **Status: public preview for developers in the US.** It is subject to the Geographic Use Policy, and Muse Wonder is not offered in South Korea.
 - **Muse Spark always reasons.**
   - `reasoning_effort` accepts `minimal`, `low`, `medium`, `high` or `xhigh` (and `max` on `muse-spark-1.3`). `none` returns HTTP 400.
@@ -49,14 +49,14 @@ Research done 2026-10-26, before the Model API key is approved. **Nothing here h
 ### 1.3 What this means for our code
 
 - **Model ID:** `config.MUSE_MODEL` defaults to `muse-spark-1.1`. That ID is valid but two releases old, and 1.3 costs the same. Set `MUSE_MODEL=muse-spark-1.3` (env only, no code change). Avoid `-contributor` for real footage of people: it lets Meta train on the content.
-- **Gaps in `coach.ask` today:**
+- **Gaps in `motion_brief.ask` today:**
   - it sends images only (no `video_url` part);
   - it uses `json_object` instead of a strict `json_schema`;
   - it uses the `system` role;
   - it has no Responses-API path for multi-turn tool use.
 
   The sketches below add all four.
-- **Anti-project risk in `coach.py`:** its prompts say "biomechanics coach" and return a `coaching` field, and "sports analyzers or coaches" are on the anti-project list. Every Muse prompt and output should be phrased as a **robot training spec**, with nothing addressed to the person in the video. Do this when `coach.py` is next edited.
+- **Anti-project risk (fixed Oct 27):** `coach.py` said "biomechanics coach" and returned a `coaching` field, too close to the "sports analyzers or coaches" anti-project. It is now `motion_brief.py`, and every Muse prompt and output is phrased as a robot training spec, with nothing addressed to the person in the video.
 - **Rough costs.** The video token rate is not published; check it with the token-counting endpoint once the key works.
   - A 4 s clip sampled at 4 fps is 16 frames, roughly 16 × 1.4k ≈ 22k input tokens at the image rate, about $0.03 per skill-reader call *(unverified)*.
   - An agent round (two short videos, metrics, about 5k reasoning tokens out) costs about $0.08.
@@ -103,7 +103,7 @@ Research done 2026-10-26, before the Model API key is approved. **Nothing here h
   - It watches the new rollouts, and repeats or calls `finish`.
   - Every round is logged, which gives the demo its "agent fixes a failed skill" chart.
 - **Where it plugs in:**
-  - The loop lives in **`coach.py`** (`reward_agent()`) and stays torch-free.
+  - The loop lives in **`motion_brief.py`** (`reward_agent()`) and stays torch-free.
   - A new driver, `experiments/reward_agent.py`, supplies `run_round(cfg)`. That function wraps `train_motion.train_motion(..., task=A2H-Hybrid…, bundle=…)` and the step-5 evaluation from `experiments/latent_policy.py`, which needs a small refactor into an `evaluate(out, name)` function.
   - The config reaches mjlab through a JSON file whose path is in an env var (`A2H_SKILL`), read by `mjlab_tasks.latent_env_cfg`. Today `latent_env_cfg` hard-codes `tracking_scale`, `SIGMA`, the latent weight `3.0` and the termination thresholds.
 - **Input:** `skill.json`, the `eval.json` fields (`aligned`, `dtw`, `dtw_rank_vs_bank`, `falls`, `mean_torso_position_error_m`) and `comparison.mp4` (video silhouette next to the robot silhouettes, the framing V-JEPA sees).
@@ -124,7 +124,7 @@ Research done 2026-10-26, before the Model API key is approved. **Nothing here h
   - phases (in seconds) with a keyframe each, and whether that phase should be matched by `pose` (tracking), `style` (latent) or left `free`;
   - global reward weights and termination thresholds.
 - **Where it plugs in:**
-  - Add `coach.read_skill()` alongside `segment_phases()`, and drop the "coach" wording.
+  - Add `read_skill()` alongside `motion_brief.segment_phases()`.
   - Call it in `experiments/latent_policy.py` right after step 1 (`humans()`), and write `out/skill.json`.
   - Uses, in order of value:
     1. Pass the reward and termination numbers to the A2H tasks (the same `A2H_SKILL` hook as #1).
@@ -204,12 +204,12 @@ Research done 2026-10-26, before the Model API key is approved. **Nothing here h
 
 ## 3. Code sketches for the top two
 
-Both are written to drop into `coach.py`. They reuse its lazy `client()`, `config.MUSE_MODEL` and the base64-inline style, and stay free of torch and mjlab imports. They are **sketches**: field names follow Meta's docs, but nothing has been run against the API.
+Both are written to drop into `motion_brief.py`. They reuse its lazy `client()`, `config.MUSE_MODEL` and the base64-inline style, and stay free of torch and mjlab imports. They are **sketches**: field names follow Meta's docs, but nothing has been run against the API.
 
 ### 3.1 Shared: video parts, strict schemas, `developer` role
 
 ```python
-# coach.py: replaces ask(). Same call sites keep working.
+# motion_brief.py: replaces ask(). Same call sites keep working.
 
 def _data_url(path, mime):
     return f"data:{mime};base64,{base64.b64encode(Path(path).read_bytes()).decode()}"
@@ -246,7 +246,7 @@ def ask(prompt, system=None, images=(), videos=(), json_mode=False, schema=None,
 ### 3.2 #2 Skill reader
 
 ```python
-# coach.py
+# motion_brief.py
 
 SKILL_SYSTEM = (
     "You turn a video of a person moving into a training spec for a Unitree G1 humanoid robot "
@@ -304,9 +304,9 @@ Call site in `experiments/latent_policy.py`, after step 1:
 ```python
 skill_f = out / "skill.json"
 if not skill_f.exists():
-    import coach
+    import motion_brief
     d = tgt["dir"]
-    spec = coach.read_skill(d / "source.mp4",  # the trimmed input clip (save it there, or pass the original path)
+    spec = motion_brief.read_skill(d / "source.mp4",  # the trimmed input clip (save it there, or pass the original path)
                             bank_motions(config.OUTPUT_DIR / "cache").keys(),
                             json.loads((d / "meta.json").read_text()),
                             json.loads((d / "retarget_report.json").read_text()))
@@ -318,7 +318,7 @@ if not skill_f.exists():
 ### 3.3 #1 Reward-design agent (Responses API, tool calls, video)
 
 ```python
-# coach.py
+# motion_brief.py
 
 AGENT_SYSTEM = (
     "You tune the reward of a reinforcement-learning run that teaches a Unitree G1 humanoid a motion "
@@ -394,7 +394,7 @@ def _log(path, row):
             f.write(json.dumps(row) + "\n")
 ```
 
-The driver, `experiments/reward_agent.py` (new), keeps the GPU side out of `coach.py`:
+The driver, `experiments/reward_agent.py` (new), keeps the GPU side out of `motion_brief.py`:
 
 ```python
 def run_round(label, cfg):
@@ -421,7 +421,7 @@ Merged with the milestones in `PLAN.md`. Cut order if behind: #3 fine-tune → #
 | Day | Date | Meta work | Done when |
 |---|---|---|---|
 | 1 | Mon Oct 26 | (Squat run continues.) As soon as the key lands: smoke-test `muse-spark-1.3`. Test calls: a text call, one `video_url` call on the squat clip, one strict `json_schema` call and one Responses tool call; also count the clip's video tokens. Set `MUSE_MODEL=muse-spark-1.3`. | Four test calls pass; video token cost recorded in `DAY1_CHECKLIST.md` |
-| 2 | Tue Oct 27 | Build **#2 skill reader** and the new `ask()`. Rename coach prompts. Add the `A2H_SKILL` hook in `mjlab_tasks.latent_env_cfg` (global weights + terminations). Attend Agents 101. | `skill.json` for 3 clips; the squat retrains from a Muse-chosen config |
+| 2 | Tue Oct 27 | Build **#2 skill reader** and the new `ask()`. Remove the coach framing (done: `motion_brief.py`). Add the `A2H_SKILL` hook in `mjlab_tasks.latent_env_cfg` (global weights + terminations). Attend Agents 101. | `skill.json` for 3 clips; the squat retrains from a Muse-chosen config |
 | 3 | Wed Oct 28 | **#1 agent loop**, first with a fake `run_round` (canned metrics) to debug tool turns, then real. Pick a move the default reward fails on (the bedroom jumps). | One real round end to end; `agent_log.jsonl` written |
 | 4 | Thu Oct 29 | Run the agent for 3–4 rounds on the failing move; confirm the winner at full length. **Record the backup demo video.** | Logged improvement in `aligned`/rank over the baseline (or an honest "no gain" with the reasons) |
 | 5 | Fri Oct 30 | **#4 SAM via API** (3–4 h). Serve **Glimmer zero-shot** (#3) on an L4 or Modal; build the contact sheets. Fireworks fine-tuning session. | `pipeline.py` runs with `A2H_SAM_BACKEND=api` on a CPU machine; Glimmer answers critic prompts |
@@ -455,7 +455,7 @@ Everything runs offline against fixture responses until the key arrives.
 | `muse/skill_reader.py` | Video → `skill_spec.json` next to the clip's pipeline outputs. Contents: action label and nearest bank motions, tempo, phases (time, keyframe, `pose`/`style`/`free`, key bodies), weighted key bodies, and success criteria in simulator metrics. |
 | `muse/reward_agent.py` | Run folder (`eval.json`, `distill_report.json`, contact sheets of `comparison.mp4` and `policy_<variant>/policy.mp4`, optional `skill_spec.json`) → `reward_proposal.json` (diagnosis + RFC 6902 patch) and `next_reward_config.json`. Patches are bounded per path, with at most 3 ops and no no-ops. Each proposal is appended to `agent_log.jsonl`, which the next proposal reads as history. |
 | `muse/fixtures/*.json` | Hand-written stand-in responses in the API's shape. Replace them with `--record` output. |
-| `tests/test_muse.py` | 22 stdlib `unittest` tests, using real run data copied from `outputs/remote_latent` into `tests/data/`. |
+| `tests/test_muse.py`, `tests/test_reward_config.py` | 28 stdlib `unittest` tests: fixture responses, real run data copied from `outputs/remote_latent` into `tests/data/`, and stub mjlab modules. |
 
 ```bash
 python -m unittest discover -s tests -t .
@@ -487,9 +487,14 @@ python -m muse.reward_agent outputs/ --watch 300 --log outputs/agent_log.jsonl
 
 `pipeline.py ... --skill live` (or `--skill dry-run`) runs the skill reader as the last pipeline stage.
 
-**Still to wire, in files this branch didn't touch:**
-- Training doesn't read `next_reward_config.json` yet. `mjlab_tasks.latent_env_cfg` needs to take `latent_weight`, `sigma`, `tracking_scale` and `terminations` from it, and `train_motion.py --iters` needs to take `iterations`. The suggested route is a `reward_config.json` copied into the run folder plus an env var such as `A2H_REWARD_CONFIG`. `reward_agent.DEFAULTS` mirrors the values hard-coded at commit 3ddc84c.
-- The success-criteria metrics (`METRICS` in `skill_reader.py`) are defined, but nothing computes them from a rollout yet.
+**Wired into training (Oct 27):**
+- `train_motion.py --reward-config next_reward_config.json` copies the file to `<out>/reward_config.json`, points `A2H_REWARD_CONFIG` at the copy, and takes its `iterations` in place of `--iters`.
+- `mjlab_tasks.reward_config()` then overrides `latent_weight`, `sigma` (passed to `LatentReward` as a term param), `tracking_scale` and the termination thresholds. The latent-only task keeps `tracking_scale` 0.
+- `experiments/latent_policy.py --reward-config` passes the file through for the hybrid and latent policies; the tracking baseline is left unchanged.
+- `reward_agent` reads `policy_<variant>/reward_config.json` back as the run's current config.
+- `tests/test_reward_config.py` checks the round trip (proposal → env cfg) against stub mjlab modules, and that `reward_agent.DEFAULTS` equals `mjlab_tasks`' defaults.
+
+**Still open:** the success-criteria metrics (`METRICS` in `skill_reader.py`) are defined, but nothing computes them from a rollout yet.
 
 ---
 

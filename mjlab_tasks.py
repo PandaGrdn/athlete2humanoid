@@ -8,8 +8,13 @@ Runs inside mjlab's virtualenv; takes the same flags as mjlab's `train`:
   terminations: the robot may deviate from the retarget where that looks more like the video.
 - A2H-Latent-Flat-Unitree-G1: latent reward only; the retarget is still the policy's input
   (it says what to do next) and its starting states, but is never scored.
+
+A2H_REWARD_CONFIG=next_reward_config.json (muse/reward_agent.py's format; train_motion.py
+--reward-config sets it) overrides the latent weight, SIGMA, tracking scale and termination
+thresholds below. The latent-only task keeps tracking_scale 0.
 """
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -55,7 +60,7 @@ class LatentReward:
     def reset(self, env_ids=None):
         self.last_ts[slice(None) if env_ids is None else env_ids] = -10
 
-    def __call__(self, env, **kwargs):
+    def __call__(self, env, sigma=SIGMA, **kwargs):
         ts = self.cmd.time_steps
         jumped = (ts != self.last_ts + 1).nonzero().squeeze(1)  # reset, or motion wrapped around
         if len(jumped):
@@ -73,26 +78,45 @@ class LatentReward:
         valid = (step >= 0) & (step < len(self.target))
         step = step.clamp(0, len(self.target) - 1)
         cos = torch.nn.functional.cosine_similarity(pred, self.target[step], dim=-1)
-        return torch.exp(-(self.cos_ref[step] - cos).clamp(min=0) / SIGMA) * valid
+        return torch.exp(-(self.cos_ref[step] - cos).clamp(min=0) / sigma) * valid
 
 
 TRACKING_TERMS = ("motion_global_root_pos", "motion_global_root_ori", "motion_body_pos",
                   "motion_body_ori", "motion_body_lin_vel", "motion_body_ang_vel")
 
 
+REWARD_CONFIG_ENV = "A2H_REWARD_CONFIG"
+
+
+def reward_config(tracking_scale):
+    """This task's settings: the defaults, overridden by the A2H_REWARD_CONFIG file if set."""
+    rc = {"latent_weight": 3.0, "sigma": SIGMA, "tracking_scale": tracking_scale,
+          # Relaxed: end an episode when the robot has fallen, not when it leaves the retarget.
+          "terminations": {"anchor_pos": 0.5, "anchor_ori": 1.2, "ee_body_pos": 0.6}}
+    path = os.environ.get(REWARD_CONFIG_ENV)
+    if path:
+        user = json.loads(Path(path).read_text())
+        rc |= {k: float(user[k]) for k in ("latent_weight", "sigma") if k in user}
+        if tracking_scale and "tracking_scale" in user:
+            rc["tracking_scale"] = float(user["tracking_scale"])
+        rc["terminations"] |= {k: float(v) for k, v in user.get("terminations", {}).items() if k in rc["terminations"]}
+    return rc
+
+
 def latent_env_cfg(tracking_scale, play=False):
+    rc = reward_config(tracking_scale)
+    tracking_scale, th = rc["tracking_scale"], rc["terminations"]
     cfg = unitree_g1_flat_tracking_env_cfg(play=play)
     for k in TRACKING_TERMS:
         if tracking_scale:
             cfg.rewards[k].weight *= tracking_scale
         else:
             del cfg.rewards[k]
-    cfg.rewards["latent"] = RewardTermCfg(func=LatentReward, weight=3.0)
-    # Relaxed: end an episode when the robot has fallen, not when it leaves the retarget.
-    cfg.terminations["anchor_pos"].params["threshold"] = 0.5
-    cfg.terminations["anchor_ori"].params["threshold"] = 1.2
+    cfg.rewards["latent"] = RewardTermCfg(func=LatentReward, weight=rc["latent_weight"], params={"sigma": rc["sigma"]})
+    cfg.terminations["anchor_pos"].params["threshold"] = th["anchor_pos"]
+    cfg.terminations["anchor_ori"].params["threshold"] = th["anchor_ori"]
     if tracking_scale:
-        cfg.terminations["ee_body_pos"].params["threshold"] = 0.6
+        cfg.terminations["ee_body_pos"].params["threshold"] = th["ee_body_pos"]
     else:
         del cfg.terminations["ee_body_pos"]
     return cfg

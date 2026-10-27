@@ -2,7 +2,7 @@
 
 Start from MuJoCo Playground's G1 environments (pip install playground) rather than writing
 an MJX env from scratch. Reward = joint/pelvis tracking + upright bonus, weighted per phase
-by coach.reward_weights().
+by motion_brief.reward_weights().
 """
 
 

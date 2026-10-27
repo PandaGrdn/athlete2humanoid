@@ -7,13 +7,14 @@
 A run is a folder from experiments/latent_policy.py: eval.json (real V-JEPA scores and rollout
 metrics per policy), distill_report.json (how good the reward network is), comparison.mp4 and
 policy_<variant>/policy.mp4 (sent to Muse as frame contact sheets), and optionally
-reward_config.json (the config it was trained with; defaults to DEFAULTS) and a skill_spec.json
-from muse/skill_reader.py.
+policy_<variant>/reward_config.json (the config it was trained with, written by train_motion.py
+--reward-config; otherwise DEFAULTS) and a skill_spec.json from muse/skill_reader.py.
 
 Muse answers with a diagnosis and a JSON patch (RFC 6902 "replace" ops) on the reward config; it is
 checked against PROPOSAL_SCHEMA and BOUNDS, then written as reward_proposal.json and the patched
 config as next_reward_config.json. Each proposal is appended to the log, which later proposals see
-as history, so a loop over runs is: train with next_reward_config.json -> run this -> repeat.
+as history, so a loop over runs is: train with --reward-config next_reward_config.json
+(experiments/latent_policy.py or train_motion.py) -> run this -> repeat.
 """
 
 import argparse
@@ -30,8 +31,7 @@ from muse import media  # noqa: E402
 from muse.client import image_part, make_client, now, read_json, text_part, write_json  # noqa: E402
 from muse.schema import BOOL, NUM, STR, arr, enum, obj  # noqa: E402
 
-# The values hard-coded in mjlab_tasks.py (SIGMA, the latent RewardTermCfg weight, tracking_scale,
-# termination thresholds) and experiments/latent_policy.py (--iters), as of commit 3ddc84c.
+# mjlab_tasks.reward_config() defaults and experiments/latent_policy.py's --iters (tests check them).
 DEFAULTS = {
     "hybrid": {"latent_weight": 3.0, "sigma": 0.1, "tracking_scale": 0.2, "iterations": 1500,
                "terminations": {"anchor_pos": 0.5, "anchor_ori": 1.2, "ee_body_pos": 0.6}},
@@ -134,6 +134,8 @@ def apply_patch(cfg, patch):
 def check(proposal, cfg):
     """Checks beyond the schema: bounds, no repeats or no-ops, stop vs patch. -> list of problems."""
     errors = []
+    if cfg["tracking_scale"] == 0 and any(op["path"] == "/tracking_scale" for op in proposal["patch"]):
+        errors.append("/tracking_scale: the latent-only policy has no tracking rewards; it stays 0")
     patch = proposal["patch"]
     if proposal["stop"] and patch:
         errors.append("stop is true, so patch must be empty")
@@ -232,7 +234,10 @@ def propose(run_dir, client, variant="hybrid", out_dir=None, log=None, frames=Tr
     run = load_run(run_dir, variant, frames)
     if variant not in run["eval"]:
         raise ValueError(f"{run_dir}/eval.json has no '{variant}' policy")
-    cfg = read_json(run["dir"] / "reward_config.json") or default_config(variant, run["dir"])
+    cfg = (read_json(run["dir"] / f"policy_{variant}" / "reward_config.json")
+           or read_json(run["dir"] / "reward_config.json") or default_config(variant, run["dir"]))
+    if variant == "latent":
+        cfg["tracking_scale"] = 0.0  # mjlab_tasks ignores the file's value for this task
     content = [text_part(prompt(run, variant, cfg, read_history(log, variant), run["images"]))]
     content += [image_part(png) for _, png in run["images"]]
     proposal, info = client.ask_json("reward_proposal", SYSTEM, content, PROPOSAL_SCHEMA,
