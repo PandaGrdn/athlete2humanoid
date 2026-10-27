@@ -2,7 +2,7 @@
 
     python3 scripts/job.py NAME -- bash -c "..."
 
-- logs to /content/a2h/jobs/NAME/log, status in /content/a2h/jobs/NAME/status.json
+- logs to /content/a2h/jobs/NAME/log ($A2H_JOB_DATA instead of /content/a2h when set), status in /content/a2h/jobs/NAME/status.json
   ({"state": "running" | "done" | "failed", "returncode", "started", "finished"})
 - copies /content/a2h/{outputs,jobs,logs} to Drive (a2h/colab_runs/) every 5 min and at the end,
   when Drive is mounted, so results outlive the VM
@@ -12,13 +12,14 @@
 
 import datetime
 import json
+import os
 import shutil
 import subprocess
 import sys
 import threading
 from pathlib import Path
 
-DATA = Path("/content/a2h")
+DATA = Path(os.environ.get("A2H_JOB_DATA", "/content/a2h"))  # FarmShare: <fs-root>/runs/<session>
 DRIVE = Path("/content/drive/MyDrive/a2h/colab_runs")
 
 

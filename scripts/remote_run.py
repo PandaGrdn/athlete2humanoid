@@ -18,10 +18,14 @@
 5. downloads results to outputs/remote_<job>/ and stops the VM
 
 Progress goes to outputs/remote_<job>/runner.log. Needs `colab` logged in (oauth2).
+
+--backend farmshare runs the same job on Stanford FarmShare through Slurm instead (scripts/farmshare.py,
+docs/FARMSHARE.md): for when Colab compute units run out. Colab stays the default.
 """
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -32,7 +36,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 VIDEO_EXT = {".mp4", ".mov", ".m4v"}
 SKIP = {"bedroom"}  # test footage, not an action clip
-REMOTE = "/content/a2h"
+REMOTE = "/content/a2h"  # on FarmShare: <fs-root>/runs/<session>, set in main()
 OUT = SESSION = None  # set in main()
 
 
@@ -243,11 +247,49 @@ def fetch_results(fetch):
             log(f"unpacked {local}")
 
 
+def unpack(path):
+    with tarfile.open(path) as tar:
+        tar.extractall(OUT, filter="data")
+    log(f"unpacked {path.name}")
+
+
+def run_farmshare(a, fs, found, setup, cmd, fetch, inputs):
+    """The Colab loop's twin on Slurm: one submit, one resubmit (resuming from checkpoints) if it's lost."""
+    fs.push_secret(REPO / ".env")
+    fs.setup(setup)
+    for attempt in (1, 2):
+        fs.upload(found, inputs)
+        fs.submit(cmd.format(clips=" ".join(f"'{REMOTE}/clips/{p.name}'" for p in found)))
+        try:
+            state = fs.wait(latent_out(a) if a.job == "latent" else None)
+        except KeyboardInterrupt:
+            fs.cancel()
+            raise
+        log(f"job state: {state} (attempt {attempt})")
+        if state in ("done", "failed"):
+            fs.fetch(fetch, unpack)
+            break
+        log("Slurm job lost (node failure, preemption or time limit); resubmitting")
+        if any((OUT / "checkpoints").glob("policy_*/model_*.pt")):
+            inputs = pack_reuse(a.reuse, policies=a.job == "robust" or a.with_weights, checkpoints=OUT / "checkpoints")
+            if "--resume-from" not in cmd:
+                cmd += f" --resume-from {REMOTE}/inputs/checkpoints"
+            log("resubmit resumes from the synced checkpoints")
+    log(f"done. Results in {OUT}")
+
+
 def main(a):
-    global OUT, SESSION
+    global OUT, SESSION, REMOTE
     SESSION = a.job + ("_smoke" if a.smoke else "") + (f"_{a.tag}" if a.tag else "")
     OUT = REPO / "outputs" / f"remote_{SESSION}"
     OUT.mkdir(parents=True, exist_ok=True)
+    fs = None
+    if a.backend == "farmshare":
+        from farmshare import FarmShare  # scripts/ is on sys.path when this file runs
+        fs = FarmShare.from_args(a, OUT, SESSION, log)
+        log(f"FarmShare via {a.fs_host}: {fs.check_connection()} connection")
+        fs.resolve()
+        REMOTE = fs.run_dir
     setup, cmd, fetch = job_spec(a)
     found = [] if a.smoke or a.reuse else wait_for_clips(a.min_clips, a.max_wait_h)
     if a.job in ("robust", "relevance") and not a.reuse:
@@ -257,6 +299,8 @@ def main(a):
         log(f"clips ready: {', '.join(p.name for p in found)}")
         check_token()
         log("HF token OK")
+    if fs:
+        return run_farmshare(a, fs, found, setup, cmd, fetch, inputs)
     for attempt in (1, 2):
         keeper = launch(found, setup, cmd, inputs)
         state, unknown, polls = "running", 0, 0
@@ -287,7 +331,7 @@ def main(a):
     log(f"VM stopped. Results in {OUT}")
 
 
-if __name__ == "__main__":
+def parser():
     ap = argparse.ArgumentParser()
     ap.add_argument("job", choices=["probe", "latent", "robust", "relevance"])
     ap.add_argument("--min-clips", type=int, default=6)
@@ -300,4 +344,19 @@ if __name__ == "__main__":
     ap.add_argument("--with-weights", action="store_true",
                     help="with --reuse: upload its trained policies too (for --args '--init/--resume-from /content/a2h/inputs')")
     ap.add_argument("--args", default="", help="extra flags for the job's script (latent_policy.py, robustness_eval.py)")
-    main(ap.parse_args())
+    fs = ap.add_argument_group("FarmShare (--backend farmshare; docs/FARMSHARE.md)")
+    ap.add_argument("--backend", choices=["colab", "farmshare"], default="colab")
+    fs.add_argument("--fs-host", default=os.environ.get("A2H_FS_HOST", "farmshare"), help="ssh host alias")
+    fs.add_argument("--fs-root", default=os.environ.get("A2H_FS_ROOT", "a2h"),
+                    help="remote folder for the repo, venvs and runs (relative to home, or e.g. /scratch/users/$USER/a2h)")
+    fs.add_argument("--fs-partition", default=os.environ.get("A2H_FS_PARTITION", "gpu"))
+    fs.add_argument("--fs-qos", default=os.environ.get("A2H_FS_QOS", "gpu"))
+    fs.add_argument("--fs-gres", default=os.environ.get("A2H_FS_GRES", "gpu:1"))
+    fs.add_argument("--fs-cpus", type=int, default=8)
+    fs.add_argument("--fs-mem", default="64G")
+    fs.add_argument("--fs-time", default=os.environ.get("A2H_FS_TIME", "12:00:00"), help="Slurm --time")
+    return ap
+
+
+if __name__ == "__main__":
+    main(parser().parse_args())
