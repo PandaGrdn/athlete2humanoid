@@ -3,6 +3,8 @@
     python3 scripts/remote_run.py probe --min-clips 7       # cross-embodiment probe
     python3 scripts/remote_run.py latent --target squat     # video -> latent reward -> policies
     python3 scripts/remote_run.py latent --smoke            # the same, tiny, no clips: plumbing test
+    python3 scripts/remote_run.py latent --tag v2 --reuse outputs/remote_latent   # a follow-up run:
+        # an earlier run's processed clips (no SAM) and its policies' rollouts (DAgger data)
 
 1. waits until at least --min-clips videos sit in clips/ and stop changing (copy finished)
 2. checks the HF token in .env before spending GPU time
@@ -35,8 +37,12 @@ def job_spec(a):
         out = f"{REMOTE}/outputs/cross_embodiment"
         return ("--with-sam", f"python3 experiments/cross_embodiment_probe.py {{clips}} --out {out}",
                 {"cross_embodiment.json": f"{out}/cross_embodiment.json"})
-    out = f"{REMOTE}/outputs/latent_{'smoke' if a.smoke else a.target}"
-    cmd = f"python3 experiments/latent_policy.py {{clips}} --target {a.target} --out {out} --iters {a.iters}"
+    out = f"{REMOTE}/outputs/latent_{'smoke' if a.smoke else a.tag or a.target}"
+    cmd = f"python3 experiments/latent_policy.py {{clips}} --target {a.target} --out {out} --iters {a.iters} {a.args}"
+    if a.reuse:
+        inp = f"{REMOTE}/inputs"
+        cmd = cmd.replace("{clips}", f"{inp}/clips/*") + f" --extra-motions {inp}/policy_*/policy_qpos.npy"
+        return "--with-main", cmd, {"results.tar.gz": f"{out}/results.tar.gz"}
     if a.smoke:
         return "--with-main", cmd + " --smoke", {"results.tar.gz": f"{out}/results.tar.gz"}
     return "--with-sam", cmd, {"results.tar.gz": f"{out}/results.tar.gz"}
@@ -86,12 +92,27 @@ def check_token():
         raise SystemExit("HF token in .env is invalid or lacks SAM 3.1 access; update .env and rerun.")
 
 
-def launch(found, setup, cmd):
+def pack_reuse(src):
+    """An earlier run's processed clips and policy rollouts, as one archive to upload."""
+    src = Path(src)
+    f = OUT / "inputs.tar.gz"
+    with tarfile.open(f, "w:gz") as tar:
+        tar.add(src / "clips", "clips")
+        for q in src.glob("policy_*/policy_qpos.npy"):
+            tar.add(q, f"{q.parent.name}/{q.name}")
+    return f
+
+
+def launch(found, setup, cmd, inputs=None):
     colab("new", "-s", SESSION, "--gpu", "A100", timeout=900)
-    log("A100 ready; uploading clips")
+    log("A100 ready; uploading inputs")
     _exec(f"import os; [os.makedirs(d, exist_ok=True) for d in ('{REMOTE}/clips', '{REMOTE}/env')]")
     for p in found:
         colab("upload", "-s", SESSION, str(p), f"{REMOTE}/clips/{p.name}", timeout=900)
+    if inputs:
+        colab("upload", "-s", SESSION, str(inputs), f"{REMOTE}/inputs.tar.gz", timeout=900)
+        _exec(f"import tarfile, os; os.makedirs('{REMOTE}/inputs', exist_ok=True); "
+              f"tarfile.open('{REMOTE}/inputs.tar.gz').extractall('{REMOTE}/inputs')")
     colab("upload", "-s", SESSION, str(REPO / ".env"), f"{REMOTE}/env/HF_TOKEN")
     paths = " ".join(f"'{REMOTE}/clips/{p.name}'" for p in found)
     inner = f"cd /content/athlete2humanoid && bash scripts/setup_colab.sh {setup} && " + cmd.format(clips=paths)
@@ -164,17 +185,18 @@ def fetch_results(fetch):
 
 def main(a):
     global OUT, SESSION
-    SESSION = a.job + ("_smoke" if a.smoke else "")
+    SESSION = a.job + ("_smoke" if a.smoke else "") + (f"_{a.tag}" if a.tag else "")
     OUT = REPO / "outputs" / f"remote_{SESSION}"
     OUT.mkdir(parents=True, exist_ok=True)
     setup, cmd, fetch = job_spec(a)
-    found = [] if a.smoke else wait_for_clips(a.min_clips, a.max_wait_h)
+    found = [] if a.smoke or a.reuse else wait_for_clips(a.min_clips, a.max_wait_h)
+    inputs = pack_reuse(a.reuse) if a.reuse else None
     if found:
         log(f"clips ready: {', '.join(p.name for p in found)}")
         check_token()
         log("HF token OK")
     for attempt in (1, 2):
-        keeper = launch(found, setup, cmd)
+        keeper = launch(found, setup, cmd, inputs)
         state, unknown, polls = "running", 0, 0
         while state in ("running", "unknown"):
             time.sleep(120)
@@ -205,4 +227,7 @@ if __name__ == "__main__":
     ap.add_argument("--target", default="squat")
     ap.add_argument("--iters", type=int, default=1500)
     ap.add_argument("--smoke", action="store_true")
+    ap.add_argument("--tag", default="", help="names the run (outputs/remote_<job>_<tag>)")
+    ap.add_argument("--reuse", help="an earlier latent run's results folder: its clips and rollouts")
+    ap.add_argument("--args", default="", help="extra flags for experiments/latent_policy.py")
     main(ap.parse_args())

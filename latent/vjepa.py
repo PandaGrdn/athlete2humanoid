@@ -2,6 +2,8 @@
 
 embed_windows: one embedding per ~1 s window. embed_dense: one embedding per 2 frames (15/s at
 30 fps), each from V-JEPA's own time step within a window, so it still carries ~1 s of context.
+embed_centred: one mean-pooled embedding per 2 frames, from a window centred on that moment, so
+it depends only on the 32 frames around it (what the distilled reward network sees).
 """
 
 import numpy as np
@@ -67,3 +69,14 @@ class VJepa:
                 if t < n_steps and dist < best[t]:
                     dense[t], best[t] = per_win[w, k], dist
         return dense
+
+    def embed_centred(self, video, every=1, window=WINDOW, batch=16):
+        """(T, H, W, 3) video -> (embeddings (n, D), steps (n,)) for dense steps 0, every, 2 * every...
+        Step s covers frames 2s, 2s + 1; its window is frames [2s - 15, 2s + 16], edge-padded."""
+        steps = np.arange(0, len(video) // TUBELET, every)
+        offs = np.arange(-(window // 2) + 1, window // 2 + 1)
+        out = []
+        for i in range(0, len(steps), batch):
+            idx = np.clip(TUBELET * steps[i:i + batch, None] + offs, 0, len(video) - 1)
+            out.append(self.embed_clips([video[j] for j in idx]))
+        return np.concatenate(out), steps

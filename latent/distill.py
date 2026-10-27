@@ -1,9 +1,10 @@
 """Distil V-JEPA into the latent reward network (latent/reward_net.py).
 
-Dataset: many robot motions (the IK bank, every clip's retarget, and randomised variations of
-them: speed changes, mixed upper/lower bodies, joint noise, leaning, falling, freezing), each
-rendered as a silhouette video from the target video's viewpoint and embedded with V-JEPA 2.
-Pairs: ~1 s of the robot's body positions -> the V-JEPA latent at that moment.
+Dataset: many robot motions (the IK bank, every clip's retarget, earlier policies' rollouts, and
+randomised variations of them: speed changes, mixed upper/lower bodies, half-done blends, joint
+noise, leaning, falling, freezing), each rendered as a silhouette video from the target video's
+viewpoint and embedded with V-JEPA 2. Pairs: the ~1 s of the robot's body positions around a
+moment -> V-JEPA's embedding of the window of video around that same moment (embed_centred).
 
 The variations matter: during RL the robot is mostly *not* doing the motion well, and the
 network has to say so instead of guessing.
@@ -68,6 +69,9 @@ def variation(motions, rng, seconds=4.0):
     if rng.random() < 0.4:  # another motion's upper body
         other = motions[names[rng.integers(len(names))]]
         q[:, UPPER] = resample(other, T)[:, UPPER]
+    if rng.random() < 0.3:  # half-done: joints part way towards another motion's
+        other = motions[names[rng.integers(len(names))]]
+        q[:, 7:] += rng.uniform(0.2, 0.7) * (resample(other, T)[:, 7:] - q[:, 7:])
     if rng.random() < 0.6:  # imperfect joints
         q[:, 7:] += _smooth_noise(rng, (T, 29), rng.uniform(4, 12), rng.uniform(0.05, 0.4))
     if rng.random() < 0.4:  # leaning, bobbing
@@ -120,19 +124,20 @@ def windows(pos, n_steps):
     return pos[np.clip(idx, 0, len(pos) - 1)]
 
 
-def build_dataset(motions, azimuth, vj, workers=8):
+def build_dataset(motions, azimuth, vj, workers=8, every=2):
     """name -> qpos (30 fps) -> {X: (N, 32, B, 3) windows, Y: (N, 1024) V-JEPA latents,
-    seq: (N,) motion index, names}. Rendering runs in parallel worker processes."""
+    seq: (N,) motion index, names}, at every `every`-th dense step. Rendering runs in parallel
+    worker processes."""
     names = list(motions)
     X, Y, seq = [], [], []
     t0 = time.time()
     with get_context("spawn").Pool(workers, initializer=_init_worker) as pool:
         jobs = ((motions[k], azimuth) for k in names)
         for i, (sil, pos) in enumerate(pool.imap(_render, jobs, chunksize=1)):
-            dense = vj.embed_dense(np.repeat(sil[..., None], 3, -1))
-            X.append(windows(pos, len(dense)))
-            Y.append(dense.astype(np.float16))
-            seq.append(np.full(len(dense), i))
+            emb, steps = vj.embed_centred(np.repeat(sil[..., None], 3, -1), every=every)
+            X.append(windows(pos, len(pos) // 2)[steps])
+            Y.append(emb.astype(np.float16))
+            seq.append(np.full(len(emb), i))
             if (i + 1) % 25 == 0 or i + 1 == len(names):
                 print(f"  {i + 1}/{len(names)} motions rendered + embedded ({time.time() - t0:.0f} s)", flush=True)
     return {"X": np.concatenate(X), "Y": np.concatenate(Y), "seq": np.concatenate(seq), "names": np.array(names)}
@@ -144,7 +149,8 @@ def unit(x):
     return x / np.linalg.norm(x, axis=-1, keepdims=True)
 
 
-def train_reward_net(X, Y, seq, r_mean, k=64, epochs=80, val_frac=0.1, seed=0, device=None):
+def train_reward_net(X, Y, seq, r_mean, k=64, epochs=80, val_frac=0.1, seed=0, device=None,
+                     hidden=1024, depth=3, features=2):
     """Fit the network on (window -> centred latent projected on its top-k principal components).
     Validation holds out whole motions. Returns (net, basis (1024, k), report)."""
     import torch
@@ -160,11 +166,13 @@ def train_reward_net(X, Y, seq, r_mean, k=64, epochs=80, val_frac=0.1, seed=0, d
     explained = float((S[:k] ** 2).sum() / (S ** 2).sum())
     Z = Yc @ U
 
-    net = LatentRewardNet(k=k).to(device)
+    net = LatentRewardNet(k=k, hidden=hidden, depth=depth, features=features).to(device)
+    net.kwargs = {"k": k, "hidden": hidden, "depth": depth, "features": features}
     Xt = torch.as_tensor(X, dtype=torch.float32, device=device)
     Zt = torch.as_tensor(Z, dtype=torch.float32, device=device)
     tr, va = torch.as_tensor(~val, device=device), torch.as_tensor(val, device=device)
-    feats = LatentRewardNet.featurize(Xt[tr])
+    with torch.no_grad():
+        feats = net.featurize(Xt[tr])
     net.in_mean.copy_(feats.mean(0))
     net.in_std.copy_(feats.std(0) + 1e-3)
     z_scale = Zt[tr].pow(2).mean()
@@ -186,7 +194,7 @@ def train_reward_net(X, Y, seq, r_mean, k=64, epochs=80, val_frac=0.1, seed=0, d
             loss.backward()
             opt.step()
         sched.step()
-        if (ep + 1) % 20 == 0 or ep == 0:
+        if (ep + 1) % max(1, epochs // 5) == 0 or ep == 0:
             net.eval()
             with torch.no_grad():
                 _, cos_v = loss_fn(net(Xt[va]), Zt[va])
@@ -198,6 +206,7 @@ def train_reward_net(X, Y, seq, r_mean, k=64, epochs=80, val_frac=0.1, seed=0, d
     report = {"samples": int(len(X)), "motions": int(len(motions)), "val_motions": int(len(val_m)),
               "pca_k": k, "pca_explained_variance": explained, "val_cosine_mean": float(cos_v.mean()),
               "val_cosine_p10": float(cos_v.quantile(0.1))}
+    report |= {"net": net.kwargs, "epochs": epochs}
     return net.cpu(), U.astype(np.float32), report
 
 
@@ -218,7 +227,7 @@ def save_bundle(path, net, U, r_mean, h_mean, target, cos_ref, video_fps, report
     cos_ref, how well the retarget itself matches the video at each step (the reward's 'full
     marks' level)."""
     import torch
-    torch.save({"state_dict": net.state_dict(), "net_kwargs": {"k": U.shape[1]}, "target": target.astype(np.float32),
+    torch.save({"state_dict": net.state_dict(), "net_kwargs": getattr(net, "kwargs", {"k": U.shape[1]}), "target": target.astype(np.float32),
                 "cos_ref": cos_ref.astype(np.float32), "basis": U, "r_mean": r_mean, "h_mean": h_mean,
                 "video_fps": float(video_fps), "azimuth": float(azimuth), "report": report}, path)
     print(f"reward bundle -> {path}: {len(target)} target steps, {json.dumps(report)}")

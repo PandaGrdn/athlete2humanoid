@@ -4,8 +4,8 @@
 
 1. every clip: SAM 3.1 -> pose -> retarget, and its V-JEPA silhouette latent (cached per clip;
    all clips together give the human-domain mean)
-2. distillation dataset at the target video's viewpoint: bank + retargets + random variations,
-   rendered and embedded with V-JEPA
+2. distillation dataset at the target video's viewpoint: bank + retargets + earlier policies'
+   rollouts (--extra-motions, DAgger-style) + random variations, rendered and embedded with V-JEPA
 3. reward network (robot body trajectory -> V-JEPA latent), bundled with the target's latent
 4. three policies on the target clip, in parallel: tracking (copy the retarget), hybrid (latent
    reward + weak tracking), latent (latent reward only)
@@ -45,7 +45,8 @@ def log(msg):
 
 
 def humans(clips, vj, smoke, out):
-    """name -> {dense, az, qpos, csv, sil} for every clip, plus the human-domain mean."""
+    """name -> {dense, centred, az, qpos, csv, dir} for every clip, plus the human-domain means
+    of both embeddings (dense: evaluation, as in earlier runs; centred: the reward's target)."""
     from latent.video_latent import video_latent
     if smoke:  # robot squat silhouettes stand in for a human video
         g1 = render.load_g1()[0]
@@ -54,17 +55,24 @@ def humans(clips, vj, smoke, out):
             d = out / "smoke_clips" / name
             d.mkdir(parents=True, exist_ok=True)
             csv = retarget.export_mjlab_csv(q, d / "motion.csv")
-            res[name] = {"dense": vj.embed_dense(silhouette.robot_silhouettes(g1, q, azimuth=-150)),
+            sil = silhouette.robot_silhouettes(g1, q, azimuth=-150)
+            res[name] = {"dense": vj.embed_dense(sil), "centred": vj.embed_centred(sil)[0],
                          "az": -150.0, "qpos": q, "csv": csv, "dir": d}
     else:
+        import mediapy
         res = {}
         for d in map(_processed, clips):
             video_latent(d, vj)
             lat = np.load(d / "video_latent.npz")
-            res[d.name] = {"dense": lat["dense"], "az": float(lat["view_azimuth"]), "qpos": np.load(d / "qpos.npy"),
-                           "csv": d / "motion.csv", "dir": d}
+            cf = out / "human_centred" / f"{d.name}.npy"
+            if not cf.exists():
+                cf.parent.mkdir(exist_ok=True)
+                np.save(cf, vj.embed_centred(np.asarray(mediapy.read_video(str(d / "silhouette.mp4"))))[0])
+            res[d.name] = {"dense": lat["dense"], "centred": np.load(cf), "az": float(lat["view_azimuth"]),
+                           "qpos": np.load(d / "qpos.npy"), "csv": d / "motion.csv", "dir": d}
     h_mean = np.concatenate([h["dense"] for h in res.values()]).mean(0)
-    return res, h_mean
+    h_mean_c = np.concatenate([h["centred"] for h in res.values()]).mean(0)
+    return res, h_mean, h_mean_c
 
 
 def bank_motions(cache):
@@ -94,8 +102,11 @@ def main(a):
     vj = VJepa()
     g1 = render.load_g1()[0]
 
+    # Earlier policies' rollouts (50 Hz qpos), named after their folder: policy_latent -> latent.
+    extra = {Path(f).parent.name.removeprefix("policy_"): to_30fps(np.load(f)) for f in a.extra_motions}
+
     # 1. clips -> latents
-    hum, h_mean = humans(a.clips, vj, a.smoke, out)
+    hum, h_mean, h_mean_c = humans(a.clips, vj, a.smoke, out)
     tgt = hum[a.target]
     bucket = int(round(tgt["az"] / AZ_BUCKET) * AZ_BUCKET)
     log(f"target {a.target}: viewpoint {tgt['az']:.0f} deg (renders at {bucket}), {len(tgt['dense'])} latent steps")
@@ -107,33 +118,35 @@ def main(a):
         if a.smoke:
             bank = dict(list(bank.items())[:4])
         base = {f"bank/{k}": q for k, q in bank.items()} | {f"clip/{k}": h["qpos"] for k, h in hum.items()}
+        base |= {f"dagger/{k}": q for k, q in extra.items()}
         rng = np.random.default_rng(0)
         motions = base | {f"var/{i}": distill.variation(base, rng) for i in range(a.variations)}
         log(f"distillation dataset: {len(motions)} motions ({sum(len(q) for q in motions.values())} frames)")
-        np.savez(ds_f, **distill.build_dataset(motions, bucket, vj, workers=a.workers))
+        np.savez(ds_f, **distill.build_dataset(motions, bucket, vj, workers=a.workers, every=a.every))
     ds = np.load(ds_f)
     names, seq, Y = ds["names"], ds["seq"], ds["Y"]
     is_bank = np.char.startswith(names.astype(str), "bank/")
     r_mean = Y[is_bank[seq]].astype(np.float32).mean(0)
-    bank_dense = {str(n)[5:]: Y[seq == i].astype(np.float32) for i, n in enumerate(names) if is_bank[i]}
+    bank_c = {str(n)[5:]: Y[seq == i].astype(np.float32) for i, n in enumerate(names) if is_bank[i]}
 
     # 3. reward network
     bundle = out / "reward.pt"
     if not bundle.exists():
         log("training the reward network")
-        net, U, rep = distill.train_reward_net(ds["X"], Y, seq, r_mean, k=a.k, epochs=a.epochs)
-        target = distill.video_target(tgt["dense"], h_mean, U)
+        net, U, rep = distill.train_reward_net(ds["X"], Y, seq, r_mean, k=a.k, epochs=a.epochs,
+                                               hidden=a.hidden, depth=a.depth)
+        target = distill.video_target(tgt["centred"], h_mean_c, U)
         pred = distill.predict(net, distill.body_positions(g1, tgt["qpos"]))
         n = min(len(pred), len(target))
         cos = (unit(pred[:n]) * unit(target[:n])).sum(-1)
         cos_ref = uniform_filter1d(np.pad(cos, (0, len(target) - n), mode="edge"), 5)
         # Does the 64-d space keep what the probe found? Rank of the target's own retarget by DTW.
         own_i = list(names.astype(str)).index(f"clip/{a.target}")
-        cand = {k: (v - r_mean) @ U for k, v in bank_dense.items()} | {"(own retarget)": (Y[seq == own_i] - r_mean) @ U}
+        cand = {k: (v - r_mean) @ U for k, v in bank_c.items()} | {"(own retarget)": (Y[seq == own_i] - r_mean) @ U}
         ranked = sorted(cand, key=lambda k: -dtw(unit(target), unit(cand[k])))
         rep |= {"cos_ref_mean": float(cos_ref.mean()), "pca_own_retarget_dtw_rank": ranked.index("(own retarget)") + 1,
                 "pca_dtw_top3": ranked[:3]}
-        distill.save_bundle(bundle, net, U, r_mean, h_mean, target, cos_ref, 30.0, rep, bucket)
+        distill.save_bundle(bundle, net, U, r_mean, h_mean_c, target, cos_ref, 30.0, rep, bucket)
         (out / "distill_report.json").write_text(json.dumps(rep, indent=1))
     log("reward bundle ready: " + (out / "distill_report.json").read_text().replace("\n", ""))
 
@@ -141,7 +154,8 @@ def main(a):
     import torch
     torch.cuda.empty_cache()
     procs = {}
-    for name, task in TASKS.items():
+    for name in a.policies:
+        task = TASKS[name]
         d = out / f"policy_{name}"
         if (d / "policy_metrics.json").exists():
             continue
@@ -154,25 +168,28 @@ def main(a):
         rc = p.wait()
         log(f"{name} finished with code {rc}")
 
-    # 5. evaluation with the real V-JEPA
+    # 5. evaluation with the real V-JEPA, in its dense embedding (comparable across runs), plus how
+    # the reward network and the real centred embedding score each rollout in the reward's space
     from latent.reward_net import load_bundle
     net, target_k, b = load_bundle(bundle)
     U = b["basis"]
     H = unit(tgt["dense"] - h_mean)
-    cands = {"retarget": tgt["qpos"]}
+    bank_d = eval_bank(bank_motions(config.OUTPUT_DIR / "cache"), bucket, vj, g1, out, a.smoke)
+    r_mean_d = np.concatenate(list(bank_d.values())).mean(0)
+    cands = {"retarget": tgt["qpos"]} | {f"prev_{k}": q for k, q in extra.items()}
     for name in TASKS:
         f = out / f"policy_{name}" / "policy_qpos.npy"
         if f.exists():
             cands[name] = to_30fps(np.load(f))
     results, sils = {}, {}
-    bank_c = {k: unit(v - r_mean) for k, v in bank_dense.items()}
+    bank_n = {k: unit(v - r_mean_d) for k, v in bank_d.items()}
     for name, q in cands.items():
         sil = silhouette.robot_silhouettes(g1, q, azimuth=bucket)
         dense = vj.embed_dense(sil)
-        R = unit(dense - r_mean)
+        R = unit(dense - r_mean_d)
         pred = distill.predict(net, distill.body_positions(g1, q))
-        real_k = (dense - r_mean) @ U
-        others = {k: dtw(H, v) for k, v in bank_c.items()}
+        real_k = (vj.embed_centred(sil)[0] - r_mean) @ U
+        others = {k: dtw(H, v) for k, v in bank_n.items()}
         score = dtw(H, R)
         res = {"aligned": aligned(H, R), "dtw": float(score), "chamfer": float(chamfer(H, R)),
                "dtw_rank_vs_bank": 1 + int(sum(v > score for v in others.values())),
@@ -181,14 +198,25 @@ def main(a):
         if m.exists():
             res |= {k: v for k, v in json.loads(m.read_text()).items() if k != "checkpoint"}
         results[name] = res
-        sils[name] = sil
+        if not name.startswith("prev_"):
+            sils[name] = sil
         log(f"{name:9s}: " + ", ".join(f"{k} {v:.3f}" if isinstance(v, float) else f"{k} {v}" for k, v in res.items()))
-    best_bank = sorted(((dtw(H, v), k) for k, v in bank_c.items()), reverse=True)[:5]
+    best_bank = sorted(((dtw(H, v), k) for k, v in bank_n.items()), reverse=True)[:5]
     results["_bank_top5_dtw"] = [(k, round(v, 3)) for v, k in best_bank]
     (out / "eval.json").write_text(json.dumps(results, indent=1))
     comparison_video(tgt, sils, out / "comparison.mp4")
     pack(out, hum)
     log(f"done: {out / 'eval.json'}")
+
+
+def eval_bank(bank, bucket, vj, g1, out, smoke):
+    """The bank's dense V-JEPA embeddings at the target's viewpoint (the evaluation's reference)."""
+    f = out / "eval_bank_dense.npz"
+    if not f.exists():
+        if smoke:
+            bank = dict(list(bank.items())[:4])
+        np.savez(f, **{k: vj.embed_dense(silhouette.robot_silhouettes(g1, q, azimuth=bucket)) for k, q in bank.items()})
+    return dict(np.load(f))
 
 
 def comparison_video(tgt, sils, path):
@@ -235,10 +263,16 @@ if __name__ == "__main__":
     ap.add_argument("clips", nargs="*")
     ap.add_argument("--target", default="squat")
     ap.add_argument("--out", default="outputs/latent_policy")
-    ap.add_argument("--variations", type=int, default=220)
+    ap.add_argument("--variations", type=int, default=500)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--k", type=int, default=64)
-    ap.add_argument("--epochs", type=int, default=80)
+    ap.add_argument("--epochs", type=int, default=150)
+    ap.add_argument("--hidden", type=int, default=1024)
+    ap.add_argument("--depth", type=int, default=3)
+    ap.add_argument("--every", type=int, default=2, help="distil at every n-th dense step")
+    ap.add_argument("--extra-motions", nargs="*", default=[],
+                    help="earlier policies' policy_qpos.npy (50 Hz), added to the distillation data")
+    ap.add_argument("--policies", nargs="+", default=list(TASKS), choices=list(TASKS))
     ap.add_argument("--iters", type=int, default=1500)
     ap.add_argument("--num-envs", type=int, default=4096)
     ap.add_argument("--smoke", action="store_true")

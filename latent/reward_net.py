@@ -25,21 +25,28 @@ def window_center_step(end_frame):
 
 
 class LatentRewardNet(nn.Module):
-    def __init__(self, k=64, hidden=512, n_bodies=len(BODIES), window=WINDOW):
+    # Defaults are the first version's (bundles saved before features/depth existed load as v1).
+    def __init__(self, k=64, hidden=512, depth=2, features=1, n_bodies=len(BODIES), window=WINDOW):
         super().__init__()
-        d = window * n_bodies * 3
+        self.features = features
+        d = window * n_bodies * 3 * (3 if features >= 2 else 1)
         self.register_buffer("in_mean", torch.zeros(d))
         self.register_buffer("in_std", torch.ones(d))
-        self.net = nn.Sequential(nn.Linear(d, hidden), nn.ELU(), nn.Dropout(0.1),
-                                 nn.Linear(hidden, hidden), nn.ELU(), nn.Linear(hidden, k))
+        layers = [nn.Linear(d, hidden), nn.ELU(), nn.Dropout(0.1)]
+        for _ in range(depth - 1):
+            layers += [nn.Linear(hidden, hidden), nn.ELU()]
+        self.net = nn.Sequential(*layers, nn.Linear(hidden, k))
 
-    @staticmethod
-    def featurize(win):
+    def featurize(self, win):
         """(B, WINDOW, bodies, 3) world positions -> (B, D). Horizontal position relative to the
         pelvis's mean over the window (the silhouette camera follows the body sideways); height
-        and the world-frame heading kept (the camera has a fixed height and azimuth)."""
+        and the world-frame heading kept (the camera has a fixed height and azimuth). v2 adds the
+        pose relative to the pelvis at each frame, and velocities."""
         centre = win[:, :, :1, :2].mean(1, keepdim=True)
-        return torch.cat([win[..., :2] - centre, win[..., 2:]], -1).flatten(1)
+        f = [torch.cat([win[..., :2] - centre, win[..., 2:]], -1)]
+        if self.features >= 2:
+            f += [win - win[:, :, :1], torch.diff(win, dim=1, prepend=win[:, :1]) * FPS]
+        return torch.cat(f, -1).flatten(1)
 
     def forward(self, win):
         return self.net((self.featurize(win) - self.in_mean) / self.in_std)
