@@ -41,22 +41,37 @@ This Space runs on CPU, so jobs use the demo runner, which replays recorded A100
 `/api/health`, `/api/runs`, `/api/runs/{id}`, `/api/jobs` (see `/docs`).
 """
 
-DOCKERFILE = """FROM python:3.12-slim
-RUN useradd -m -u 1000 user
-USER user
-ENV HOME=/home/user PATH=/home/user/.local/bin:$PATH PYTHONUNBUFFERED=1
-WORKDIR /home/user/app
-COPY --chown=user server/requirements.txt server/requirements.txt
-RUN pip install --no-cache-dir --user -r server/requirements.txt
-COPY --chown=user server server
-COPY --chown=user data data
-ENV A2H_RUNS_DIR=/home/user/app/data/runs \\
+# Pinned by digest (Dependabot bumps it); deps installed from a hash-locked file as root, so the app
+# user (uid 1000, which Spaces run as) can read but not modify code or packages. Only /tmp is written.
+BASE_IMAGE = "python:3.12.16-slim-bookworm@sha256:6dd8b6dab6b3adc7812bab69eca5dbdc1a5cc690ad28306d234ffb4ef8ac9753"
+DOCKERFILE = """FROM {base}
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+WORKDIR /app
+COPY server/requirements.lock server/requirements.lock
+RUN pip install --require-hashes --no-deps -r server/requirements.lock \\
+ && useradd --create-home --uid 1000 --shell /usr/sbin/nologin user
+COPY server server
+COPY data data
+# A2H_HOSTED: the colab runner can't be enabled and the job list is off, whatever Space variables say.
+ENV A2H_HOSTED=1 \\
+    A2H_RUNS_DIR=/app/data/runs \\
     A2H_DATA_DIR=/tmp/a2h \\
     A2H_RUNNERS=demo \\
     A2H_MAX_UPLOAD_MB=100 \\
+    A2H_MAX_UPLOAD_STORAGE_MB=2000 \\
+    A2H_PROXY_HOPS=1 \\
     A2H_CORS_ORIGINS="{cors}"{demo_run}
+USER 1000
 EXPOSE 7860
-CMD ["uvicorn", "server.main:app", "--host", "0.0.0.0", "--port", "7860", "--proxy-headers"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \\
+  CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/healthz', timeout=4)"]
+CMD ["uvicorn", "server.main:app", "--host", "0.0.0.0", "--port", "7860", "--no-access-log", "--no-server-header", \\
+     "--limit-concurrency", "200", "--timeout-keep-alive", "15", "--timeout-graceful-shutdown", "10"]
+"""
+DOCKERIGNORE = """**/__pycache__
+**/*.pyc
+**/.*
+**/*.sqlite3*
 """
 
 
@@ -106,11 +121,22 @@ def poster(run_dir, exe):
                         str(run_dir / "poster.jpg")], check=False)
 
 
+def check_origins(cors):
+    """The Space's CORS list ends up in the image: https origins (or localhost) only, never '*'."""
+    bad = [o for o in cors.split(",") if o == "*" or not re.fullmatch(r"https://[^/\s\"]+|http://(localhost|127\.0\.0\.1)(:\d+)?", o)]
+    if bad:
+        raise SystemExit(f"--cors: {bad} must be https origins (scheme://host, no path), comma-separated")
+
+
 def main(a):
+    check_origins(a.cors)
     src_root = REPO / "outputs"
-    picked = [Path(p).resolve() for p in a.runs] if a.runs else list(R.find_runs(src_root, ["*smoke*", "_*"]).values())
-    if not picked:
-        raise SystemExit("no finished runs (folders with eval.json) to ship")
+    if a.code_only:  # CI redeploys: code, Dockerfile and README only; the Space keeps its data/ folder
+        picked = []
+    else:
+        picked = [Path(p).resolve() for p in a.runs] if a.runs else list(R.find_runs(src_root, ["*smoke*", "_*"]).values())
+        if not picked:
+            raise SystemExit("no finished runs (folders with eval.json) to ship")
     out = Path(a.out).resolve()
     if out.exists():
         shutil.rmtree(out)
@@ -119,7 +145,7 @@ def main(a):
     for run in picked:
         total += slim_run(run, data / run.name)
         print(f"run    {run.name}")
-    for rb in sorted({p for root in {src_root, *(r.parent for r in picked)} for p in root.glob("remote_robust*/robust.json")}):
+    for rb in sorted({p for root in ({src_root, *(r.parent for r in picked)} if picked else ()) for p in root.glob("remote_robust*/robust.json")}):
         total += copy(rb, data / rb.parent.name / "robust.json")
         print(f"robust {rb.parent.name}")
     if a.onnx_python:
@@ -128,9 +154,12 @@ def main(a):
     exe = ffmpeg()
     for run in picked:
         poster(data / run.name, exe)
-    shutil.copytree(REPO / "server", out / "server", ignore=shutil.ignore_patterns("__pycache__", "tests", "*.pyc"))
+    # code and the dependency lock only: never dotfiles (.env), journals or tests
+    shutil.copytree(REPO / "server", out / "server", ignore=shutil.ignore_patterns(
+        "__pycache__", "tests", "*.pyc", ".*", "*.sqlite3*", "requirements-dev.txt"))
     demo = f" \\\n    A2H_DEMO_RUN={a.demo_run}" if a.demo_run else ""
-    (out / "Dockerfile").write_text(DOCKERFILE.format(cors=a.cors, demo_run=demo))
+    (out / "Dockerfile").write_text(DOCKERFILE.format(base=BASE_IMAGE, cors=a.cors, demo_run=demo))
+    (out / ".dockerignore").write_text(DOCKERIGNORE)
     (out / "README.md").write_text(README)
     (out / ".gitattributes").write_text("*.mp4 filter=lfs diff=lfs merge=lfs -text\n*.pt filter=lfs diff=lfs merge=lfs -text\n"
                                        "*.onnx filter=lfs diff=lfs merge=lfs -text\n*.jpg filter=lfs diff=lfs merge=lfs -text\n")
@@ -144,5 +173,7 @@ if __name__ == "__main__":
     ap.add_argument("--out", default=str(REPO / "build" / "space"))
     ap.add_argument("--cors", default="http://localhost:5173", help="the frontend's origin(s), comma-separated")
     ap.add_argument("--demo-run", default="", help="run id the demo runner replays for uploads (default: newest)")
+    ap.add_argument("--code-only", action="store_true",
+                    help="no runs: server code, Dockerfile and README only (CI redeploy onto a Space that has data/)")
     ap.add_argument("--onnx-python", help="a python with torch + onnx (+ rsl_rl to verify): exports policy.onnx")
     main(ap.parse_args())

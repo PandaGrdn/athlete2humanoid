@@ -1,0 +1,16 @@
+# Lint only (no `ruff format`: the code keeps its own dense style). CI runs `ruff check .`
+line-length = 150
+target-version = "py310"
+extend-exclude = ["*.ipynb", "assets", "outputs", "build", "web", "weights"]
+
+[lint]
+# pyflakes, pycodestyle errors/warnings, bugbear: things that are bugs, not taste
+select = ["E", "F", "W", "B"]
+ignore = [
+    "E501",  # long lines are the house style for dense numeric code
+    "E731",  # small named lambdas are used deliberately
+    "E741",  # l / I as loop names in math-heavy code
+    "B008",  # FastAPI's File()/Form() defaults
+    "B023",  # closures called within the same loop iteration (callbacks, renderers)
+    "B905",  # zip() over equal-length arrays; strict= is noise here
+]

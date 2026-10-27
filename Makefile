@@ -2,7 +2,7 @@
 PY ?= python3
 NPM ?= npm
 
-.PHONY: dev api web install test space
+.PHONY: dev api web install test lint audit lock space
 
 install:
 	$(PY) -m pip install -r server/requirements-dev.txt
@@ -22,6 +22,18 @@ test:
 	$(PY) -m pytest server/tests -q
 	$(PY) -m unittest discover -s tests -t .
 	cd web && $(NPM) run typecheck && $(NPM) run build
+
+lint:
+	uvx ruff check .
+
+# Non-blocking in CI; here it just reports
+audit:
+	-uvx pip-audit -r server/requirements.lock --require-hashes --disable-pip
+	-cd web && $(NPM) audit
+
+# Re-pin the Space's server dependencies (hashes for linux x86_64, Python 3.12) after editing server/requirements.txt
+lock:
+	uv pip compile server/requirements.txt --generate-hashes --python-version 3.12 --python-platform x86_64-manylinux_2_28 -o server/requirements.lock
 
 # The Hugging Face Space folder (build/space). CORS=<frontend origin>, ONNX_PY=<python with torch+onnx>
 space:

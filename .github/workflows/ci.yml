@@ -1,0 +1,140 @@
+# Tests, lint, frontend build, dependency audits and the Space image, on every PR and push.
+# Actions are pinned to commit SHAs (Dependabot keeps them current: .github/dependabot.yml).
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with: { persist-credentials: false }
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
+      - run: uvx ruff@0.17.3 check . --output-format github
+
+  server:
+    name: server tests (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with: { python-version: "3.12" }
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
+      # the image's exact, hash-locked versions, plus the test tools
+      - run: uv pip install --system --require-hashes --no-deps -r server/requirements.lock && uv pip install --system "pytest>=8" "httpx>=0.27"
+      - run: python -m pytest server/tests -q
+
+  unit:
+    name: unit tests (CPU)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with: { python-version: "3.12" }
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
+      # CPU torch + MuJoCo/mink: everything the suite needs except GPUs, SAM and the V-JEPA weights
+      - name: Install light deps
+        run: |
+          uv pip install --system numpy scipy mujoco mink daqp mediapy imageio-ffmpeg opencv-python-headless
+          uv pip install --system torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Cache the G1 model
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: assets/mujoco_menagerie
+          key: menagerie-g1-v1
+      - name: Fetch the G1 model (sparse checkout, a few MB)
+        run: |
+          [ -f assets/mujoco_menagerie/unitree_g1/scene.xml ] && exit 0
+          mkdir -p assets && cd assets
+          git clone -q --depth 1 --filter=blob:none --sparse https://github.com/google-deepmind/mujoco_menagerie.git
+          git -C mujoco_menagerie sparse-checkout set unitree_g1
+      - run: python -m unittest discover -s tests -t .
+
+  web:
+    name: frontend typecheck + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with: { node-version: "22", cache: npm, cache-dependency-path: web/package-lock.json }
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: web
+      - run: npm run typecheck
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+        env: { API_BASE: "https://example-athlete2humanoid-api.hf.space" }
+      - name: No secrets in the bundle, CSP headers present
+        working-directory: web
+        run: |
+          ! grep -rEn 'hf_[A-Za-z0-9]{30,}|sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|BEGIN [A-Z ]*PRIVATE KEY' dist
+          grep -q "Content-Security-Policy: default-src 'self'" dist/_headers
+          grep -q "connect-src 'self' https://example-athlete2humanoid-api.hf.space" dist/_headers
+
+  audit:
+    name: dependency audit (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with: { persist-credentials: false }
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with: { node-version: "22" }
+      - name: pip-audit (server lock, what the Space runs)
+        run: uvx pip-audit@2.10.1 -r server/requirements.lock --require-hashes --disable-pip
+      - name: pip-audit (pipeline requirements, resolved)
+        run: uvx pip-audit@2.10.1 -r requirements.txt || true
+      - name: npm audit
+        working-directory: web
+        run: npm audit --audit-level=high
+
+  space-image:
+    name: Space image (build + hardened smoke test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with: { persist-credentials: false }
+      - name: Bundle with the test fixture run
+        run: python3 scripts/build_space.py tests/data/remote_latent --out build/space --cors https://athlete2humanoid.pages.dev
+      - run: docker build -t a2h-space:ci build/space
+      - name: Run read-only, no capabilities, and probe it
+        run: |
+          docker run -d --name a2h --read-only --tmpfs /tmp:rw,size=256m --cap-drop ALL \
+            --security-opt no-new-privileges -e A2H_RUNNERS=demo,colab -e A2H_ENABLE_COLAB=1 \
+            -p 127.0.0.1:7860:7860 a2h-space:ci
+          for i in $(seq 1 30); do curl -sf localhost:7860/healthz && break; sleep 1; done
+          curl -sf localhost:7860/readyz
+          # hosted: colab stays off even with both flags set; the job list is hidden; no root
+          curl -sf localhost:7860/api/health | python3 -c 'import sys,json; assert json.load(sys.stdin)["runners"] == ["demo"]'
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:7860/api/jobs)" = 404
+          test "$(docker exec a2h id -u)" = 1000
+          curl -sI localhost:7860/api/runs | grep -qi "content-security-policy: default-src 'none'"
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:7860/api/jobs -F run_id=latent)
+          test "$code" = 201
+      - if: failure()
+        run: docker logs a2h || true

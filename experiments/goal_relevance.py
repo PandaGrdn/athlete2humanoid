@@ -20,7 +20,6 @@ the task? GPU job (scripts/remote_run.py relevance); also the V-JEPA 2 predictor
 
 import argparse
 import json
-import shutil
 import subprocess
 import sys
 import tarfile

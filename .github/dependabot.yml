@@ -1,0 +1,17 @@
+# Weekly PRs for pinned versions: Actions SHAs, the frontend lockfile and server/requirements.txt.
+# Not covered (manual, see docs/SECURITY.md): server/requirements.lock (`make lock`) and the base image
+# digest in scripts/build_space.py.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups: { actions: { patterns: ["*"] } }
+  - package-ecosystem: npm
+    directory: /web
+    schedule: { interval: weekly }
+    groups: { web: { patterns: ["*"], update-types: [minor, patch] } }
+  - package-ecosystem: pip
+    directory: /server
+    schedule: { interval: weekly }
+    groups: { server: { patterns: ["*"] } }

@@ -7,6 +7,7 @@ colab  shells out to scripts/remote_run.py (a real A100 job, hours long) and fol
 """
 
 import json
+import logging
 import re
 import shutil
 import subprocess
@@ -14,15 +15,17 @@ import sys
 import threading
 import time
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 from . import runs
 from .config import REPO
 from .stages import STAGES, STAGE_KEYS, classify, redact
 
+log = logging.getLogger("a2h.jobs")
 TERMINAL = {"succeeded", "failed", "cancelled"}
 MAX_LOG = 400
+KEEP_JOBS = 200  # terminal jobs kept (newest), whatever their age
 
 
 def _now():
@@ -64,37 +67,177 @@ class Job:
         return d
 
 
+def _job_from_dict(d):
+    names = {f.name for f in fields(Job)}
+    job = Job(**{k: v for k, v in d.items() if k in names and k != "stages"})
+    job.stages = [Stage(**{k: v for k, v in st.items() if k in Stage.__dataclass_fields__}) for st in d.get("stages") or []]
+    return job
+
+
 class JobStore:
-    def __init__(self, settings):
+    """Jobs in memory, mirrored to a Journal (when given) so they survive a restart.
+
+    Log lines arrive many times a second, so changes mark a job dirty and a background thread writes
+    dirty jobs once a second; status changes (create, finish) are written at once. The same thread
+    expires uploads (A2H_UPLOAD_TTL_H after their job ends) and jobs (A2H_JOB_TTL_H).
+    """
+
+    def __init__(self, settings, journal=None):
         self.settings = settings
         self.jobs = {}
+        self.owner = {}  # job id -> client pseudonym (never sent to clients)
         self.lock = threading.RLock()
         self.cancel = {}
+        self.journal = journal
+        self.dirty = set()
+        self.stop = threading.Event()
         (settings.data_dir / "uploads").mkdir(parents=True, exist_ok=True)
+        if journal:
+            self._recover()
+        self._sweep_incoming(max_age=0)  # half-written uploads from before a restart
+        self._flusher = None
+
+    def start_background(self, interval=1.0):
+        """The flush + expiry thread. Separate from __init__ so tests can drive sweep() themselves."""
+        if self._flusher is None:
+            self._flusher = threading.Thread(target=self._background, args=(interval,), daemon=True, name="jobs-flush")
+            self._flusher.start()
+
+    def close(self):
+        self.stop.set()
+        for ev in list(self.cancel.values()):
+            ev.set()
+        self.flush()
+
+    # --- persistence -------------------------------------------------------------------------
+    def _recover(self):
+        """Load the journal. A job that was queued or running when the process died can't be resumed
+        (its runner thread is gone), so it is marked failed with a reason the UI shows."""
+        n = 0
+        for owner, d in self.journal.load():
+            try:
+                job = _job_from_dict(d)
+            except TypeError:
+                continue
+            self.jobs[job.id], self.owner[job.id] = job, owner
+            self.cancel[job.id] = threading.Event()
+            if job.status not in TERMINAL:
+                msg = "the server restarted while this job was running; start it again"
+                if job.runner == "colab":
+                    msg += " (the remote GPU job may still be running: see its runner.log under outputs/)"
+                self.finish(job, "failed", error=msg)
+                n += 1
+        if self.jobs:
+            log.info("jobs recovered", extra={"fields": {"jobs": len(self.jobs), "interrupted": n}})
+
+    def _row(self, job):
+        return (job.id, job.status, job.created_at, job.updated_at, self.owner.get(job.id), asdict(job))
+
+    def flush(self):
+        if not self.journal:
+            return
+        with self.lock:
+            rows = [self._row(self.jobs[j]) for j in self.dirty if j in self.jobs]
+            self.dirty.clear()
+        try:
+            self.journal.save(rows)
+        except Exception:
+            log.exception("journal write failed")
+            with self.lock:
+                self.dirty.update(r[0] for r in rows)
+
+    def _background(self, interval):
+        last_sweep = 0.0
+        while not self.stop.wait(interval):
+            self.flush()
+            if time.monotonic() - last_sweep > 60:
+                last_sweep = time.monotonic()
+                try:
+                    self.sweep()
+                except Exception:
+                    log.exception("sweep failed")
+
+    # --- expiry ------------------------------------------------------------------------------
+    def sweep(self, now=None):
+        """Delete expired uploads and jobs, and stray files no job owns. Returns (uploads, jobs) removed."""
+        now = now or _now()
+        s = self.settings
+        gone_uploads, gone_jobs = 0, []
+        with self.lock:
+            for j in list(self.jobs.values()):
+                if j.status not in TERMINAL:
+                    continue
+                age = now - j.updated_at
+                if age > s.job_ttl_h * 3600:
+                    gone_jobs.append(j.id)
+                elif age > s.upload_ttl_h * 3600 and self.upload_dir(j.id).exists():
+                    shutil.rmtree(self.upload_dir(j.id), ignore_errors=True)
+                    gone_uploads += 1
+            for jid in gone_jobs:
+                self._forget(jid)
+            known = set(self.jobs)
+        for d in (s.data_dir / "uploads").iterdir():
+            if d.is_dir() and d.name != "_incoming" and d.name not in known:
+                shutil.rmtree(d, ignore_errors=True)
+                gone_uploads += 1
+        self._sweep_incoming(max_age=3600)
+        if gone_jobs and self.journal:
+            self.journal.delete(gone_jobs)
+        if gone_uploads or gone_jobs:
+            log.info("expired", extra={"fields": {"uploads": gone_uploads, "jobs": len(gone_jobs)}})
+        return gone_uploads, len(gone_jobs)
+
+    def _sweep_incoming(self, max_age):
+        inc = self.settings.data_dir / "uploads" / "_incoming"
+        if inc.is_dir():
+            for f in inc.iterdir():
+                try:
+                    if _now() - f.stat().st_mtime >= max_age:
+                        f.unlink()
+                except OSError:
+                    pass
+
+    def upload_bytes(self):
+        root = self.settings.data_dir / "uploads"
+        return sum(f.stat().st_size for f in root.rglob("*") if f.is_file())
+
+    def _forget(self, jid):
+        shutil.rmtree(self.upload_dir(jid), ignore_errors=True)
+        self.jobs.pop(jid, None)
+        self.cancel.pop(jid, None)
+        self.owner.pop(jid, None)
+        self.dirty.discard(jid)
 
     # --- bookkeeping -------------------------------------------------------------------------
-    def create(self, runner, source_run=None, upload=None):
-        jid = uuid.uuid4().hex[:12]
+    def create(self, runner, source_run=None, upload=None, owner=None):
+        jid = uuid.uuid4().hex  # 128 bits: a job id is the only key to its upload
         job = Job(id=jid, runner=runner, source_run=source_run,
                   stages=[Stage(k, label, desc) for k, label, desc, _ in STAGES])
         if upload:
             job.input = {**upload, "url": f"/api/jobs/{jid}/input"}
         with self.lock:
             self.jobs[jid] = job
+            self.owner[jid] = owner
             self.cancel[jid] = threading.Event()
             self._prune()
+            self.dirty.add(jid)
+        self.flush()
+        log.info("job created", extra={"fields": {"job": jid, "runner": runner, "source_run": source_run,
+                                                  "upload_bytes": upload and upload.get("size"), "client": owner}})
         return job
 
-    def active_count(self):
+    def active_count(self, owner=None):
         with self.lock:
-            return sum(j.status not in TERMINAL for j in self.jobs.values())
+            return sum(j.status not in TERMINAL and (owner is None or self.owner.get(j.id) == owner)
+                       for j in self.jobs.values())
 
-    def _prune(self, keep=50):
+    def _prune(self, keep=KEEP_JOBS):
         done = sorted((j for j in self.jobs.values() if j.status in TERMINAL), key=lambda j: j.created_at)
-        for j in done[:max(0, len(self.jobs) - keep)]:
-            shutil.rmtree(self.upload_dir(j.id), ignore_errors=True)
-            self.jobs.pop(j.id, None)
-            self.cancel.pop(j.id, None)
+        drop = [j.id for j in done[:max(0, len(done) - keep)]]
+        for jid in drop:
+            self._forget(jid)
+        if drop and self.journal:
+            self.journal.delete(drop)
 
     def upload_dir(self, jid):
         return self.settings.data_dir / "uploads" / jid
@@ -113,6 +256,8 @@ class JobStore:
             for k, v in kw.items():
                 setattr(job, k, v)
             self._recompute(job)
+        if "status" in kw:
+            self.flush()
 
     def log(self, job, stage, line):
         with self.lock:
@@ -144,6 +289,7 @@ class JobStore:
         job.progress = round(sum(w[s.key] * (1.0 if s.status == "done" else s.progress) for s in job.stages), 4)
         job.updated_at = _now()
         job.version += 1
+        self.dirty.add(job.id)
 
     def finish(self, job, status, error=None, result_run=None):
         with self.lock:
@@ -159,6 +305,9 @@ class JobStore:
             job.status, job.error = status, error
             job.result_run = result_run or job.result_run
             self._recompute(job)
+        self.flush()
+        log.info("job finished", extra={"fields": {"job": job.id, "runner": job.runner, "status": status,
+                                                   "seconds": round(job.updated_at - job.created_at, 1)}})
 
     # --- running -----------------------------------------------------------------------------
     def start(self, job):
@@ -168,8 +317,11 @@ class JobStore:
             try:
                 self.update(job, status="running")
                 target(job)
-            except Exception as e:  # a runner bug must not leave the job "running" forever
-                self.finish(job, "failed", error=f"{type(e).__name__}: {e}")
+            except Exception:  # a runner bug must not leave the job "running" forever
+                ref = uuid.uuid4().hex[:8]
+                log.exception("runner crashed", extra={"fields": {"job": job.id, "ref": ref}})
+                # the traceback (paths, internals) stays in the server log; the client gets a reference
+                self.finish(job, "failed", error=f"internal error in the {job.runner} runner (ref {ref})")
         threading.Thread(target=go, daemon=True, name=f"job-{job.id}").start()
 
     def _sleep(self, job, seconds):
@@ -234,16 +386,19 @@ class JobStore:
         if not job.input:
             return self.finish(job, "failed", error="the colab runner needs an uploaded video")
         src = self.upload_dir(job.id) / job.input["stored"]
-        stem = re.sub(r"[^a-z0-9_]", "_", Path(job.input["filename"]).stem.lower())[:40].strip("_") or "clip"
+        tag = f"web{job.id[:6]}"
+        # prefixed with the tag: an upload named squat.mp4 must not overwrite clips/squat.mp4
+        stem = tag + "_" + (re.sub(r"[^a-z0-9_]", "_", Path(job.input["filename"]).stem.lower())[:40].strip("_") or "clip")
         clip = REPO / "clips" / f"{stem}{src.suffix.lower()}"
         shutil.copyfile(src, clip)
-        tag = f"web{job.id[:6]}"
         out = REPO / "outputs" / f"remote_latent_{tag}"
         cmd = [sys.executable, str(REPO / "scripts" / "remote_run.py"), "latent", "--target", stem,
-               "--tag", tag, "--min-clips", "1", "--iters", str(self.settings.colab_iters)]
-        self.log(job, "silhouette", f"colab runner: {' '.join(cmd[1:])}")
+               "--tag", tag, "--min-clips", "1", "--iters", str(self.settings.colab_iters),
+               "--backend", self.settings.remote_backend]
+        self.log(job, "silhouette", f"{self.settings.remote_backend} runner: remote_run.py {' '.join(cmd[3:])}")
         proc = subprocess.Popen(cmd, cwd=REPO, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         seen = {"runner.log": 0, "job.log": 0}
+        deadline = time.monotonic() + self.settings.job_timeout_h * 3600
         while True:
             for name in seen:
                 f = out / name
@@ -265,6 +420,9 @@ class JobStore:
             if self.cancel[job.id].wait(5):
                 proc.terminate()
                 return self.finish(job, "cancelled")
+            if time.monotonic() > deadline:
+                proc.terminate()
+                return self.finish(job, "failed", error=f"timed out after {self.settings.job_timeout_h:g} h")
         state = (runs.read_json(out / "status.json") or {}).get("state")
         if (out / "eval.json").is_file():
             return self.finish(job, "succeeded", result_run=runs.run_id(out))
