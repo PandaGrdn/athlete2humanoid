@@ -284,7 +284,8 @@ class TaskReward:
         if len(jumped):
             self.m.reset(jumped, ts[jumped] * self.dt, pos[jumped])
         self.last_ts = ts.clone()
-        return self.m.step(pos)
+        # Terminations are computed before rewards: a fall this step refunds the attempt.
+        return self.m.step(pos, fell=env.termination_manager.terminated)
 
 
 def task_stage(env):

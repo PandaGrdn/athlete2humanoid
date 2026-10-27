@@ -104,6 +104,28 @@ class SkillTaskTest(unittest.TestCase):
         self.assertLess(total, (m.w["stage"] + m.w["progress"]) + m.w["progress"] + 0.05)
         self.assertEqual(int(m.completed[0]), 1)
 
+    def test_a_fall_refunds_the_attempt(self):
+        def run(pos, fall_at=None):
+            pos = torch.as_tensor(pos)
+            m = T.StageMachine(self.spec, 1, dt=1 / FPS)
+            m.reset(torch.tensor([0]), 0.0, pos[:1])
+            total = 0.0
+            for t in range(1, len(pos) if fall_at is None else fall_at + 1):
+                total += float(m.step(pos[t:t + 1], fell=torch.tensor([t == fall_at]))[0]) / FPS
+            return total, m
+        stand_only, _ = run(traj(STAND + [(0.3, 0.8, 0.0)]))  # the first stand completes, nothing else
+        ref = squat_jump()
+        crashed, m = run(ref, fall_at=72)  # squatted, jumped, then fell during the landing
+        self.assertGreaterEqual(int(m.completed[0]), 3)
+        self.assertAlmostEqual(crashed, stand_only, delta=0.05)  # the jump attempt earned nothing
+        landed, _ = run(ref)
+        self.assertGreater(landed, stand_only + 4)
+
+    def test_overshooting_the_jump_scores_less(self):
+        r = T.evaluate(self.spec, squat_jump(clearance=0.25 * 1.5), FPS)
+        self.assertTrue(r["success"])
+        self.assertAlmostEqual(r["jump_quality"][0], 1 - 0.25 / 0.75, delta=0.05)
+
     def test_batched_resets_start_at_the_reference_stage(self):
         m = T.StageMachine(self.spec, 3, dt=0.02)
         pos = torch.as_tensor(self.ref[[0, 50, 58]])

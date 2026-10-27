@@ -11,7 +11,7 @@ jump, land), each with a success predicate on the robot's own body, instead of p
   for progress toward that stage's goal (potential-based, so going back and forth earns nothing),
   a one-off bonus when the stage's predicate holds long enough (for a jump, scaled by how close
   the apex came to the target band), and a bonus for finishing the sequence. Progress is gated on
-  staying upright. Timing and poses are free: only the order of the stages counts. Its stage is
+  staying upright, and a fall refunds the attempt (everything since the last completed stand). Timing and poses are free: only the order of the stages counts. Its stage is
   also the policy's observation, so the reward stays Markov ("squat now", "jump now").
 - evaluate(): the same machine over a rollout -> semantic success (stages completed in order, jump
   heights, squat depths, falls) plus Muse's success criteria where the simulator can measure them.
@@ -181,7 +181,7 @@ class StageMachine:
                                       dtype=torch.float32, device=device)
         z = lambda dtype=torch.float32: torch.zeros(num_envs, dtype=dtype, device=device)
         self.stage, self.completed = z(torch.long), z(torch.long)
-        self.hold, self.phi, self.apex, self.z_prev, self.p = z(), z(), z(), z(), z()
+        self.hold, self.phi, self.apex, self.z_prev, self.p, self.banked = z(), z(), z(), z(), z(), z()
         self.done = z(torch.bool)
         self.stats = {"advances": z(torch.long), "jump_q": z()}
 
@@ -212,11 +212,14 @@ class StageMachine:
         stage = self.stage_at(torch.as_tensor(t, device=self.dev).expand(len(env_ids)))
         p, _ = self._eval(stage, z, lo, hi, up, torch.zeros_like(z))
         self.stage[env_ids], self.p[env_ids], self.phi[env_ids] = stage, p, stage + p
-        for buf in (self.hold, self.apex, self.completed):
+        for buf in (self.hold, self.apex, self.completed, self.banked):
             buf[env_ids] = 0
         self.done[env_ids], self.z_prev[env_ids] = False, z
 
-    def step(self, pos):
+    def step(self, pos, fell=None):
+        """fell: (n,) bool, episodes that end this step in a fall. Potential-based shaping gives a
+        terminal state potential 0, so a fall refunds what the attempt earned: everything since the
+        last completed stand (a rep counts once the robot has landed and stood back up)."""
         z, lo, hi, up = features(pos, self.spec["foot0"])
         vz, self.z_prev = (z - self.z_prev) / self.dt, z
         p, sat = self._eval(self.stage, z, lo, hi, up, vz)
@@ -225,11 +228,11 @@ class StageMachine:
         self.hold = torch.where(sat & ~self.done, self.hold + self.dt, torch.zeros_like(self.hold))
         adv = (self.hold >= self.hold_need[self.stage] - 1e-6) & ~self.done
 
-        # Jump quality, paid when the landing after it completes: 1 inside [goal, 1.5 goal], less
-        # below it, and less again for overshooting (no reward for launching itself out of control).
+        # Jump quality, paid when the landing after it completes: 1 inside [goal, 1.25 goal], less
+        # below it, and falling to 0 at 2x the goal (no reward for launching itself out of control).
         jg = self.jump_goal[self.stage]
         ratio = self.apex / jg.clamp(min=1e-3)
-        q = torch.where(jg > 0, ratio.clamp(0, 1) - (ratio - 1.5).clamp(0, 1), torch.zeros_like(ratio))
+        q = torch.where(jg > 0, ratio.clamp(0, 1) - ((ratio - 1.25) / 0.75).clamp(0, 1), torch.zeros_like(ratio))
         bonus = adv * (self.w["stage"] + self.w["jump"] * q)
 
         self.completed += adv.long()
@@ -247,7 +250,14 @@ class StageMachine:
         prog = torch.where(d > 0, d * gate, d) * self.w["progress"]
         self.stats["advances"] += adv.long()
         self.stats["jump_q"] = torch.where(adv & (jg > 0), q, self.stats["jump_q"])
-        return (prog + bonus) / self.dt
+        r = prog + bonus
+        self.banked = self.banked + r
+        if fell is not None:
+            r = torch.where(fell, r - self.banked, r)
+            self.banked = torch.where(fell, torch.zeros_like(r), self.banked)
+        rep_done = (adv & (k == STAND)) | just_done
+        self.banked = torch.where(rep_done, torch.zeros_like(r), self.banked)
+        return r / self.dt
 
     def obs(self):
         """(n, MAX_STAGES + 2): one-hot stage, progress in it, finished."""
