@@ -166,6 +166,27 @@ The obs vector for TaskCmd, in order, is mjlab's tracking actor terms minus the 
 
 On the robot, `phase` comes from a clock, `task_stage` from E, and `task_command` from the operator: "squat 0.2, jump 0.15". Control runs at 50 Hz with mjlab's G1 PD gains and action scale; `base_lin_vel` needs a state estimator.
 
+## First TaskCmd result (2026-10-27, short run)
+
+The run used the last Colab units:
+- `A2H-TaskCmd`, 500 iterations, warm-started from the final squat-jump TaskPhase policy (1,200 iterations), with the goal-importance weights.
+- The VM was stopped right after training, so the V-JEPA evaluation was skipped.
+- The policy is in `weights/sj_cmd_taskcmd_500`; the raw results are in `outputs/remote_latent_sj_cmd/command_eval.json`.
+
+`experiments/command_eval.py`, run on CPU: 12 commands (squat depth × jump clearance, 11 of them away from the clip's own targets), 3 envs each.
+
+| Policy | Success, novel commands | Hits the commanded height (q ≥ 0.7) | Depth slope | Clearance slope | Depth error | Clearance error |
+|---|---|---|---|---|---|---|
+| TaskCmd, 500 iterations | 97% | 33% | 0.11 | 0.06 | 8.6 cm | 6.1 cm |
+| TaskPhase (ignores commands) | 94% | 58% | 0.06 | 0.13 | 8.7 cm | 6.5 cm |
+
+- **Generalisation holds.** Both policies still complete the squat jump for almost every command.
+- **Command following isn't learned yet.** A slope of 1 means doing what is asked and 0 means ignoring it; TaskCmd sits near 0. After 500 iterations it still squats about 29 cm deep and jumps about 24 cm high whatever it's asked.
+- **The curriculum hadn't widened** past the first levels (success 0.33, under the 0.6 needed to advance).
+- **Next:**
+  - Train longer: 1,500 iterations, as planned in section 3.
+  - Or make the command matter more early: a stronger quality-band weight, or lower the curriculum threshold with `{"command": {"up": 0.4}}` in the reward config.
+
 ## 3. GPU runs (not launched)
 
 Before any run, **merge this branch and push main**: the Colab VM pulls GitHub main.
