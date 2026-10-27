@@ -9,7 +9,7 @@ The task-first reward (`docs/SEMANTIC_REWARD.md`) already ignores them: its stag
 ```bash
 python -m skill.importance outputs/remote_latent/clips/squat_jump                  # physics only
 python -m skill.importance outputs/remote_latent/clips/squat_jump --hype 0.2 1.4   # validation case
-python -m skill.importance outputs/remote_latent/clips/squat_jump --vjepa auto     # + V-JEPA 2 predictor
+python -m skill.importance outputs/remote_latent/clips/squat_jump --vjepa encoder  # + V-JEPA 2 scores (diagnostic)
 ```
 
 Output: `outputs/goal_relevance/<clip>/importance.json` (+ `importance.png`, `task_spec.json`). Train with it:
@@ -61,7 +61,7 @@ Each stage of `task_spec.json` gives one or more **goal events**. Each event has
 
 **Frames outside every causal window get no credit,** whatever moves there. That includes the hype before the countermovement.
 
-### 3. World model (V-JEPA 2 predictor, optional, GPU)
+### 3. World model (V-JEPA 2, a diagnostic: not mixed into the weights by default)
 
 Code: `latent/predictor_relevance.py`.
 
@@ -82,19 +82,28 @@ Code: `latent/predictor_relevance.py`.
 - Body-part masks come exactly from MuJoCo's segmentation; the human silhouette has no part labels.
 - It is also the domain the latent reward is computed in.
 
-**Combining with physics.**
-- Physics and V-JEPA scores are each scaled to [0, 1] and mixed. V-JEPA's share is `--vjepa-mix 0.35`; the predictor has a recency bias, which is why physics leads.
-- The mix is smoothed (Gaussian, σ = 0.07 s) and lifted to a floor of 0.1, so style still regularises a little everywhere.
-- A group's weight is the frame weight × its score relative to the most relevant group at that frame.
+**Encoder variant (`--vjepa encoder`).** The same counterfactual renders, but scored by how far the encoder's tokens of the (unblanked) event frames move from the baseline's. The encoder attends across the whole clip, so the event's latent depends on the motion before it.
 
-**Cost.** Per event, 25 clips of 36 frames through ViT-L. `squat_jump` and its hype variant come to about 400 forwards plus rendering: a few minutes on an A100, about an hour on a laptop CPU.
+**What it found on squat_jump** (the weights were downloaded with the user's approval; run on an M-series GPU, about 70 s per event):
 
-**Status.** The weights (`facebook/vjepa2-vitl-fpc64-256`, about 1.3 GB) are not cached on the laptop.
-- The path is tested end to end with a tiny, randomly initialised `VJEPA2Model`.
-- The `importance.json` shipped for `squat_jump` is **physics only**.
-- The GPU job below computes the V-JEPA version.
+- **Predictor: noise.** Removing a window's motion changes the event's prediction error by only ±0.1–0.8 %, and the sign is inconsistent: removing *all* motion just before an event often *lowers* the error. The self-supervised predictor was trained to fill in masked tubes that span the whole clip; predicting whole future frames from no spatial context is outside that, and it falls back on a near-mean prediction (L1 ≈ 0.7) that barely uses the context. Scores: `outputs/goal_relevance/diagnostics/squat_jump_predictor_scores.npz`.
+- **Encoder: salience, not goal relevance.** The signal has structure:
+  - Removing all motion shifts the event latent more (0.10–0.30) than removing one group (0.01–0.17).
+  - Windows nearer the event shift it more.
+  - But with arm-waving injected into the context of the first squat (1.3–2.3 s), the arms' shifts *rise* (left arm, earliest window: 0.039 → 0.078; right arm, last window: 0.111 → 0.149).
+  - V-JEPA's latent encodes everything visible. That is exactly why imitating the latent copies the hype, and why it can't tell what serves the goal.
+
+**So the weights are physics only by default.** `--vjepa-mix` (default 0) mixes a V-JEPA score in on request: each is scaled to [0, 1] and averaged before smoothing.
+
+**Combining and smoothing.** The scores are smoothed (Gaussian, σ = 0.07 s) and lifted to a floor of 0.1, so style still regularises a little everywhere. A group's weight is the frame weight × its score relative to the most relevant group at that frame.
+
+**Cost.** Per event, 25 clips of 36 frames through ViT-L, about 200 per clip for squat_jump: about a minute on an A100, about 10 minutes on an M-series GPU (mps).
+
+**Where V-JEPA could still help (next step).** Measure the event latent's shift only along a *goal direction* in latent space, e.g. takeoff minus stand, instead of its full change. Arm-waving should mostly change the latent off that direction.
 
 ## Result: squat_jump (physics)
+
+The retarget-prop session replaced `squat_jump/qpos.npy` with the proportional retarget on 2026-10-27; the uniform one is now `qpos_uniform.npy`. These numbers are from the new one.
 
 ![squat_jump importance](goal_relevance/squat_jump_importance.png)
 
@@ -102,17 +111,16 @@ Code: `latent/predictor_relevance.py`.
 
 | Stage | stand | squat | jump (flight) | land | stand | squat | jump | land | stand |
 |---|---|---|---|---|---|---|---|---|---|
-| mean | 0.12 | 0.64 | 0.25 | 0.41 | 0.13 | 0.66 | 0.19 | 0.40 | 0.10 |
+| mean | 0.12 | 0.67 | 0.23 | 0.50 | 0.13 | 0.69 | 0.21 | 0.51 | 0.10 |
 
-- **Peaks.** The push before each takeoff (~2.6–2.8 s and 6.7–6.9 s) and the landing absorption (~3.3–3.6 s and 7.5–7.8 s) reach 0.9–1.0. A smaller peak (~0.65) is the countermovement descent.
+- **Peaks.** The push before each takeoff (~2.6–2.8 s and 6.7–6.9 s) and the landing absorption (~3.3–3.7 s and 7.5–7.8 s) reach 0.95–1.0. A smaller peak (~0.7–0.75) is the countermovement descent.
 - **Standing** stays at the floor.
 - **Flight** is low. The reference doesn't tuck its feet (flight coherence 0), so nothing in it moves the goal. The jump itself is the stage reward's job.
 
 **Body groups.**
-- **Legs** carry the takeoff and landing. Legs together get about 0.9 of the propulsion and 0.98 of the absorb credit.
-- **Arms** get about 6% of the propulsion. This retarget's arm swing is small; human arm swing adds roughly 10% of jump height (Lees et al. 2004).
-- **Torso** gets about 5%. Its own swing relative to the pelvis is small; the pelvis's motion is credited to the legs.
-- The left leg gets more than the right: the stance split follows foot height, and this retarget's left foot hovers. See `retarget_report.json`.
+- **Legs** carry the takeoff and landing. Legs together get about 0.91 of the propulsion and 0.94–0.95 of the absorb credit, split evenly between left and right.
+- **Arms** get about 5% of the propulsion. This retarget's arm swing is small; human arm swing adds roughly 10% of jump height (Lees et al. 2004).
+- **Torso** gets about 4%. Its own swing relative to the pelvis is small; the pelvis's motion is credited to the legs.
 
 ## Validation
 
@@ -134,13 +142,13 @@ Code: `latent/predictor_relevance.py`.
 - Weights after the hype match the clean clip.
 - The task spec's stages are unchanged.
 
-**4. Predictor plumbing.** A tiny `VJEPA2Model` runs through the full mask, predict and score path. Only context frames get credit, and removing the motion keeps the window's end points.
+**4. V-JEPA plumbing.** A tiny `VJEPA2Model` runs through the full mask, predict and score path in both modes. Only context frames get credit, removing the motion keeps the window's end points, and V-JEPA scores leave the weights unchanged unless `--vjepa-mix` > 0.
 
 ## Counterfactual check in simulation (designed, not run)
 
 `experiments/goal_relevance.py`, run as the `relevance` job of `scripts/remote_run.py`.
 
-1. **Importance.** It builds the hype variant of the target and computes `importance.json` for the clean and hype motions: physics plus V-JEPA predictor.
+1. **Importance.** It builds the hype variant of the target and computes `importance.json` for the clean and hype motions (physics; `--vjepa predictor|encoder` also saves the V-JEPA diagnostic scores).
 2. **Latent target for the hype variant.** No human video of it exists, so the target is V-JEPA's embedding of its robot-silhouette render. It is centred on the robot-domain mean (`r_mean`), and the reused reward network is kept.
 3. **Training.** It trains two `A2H-Task` policies on the hype variant in parallel, with identical settings: `plain` without `--importance`, and `weighted` with it. `--with-clean` adds a third policy on the clean clip as a reference.
 4. **Evaluation:**
@@ -159,11 +167,11 @@ python3 scripts/remote_run.py relevance --reuse outputs/remote_latent_v2 --targe
 - **Output:** `outputs/remote_relevance/{counterfactual.json, squat_jump*/importance.{json,png}, policy_*/...}`.
 - **Cost:**
   - Setup is about 10 min.
-  - V-JEPA scoring and the hype bundle take about 5 min.
+  - The hype variant's latent target (V-JEPA embedding of its render) takes about 2 min.
   - Two policies × 1000 iterations in parallel at about 2.4 s/iteration take about 40 min.
   - Rollouts and evaluation take about 5 min.
   - In total about **1 h ≈ 5.5 units**. With `--iters 600`, about 45 min ≈ 4 units.
-- **Importance with V-JEPA only, no training** (about 15 min ≈ 1.3 units): add `--args "--vjepa-only"`.
+- The V-JEPA scoring already ran locally (above), so the job doesn't need it.
 
 ## Literature
 

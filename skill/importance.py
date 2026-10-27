@@ -4,7 +4,7 @@ for achieving its task stages (skill/task.py), so the style terms imitate what s
 
     python -m skill.importance outputs/remote_latent/clips/squat_jump    # -> importance.json + .png
     python -m skill.importance <clip> --hype 0.3 1.6     # the same with arm-waving injected (validation)
-    python -m skill.importance <clip> --vjepa auto       # + V-JEPA 2 predictor masking (needs the weights)
+    python -m skill.importance <clip> --vjepa predictor  # + V-JEPA 2 masking scores (diagnostic; needs the weights)
 
 Two attributions, combined into importance.json {"fps", "weight": [per frame, floor..1],
 "body_weight": {group: [per frame]}, ...}, which mjlab_tasks.TimeWeighted reads (A2H_IMPORTANCE):
@@ -18,13 +18,14 @@ Two attributions, combined into importance.json {"fps", "weight": [per frame, fl
   group-frame is credited with the part that moved the quantity toward the goal, summed over a
   short window first so back-and-forth motion (waving) cancels. Frames outside every causal window
   (the stand before the countermovement) get no credit, whatever the arms do there.
-- World model (optional, latent/predictor_relevance.py): V-JEPA 2's predictor predicts the latent of
+- World model (optional diagnostic, latent/predictor_relevance.py): V-JEPA 2 predicts the latent of
   each goal event from the ~1 s of video before it; a window (or one body group's motion in it) is
-  removed by interpolation and re-rendered, and the increase in prediction error is its relevance.
+  removed by interpolation and re-rendered, and the increase in prediction error (or the shift of
+  the event's encoder latent) is its relevance. On squat_jump the first is noise and the second is
+  salience (it credits injected arm-waving), so it is mixed in only with --vjepa-mix > 0.
 
-Combined: physics and V-JEPA scores (each scaled to [0, 1]) are averaged with weight --vjepa-mix,
-smoothed (Gaussian, --smooth s), and lifted to a floor (--floor, default 0.1) so style still
-regularises a little everywhere. See docs/GOAL_RELEVANCE.md.
+The scores are smoothed (Gaussian, --smooth s) and lifted to a floor (--floor, default 0.1) so
+style still regularises a little everywhere. See docs/GOAL_RELEVANCE.md.
 """
 
 import argparse
@@ -44,7 +45,7 @@ QPOS_GROUPS = {"left_leg": slice(7, 13), "right_leg": slice(13, 19), "torso": sl
 # Events: how much each kind counts toward the frame weight (the stage machine pays the jump most).
 EVENT_WEIGHT = {"propulsion": 1.0, "absorb": 1.0, "flight": 0.6, "descent": 0.6, "balance": 0.4}
 CANCEL_S = 0.27  # s: signed credit is summed over this window before taking its positive part
-FLOOR, SMOOTH_S, VJEPA_MIX = 0.1, 0.07, 0.35
+FLOOR, SMOOTH_S, VJEPA_MIX = 0.1, 0.07, 0.0  # V-JEPA is a diagnostic by default (docs/GOAL_RELEVANCE.md)
 
 
 def group_of(body_name):
@@ -228,7 +229,7 @@ def combine(phys, vjepa=None, vjepa_mix=VJEPA_MIX, floor=FLOOR, smooth_s=SMOOTH_
         rel = S / np.maximum(S.max(1, keepdims=True), 1e-12)
         return frame, rel
     f, r = norm(phys)
-    if vjepa is not None:
+    if vjepa is not None and vjepa_mix > 0:
         fv, rv = norm(vjepa)
         f, r = (1 - vjepa_mix) * f + vjepa_mix * fv, (1 - vjepa_mix) * r + vjepa_mix * rv
     weight = floor + (1 - floor) * f
@@ -278,7 +279,7 @@ def analyse(model, qpos, spec, fps, vjepa=None, floor=FLOOR, smooth_s=SMOOTH_S, 
             "body_weight": {g: [round(float(x), 4) for x in body[:, i]] for i, g in enumerate(GROUPS)},
             "groups": {g: f"qpos[{QPOS_GROUPS[g].start}:{QPOS_GROUPS[g].stop}]" for g in GROUPS},
             "floor": floor, "smooth_s": smooth_s, "vjepa_mix": vjepa_mix if vjepa is not None else 0.0,
-            "sources": ["physics"] + (["vjepa_predictor"] if vjepa is not None else []),
+            "sources": ["physics"] + (["vjepa"] if vjepa is not None and vjepa_mix > 0 else []),
             "events": summary, "physics_raw": phys, "vjepa_raw": vjepa}
 
 
@@ -349,8 +350,8 @@ def main(argv=None):
     ap.add_argument("--out", help="output folder (default outputs/goal_relevance/<clip>[_hype])")
     ap.add_argument("--hype", nargs=2, type=float, metavar=("START_S", "END_S"),
                     help="inject arm-waving between these times first (the validation case)")
-    ap.add_argument("--vjepa", default="off", help="'off', 'auto' (run latent/predictor_relevance.py), "
-                                                   "or a vjepa_scores.npz from an earlier run")
+    ap.add_argument("--vjepa", default="off", help="'off', 'predictor' or 'encoder' (run latent/predictor_relevance.py "
+                                                   "in that mode), or a vjepa_scores.npz from an earlier run")
     ap.add_argument("--device", default=None)
     ap.add_argument("--floor", type=float, default=FLOOR)
     ap.add_argument("--smooth", type=float, default=SMOOTH_S)
@@ -375,11 +376,11 @@ def main(argv=None):
         qpos = inject_hype(qpos, *a.hype, fps=fps)
         np.save(out / "qpos.npy", qpos)
     vjepa = None
-    if a.vjepa == "auto":
+    if a.vjepa in ("predictor", "encoder"):
         from latent import predictor_relevance as pr
         kin = kinematics(model, qpos)
         events = goal_events(spec, kin["pos"], fps)
-        vjepa, detail = pr.scores(model, qpos, events, fps, azimuth=pr.azimuth_of(clip), device=a.device)
+        vjepa, detail = pr.scores(model, qpos, events, fps, azimuth=pr.azimuth_of(clip), device=a.device, mode=a.vjepa)
         np.savez(out / "vjepa_scores.npz", scores=vjepa, **detail)
     elif a.vjepa != "off":
         vjepa = np.load(a.vjepa)["scores"]
