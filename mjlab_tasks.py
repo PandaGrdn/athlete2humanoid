@@ -15,11 +15,16 @@ Runs inside mjlab's virtualenv; takes the same flags as mjlab's `train`:
 - A2H-Task-Flat-Unitree-G1 / A2H-TaskPhase-Flat-Unitree-G1: task first. A2H_TASK_SPEC=task_spec.json
   (skill/task.py) says what the action is, as stages (stand, squat, jump, land); the reward is for
   doing them in order, however and whenever. The latent (and, for Task, 0.1x tracking) is a weak
-  style term, optionally weighted in time by A2H_IMPORTANCE; episodes end on falls only.
+  style term, optionally weighted in time by A2H_IMPORTANCE; both get the stability terms below
+  and episodes end on their fall rule only.
 
 A2H_REWARD_CONFIG=next_reward_config.json (muse/reward_agent.py's format; train_motion.py
 --reward-config sets it) overrides the latent weight, SIGMA, tracking scale and termination
 thresholds below. The latent-only tasks keep tracking_scale 0.
+
+The latent-only tasks also get stability_terms(): the latent reward says what the motion should
+look like, not how to stay on your feet doing it (see its docstring). The hybrid task gets them
+only with "stability": {"hybrid": true} in the config.
 """
 
 import json
@@ -35,6 +40,8 @@ from latent.reward_net import BODIES, FPS, WINDOW, load_bundle, window_center_st
 from skill import task as skill_task  # noqa: E402
 
 import mjlab.tasks  # noqa: E402,F401  (registers mjlab's own tasks)
+from mjlab.envs import mdp as env_mdp  # noqa: E402
+from mjlab.managers.curriculum_manager import CurriculumTermCfg  # noqa: E402
 from mjlab.managers.observation_manager import ObservationTermCfg  # noqa: E402
 from mjlab.managers.reward_manager import RewardTermCfg  # noqa: E402
 from mjlab.managers.termination_manager import TerminationTermCfg  # noqa: E402
@@ -100,6 +107,105 @@ def motion_phase(env, command_name="motion", harmonics=4):
     return torch.cat([k.sin(), k.cos()], -1)
 
 
+# Stability: balance terms that never compare the robot with the retarget step by step. The only
+# use of the reference is two numbers per clip, the most its torso ever leans and the lowest it
+# ever goes, so a squat may go as deep as the clip does but not fold over or sit down.
+FEET = ("left_ankle_roll_link", "right_ankle_roll_link")
+STABILITY = {
+    "hybrid": False,       # also apply to the hybrid task
+    "alive": 1.0,          # per second upright: falling early costs what the rest of the clip would pay
+    "termination": -100.0, # once per fall (x dt: -2)
+    "upright": -2.0,       # per rad the torso leans past the clip's own max lean + tilt_margin
+    "tilt_margin": 0.15,
+    "height": -10.0,       # per m the torso sinks below the clip's lowest + height_margin
+    "height_margin": 0.1,
+    "fall_tilt": 0.35,     # fallen (episode ends): leaning this far past the clip's max lean,
+    "fall_height": 0.2,    # or this far below its lowest torso height
+    "feet_slip": -0.5,     # squared xy speed of feet on the floor
+    "action_rate": -0.1,   # mjlab's action_rate_l2 weight
+    "joint_acc": -2.5e-7,
+    "push_scale": 1.5,     # training pushes ramp from mjlab's range to push_scale x it (x/y) ...
+    "push_ramp_iters": 1000.0,  # ... over this many PPO iterations
+}
+
+
+def _tilt(quat):
+    """Angle between a body's z axis and world up (quat wxyz)."""
+    return torch.acos((1 - 2 * (quat[..., 1] ** 2 + quat[..., 2] ** 2)).clamp(-1, 1))
+
+
+def _torso(env, command_name="motion"):
+    """(torso tilt, torso height above the floor, the clip's max tilt, the clip's min height)."""
+    cmd = env.command_manager.get_term(command_name)
+    a = cmd.motion_anchor_body_index
+    z = cmd.robot_anchor_pos_w[:, 2] - env.scene.env_origins[:, 2]
+    return (_tilt(cmd.robot_anchor_quat_w), z, _tilt(cmd.motion.body_quat_w[:, a]).max(),
+            cmd.motion.body_pos_w[:, a, 2].min())
+
+
+def torso_lean_excess(env, margin):
+    tilt, _, max_tilt, _ = _torso(env)
+    return (tilt - max_tilt - margin).clamp(min=0)
+
+
+def torso_height_deficit(env, margin):
+    _, z, _, min_z = _torso(env)
+    return (min_z - margin - z).clamp(min=0)
+
+
+def torso_fallen(env, tilt_margin, height_margin):
+    tilt, z, max_tilt, min_z = _torso(env)
+    return (tilt > max_tilt + tilt_margin) | (z < min_z - height_margin)
+
+
+def feet_slip(env, contact_height=0.06):
+    """Squared horizontal speed of the feet that are on the floor (ankle below contact_height)."""
+    robot = env.scene["robot"]
+    ids = [robot.body_names.index(n) for n in FEET]
+    on_floor = robot.data.body_link_pos_w[:, ids, 2] - env.scene.env_origins[:, None, 2] < contact_height
+    return (robot.data.body_link_lin_vel_w[:, ids, :2].square().sum(-1) * on_floor).sum(-1)
+
+
+class PushCurriculum:
+    """Scales the push_robot event's x/y velocity range from 1 to `scale` over `ramp_steps` env steps."""
+
+    def __init__(self, cfg, env):
+        self.event = env.event_manager.get_term_cfg(cfg.params["event_name"])
+        self.base = dict(self.event.params["velocity_range"])
+
+    def __call__(self, env, env_ids, event_name, scale, ramp_steps):
+        s = 1 + (scale - 1) * min(1.0, env.common_step_counter / ramp_steps)
+        self.event.params["velocity_range"] = self.base | {
+            k: (lo * s, hi * s) for k, (lo, hi) in self.base.items() if k in ("x", "y")}
+        return {"push_scale": torch.tensor(s)}
+
+
+def stability_terms(cfg, rc):
+    """What the latent reward leaves out. It saturates at cos_ref, and a folded-over squat can still
+    score 1, so it neither rewards staying upright nor punishes the lean that precedes a fall; with
+    only action-rate penalties besides it, an early episode's return is negative, so falling ends
+    the losses. And the latent tasks drop ee_body_pos, the early fall detector, which leaves
+    terminations looser than an actual fall. So: an alive bonus and a fall penalty, a clip-relative
+    fall termination, hinge penalties on over-leaning and sinking, foot slip and joint-acceleration
+    costs, and training pushes that grow stronger. Zero weights leave a term out."""
+    s = rc["stability"]
+    terms = {"alive": (env_mdp.is_alive, {}), "termination": (env_mdp.is_terminated, {}),
+             "upright": (torso_lean_excess, {"margin": s["tilt_margin"]}),
+             "height": (torso_height_deficit, {"margin": s["height_margin"]}),
+             "feet_slip": (feet_slip, {}), "joint_acc": (env_mdp.joint_acc_l2, {})}
+    for k, (func, params) in terms.items():
+        if s[k]:
+            cfg.rewards[k] = RewardTermCfg(func=func, weight=s[k], params=params)
+    cfg.rewards["action_rate_l2"].weight = s["action_rate"]
+    cfg.terminations["fallen"] = TerminationTermCfg(
+        func=torso_fallen, params={"tilt_margin": s["fall_tilt"], "height_margin": s["fall_height"]})
+    if "push_robot" in cfg.events and s["push_scale"] != 1:  # play cfgs have no pushes
+        steps = s["push_ramp_iters"] * unitree_g1_tracking_ppo_runner_cfg().num_steps_per_env
+        cfg.curriculum["push"] = CurriculumTermCfg(func=PushCurriculum, params={
+            "event_name": "push_robot", "scale": s["push_scale"], "ramp_steps": max(steps, 1)})
+    return cfg
+
+
 REFERENCE_OBS = ("command", "motion_anchor_pos_b", "motion_anchor_ori_b")
 TRACKING_TERMS = ("motion_global_root_pos", "motion_global_root_ori", "motion_body_pos",
                   "motion_body_ori", "motion_body_lin_vel", "motion_body_ang_vel")
@@ -112,7 +218,8 @@ def reward_config(tracking_scale):
     """This task's settings: the defaults, overridden by the A2H_REWARD_CONFIG file if set."""
     rc = {"latent_weight": 3.0, "sigma": SIGMA, "tracking_scale": tracking_scale,
           # Relaxed: end an episode when the robot has fallen, not when it leaves the retarget.
-          "terminations": {"anchor_pos": 0.5, "anchor_ori": 1.2, "ee_body_pos": 0.6}}
+          "terminations": {"anchor_pos": 0.5, "anchor_ori": 1.2, "ee_body_pos": 0.6},
+          "stability": dict(STABILITY)}
     path = os.environ.get(REWARD_CONFIG_ENV)
     if path:
         user = json.loads(Path(path).read_text())
@@ -120,6 +227,8 @@ def reward_config(tracking_scale):
         if tracking_scale and "tracking_scale" in user:
             rc["tracking_scale"] = float(user["tracking_scale"])
         rc["terminations"] |= {k: float(v) for k, v in user.get("terminations", {}).items() if k in rc["terminations"]}
+        rc["stability"] |= {k: bool(v) if k == "hybrid" else float(v)
+                            for k, v in user.get("stability", {}).items() if k in rc["stability"]}
     return rc
 
 
@@ -144,6 +253,8 @@ def latent_env_cfg(tracking_scale, play=False, phase_only=False):
         cfg.terminations["ee_body_pos"].params["threshold"] = th["ee_body_pos"]
     else:
         del cfg.terminations["ee_body_pos"]
+    if not tracking_scale or rc["stability"]["hybrid"]:
+        stability_terms(cfg, rc)
     return cfg
 
 
@@ -184,11 +295,6 @@ def task_stage(env):
     return m.obs()
 
 
-def fallen(env, command_name="motion"):
-    """Absolute fall rule (torso low or tilted; robustness_eval's), not distance from the retarget."""
-    return skill_task.fallen(env.command_manager.get_term(command_name).robot_body_pos_w)
-
-
 class TimeWeighted:
     """A style term (latent or tracking) weighted by how much the reference's current moment matters
     for the goal: A2H_IMPORTANCE = importance.json {"fps": f, "weight": [per reference frame, 0..1]}
@@ -225,8 +331,11 @@ def task_config():
 def task_env_cfg(tracking_scale, play=False, phase_only=False):
     """Task-first hybrid: the semantic stage reward leads; the V-JEPA latent and (when
     tracking_scale > 0) the tracking terms are weak style terms, weighted in time by goal importance
-    when A2H_IMPORTANCE is set; episodes end on falls only, never for leaving the retarget."""
+    when A2H_IMPORTANCE is set. "Without falling" is part of the task, so both get stability_terms();
+    episodes end on its fall rule only, never for leaving the retarget."""
     cfg = latent_env_cfg(tracking_scale, play=play, phase_only=phase_only)
+    if "alive" not in cfg.rewards and "fallen" not in cfg.terminations:  # the hybrid path skipped them
+        stability_terms(cfg, reward_config(tracking_scale))
     tc = task_config()
     cfg.rewards["task"] = RewardTermCfg(func=TaskReward, weight=tc["task_weight"])
     if tc["style_weight"] and os.environ.get("A2H_LATENT_BUNDLE"):
@@ -244,7 +353,6 @@ def task_env_cfg(tracking_scale, play=False, phase_only=False):
             cfg.observations[group].terms["task_stage"] = ObservationTermCfg(func=task_stage)
     for k in ("anchor_pos", "anchor_ori", "ee_body_pos"):
         cfg.terminations.pop(k, None)
-    cfg.terminations["fallen"] = TerminationTermCfg(func=fallen)
     return cfg
 
 

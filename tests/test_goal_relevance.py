@@ -12,6 +12,9 @@ import os
 import unittest
 from pathlib import Path
 
+if not all(importlib.util.find_spec(m) for m in ("numpy", "torch")):  # e.g. a bare system Python
+    raise unittest.SkipTest("needs numpy and torch")
+
 import numpy as np
 
 from skill import importance as I

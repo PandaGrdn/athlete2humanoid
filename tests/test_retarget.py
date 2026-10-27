@@ -5,7 +5,11 @@ the G1 parts need the Menagerie model (scripts/fetch_assets.sh, or A2H_ASSETS_DI
     python -m unittest tests.test_retarget
 """
 
+import importlib.util
 import unittest
+
+if not all(importlib.util.find_spec(m) for m in ("numpy",)):  # e.g. a bare system Python
+    raise unittest.SkipTest("needs numpy")
 
 import numpy as np
 

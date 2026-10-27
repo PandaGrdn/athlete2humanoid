@@ -32,11 +32,16 @@ from muse.client import image_part, make_client, now, read_json, text_part, writ
 from muse.schema import BOOL, NUM, STR, arr, enum, obj  # noqa: E402
 
 # mjlab_tasks.reward_config() defaults and experiments/latent_policy.py's --iters (tests check them).
+STABILITY = {"hybrid": False, "alive": 1.0, "termination": -100.0, "upright": -2.0, "tilt_margin": 0.15,
+             "height": -10.0, "height_margin": 0.1, "fall_tilt": 0.35, "fall_height": 0.2, "feet_slip": -0.5,
+             "action_rate": -0.1, "joint_acc": -2.5e-7, "push_scale": 1.5, "push_ramp_iters": 1000.0}
 DEFAULTS = {
     "hybrid": {"latent_weight": 3.0, "sigma": 0.1, "tracking_scale": 0.2, "iterations": 1500,
-               "terminations": {"anchor_pos": 0.5, "anchor_ori": 1.2, "ee_body_pos": 0.6}},
+               "terminations": {"anchor_pos": 0.5, "anchor_ori": 1.2, "ee_body_pos": 0.6},
+               "stability": dict(STABILITY)},
     "latent": {"latent_weight": 3.0, "sigma": 0.1, "tracking_scale": 0.0, "iterations": 1500,
-               "terminations": {"anchor_pos": 0.5, "anchor_ori": 1.2, "ee_body_pos": 0.6}},
+               "terminations": {"anchor_pos": 0.5, "anchor_ori": 1.2, "ee_body_pos": 0.6},
+               "stability": dict(STABILITY)},
 }
 
 # Patchable paths -> (low, high). Muse may not touch anything else.
@@ -48,6 +53,10 @@ BOUNDS = {
     "/terminations/anchor_pos": (0.2, 1.5),
     "/terminations/anchor_ori": (0.4, 3.2),
     "/terminations/ee_body_pos": (0.2, 1.5),
+    "/stability/alive": (0.0, 5.0),
+    "/stability/upright": (-10.0, 0.0),
+    "/stability/fall_tilt": (0.1, 1.0),
+    "/stability/push_scale": (1.0, 2.5),
 }
 INTEGER_PATHS = {"/iterations"}
 MAX_OPS = 3
@@ -76,6 +85,11 @@ CONFIG_DOC = """How the config is used (mjlab PPO, G1, 4096 parallel robots, 50 
   0 removes them (latent reward only, and the end-effector termination is dropped).
 - terminations: an attempt ends when the torso drifts more than anchor_pos m or anchor_ori rad from the
   retarget, or a hand/foot more than ee_body_pos m. Loose = the robot may deviate to look more like the video.
+- stability (latent-only policies; hybrid only if stability.hybrid): balance terms that never compare
+  the robot with the retarget. alive = reward per second not fallen; upright = penalty per rad the torso
+  leans past the clip's own maximum lean + tilt_margin; an attempt also ends (fallen) when the torso
+  leans fall_tilt rad past that maximum or sinks fall_height m below the clip's lowest torso height;
+  push_scale = how much stronger than mjlab's default the random training pushes grow.
 - iterations: PPO iterations."""
 
 EVAL_DOC = """Evaluation (real V-JEPA on silhouette renders, not the reward network; one row per policy,
