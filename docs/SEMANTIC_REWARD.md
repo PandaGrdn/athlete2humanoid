@@ -74,6 +74,11 @@ A person's clip has movements that don't serve the goal. For example, waving the
 
 - **Semantic success rate** (`task_success`), including under the robustness suite's pushes, start noise and speed changes. Not just V-JEPA alignment.
 - **High success at a non-trivial distance from the clip.** Report joint-space DTW to the retarget alongside success.
+- `experiments/robustness_eval.py` does both, for every policy of a run (v1 runs get a spec compiled from their `motion.npz`):
+  - Success per condition: v1's 13 conditions, plus pushes timed to the squat and to touchdown, starts crouched or standing still, and no reference at all (standing still, reference frozen).
+  - Stages done, jump apex and quality, squat depth, and DTW to the clip, next to falls, tracking errors and V-JEPA.
+  - `robust_summary.md` is the table for the write-up.
+  - Task-first policies need their `task_spec.json` in the run folder (or `A2H_TASK_SPEC`); without it they refuse to load.
 - **Next steps:**
   - Sample depth and apex targets as commands, so the policy can't memorise one trajectory.
   - Have Muse judge rendered robot rollouts phase by phase.
