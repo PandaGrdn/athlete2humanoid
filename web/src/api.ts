@@ -135,6 +135,8 @@ export const url = (path: string) => (path.startsWith("http") ? path : API_BASE 
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(url(path), init);
+  // A static host without the API answers /api/* with the SPA's index.html: treat that as "no API".
+  if (r.ok && !(r.headers.get("content-type") ?? "").includes("json")) throw new Error("API not reachable");
   if (!r.ok) {
     let msg = `${r.status} ${r.statusText}`;
     try {
@@ -149,7 +151,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  health: () => request<Health>("/api/health"),
+  // A sleeping Space can take a while to answer; give up after 10 s and retry later.
+  health: () => request<Health>("/api/health", typeof AbortSignal.timeout === "function" ? { signal: AbortSignal.timeout(10_000) } : {}),
   runs: () => request<RunSummary[]>("/api/runs"),
   run: (id: string) => request<RunDetail>(`/api/runs/${encodeURIComponent(id)}`),
   job: (id: string) => request<Job>(`/api/jobs/${encodeURIComponent(id)}`),
