@@ -11,11 +11,13 @@
 import hashlib
 import json
 import logging
+import os
 import threading
 import time
 import uuid
 
 log = logging.getLogger("a2h.http")
+_SALT = os.urandom(16)  # per process: pseudonyms can't be reversed by hashing all IPv4 addresses
 
 API_HEADERS = [
     (b"x-content-type-options", b"nosniff"),
@@ -147,7 +149,7 @@ class RateLimit:
 
 def anon(ip):
     """Logs keep a stable pseudonym, not the address."""
-    return hashlib.sha256(f"a2h:{ip}".encode()).hexdigest()[:10]
+    return hashlib.sha256(_SALT + ip.encode()).hexdigest()[:10]
 
 
 class Hardening:

@@ -62,7 +62,9 @@ actions. Input: the 160-dim policy observation. Output: 29 joint actions.
 
 ## Settings (environment variables)
 
-All settings are server-side. The client only ever gets `API_BASE`.
+All settings are server-side. The client only ever gets `API_BASE`. The server checks every value at startup and
+refuses to start with a list of the bad ones. Limits and their rationale: `docs/SECURITY.md`. Job lifecycle,
+failure modes and health endpoints: `docs/SYSTEM_DESIGN.md`.
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -72,8 +74,19 @@ All settings are server-side. The client only ever gets `API_BASE`.
 | `A2H_RUNNERS` / `A2H_ENABLE_COLAB` | `demo` / unset | See runners above |
 | `A2H_DEMO_RUN` | newest run with a video | The run that uploads replay |
 | `A2H_DEMO_SECONDS` | `40` | Length of a demo replay |
-| `A2H_MAX_UPLOAD_MB` | `200` (`100` on the Space) | Upload limit. The extension, content type and file magic bytes are all checked. |
+| `A2H_MAX_UPLOAD_MB` | `200` (`100` on the Space) | Upload limit, enforced on the request body as it streams. The extension, content type and file magic bytes are all checked. |
+| `A2H_MAX_UPLOAD_STORAGE_MB` | `2000` | Total stored uploads before new ones get a 503 |
 | `A2H_MAX_ACTIVE_JOBS` | `4` | Concurrent jobs. Further requests get a 429. |
+| `A2H_MAX_JOBS_PER_IP` | `2` | Concurrent jobs per client |
+| `A2H_RATE_JOBS` / `A2H_RATE_REQUESTS` | `30` per hour / `600` per minute | Per-client rate limits (429 + `Retry-After`) |
+| `A2H_MAX_STREAMS` | `100` | Open live-progress streams; beyond it clients poll |
+| `A2H_PROXY_HOPS` | `0` (`1` on the Space) | Trusted proxies in front of the API; the client IP is read that far from the right of `X-Forwarded-For` |
+| `A2H_UPLOAD_TTL_H` / `A2H_JOB_TTL_H` | `1` / `24` | Hours an upload / a finished job is kept |
+| `A2H_JOB_TIMEOUT_H` | `8` | A GPU-runner job still running after this is stopped |
+| `A2H_HOSTED` | unset (`1` in the Space image; a Space's `SPACE_ID` implies it) | Public deploy: the GPU runner can't be enabled, the job list is off, CORS `*` is refused |
+| `A2H_REMOTE_BACKEND` | `colab` | GPU backend for the local GPU runner: `colab` or `farmshare` (docs/FARMSHARE.md) |
+| `A2H_LIST_JOBS` | on locally, off hosted | `GET /api/jobs` (debugging) |
+| `A2H_LOG_FORMAT` / `A2H_LOG_LEVEL` | `json` / `INFO` | Structured logs on stderr; `text` for humans |
 | `A2H_RUN_EXCLUDE` | `*smoke*` | Glob patterns of run folders to hide |
 | `A2H_STATIC_DIR` | unset | Serve a built `web/dist` from the API too (single-process hosting) |
 | `API_BASE` (frontend, build time) | empty | The backend origin, e.g. `https://you-athlete2humanoid-api.hf.space`. Empty means same origin or the dev proxy. |
@@ -137,10 +150,18 @@ The first build takes about 2 minutes. To follow it:
 hf spaces logs <hf-user>/athlete2humanoid-api
 ```
 
-Check it:
+Check it (`/readyz` is 200 once runs are loaded and storage works; `/healthz` only says the process is up):
 
 ```bash
-curl https://<hf-user>-athlete2humanoid-api.hf.space/api/health
+curl https://<hf-user>-athlete2humanoid-api.hf.space/readyz
+```
+
+The image runs as uid 1000 from a digest-pinned base with hash-locked dependencies (`server/requirements.lock`;
+after changing `server/requirements.txt`, run `make lock`). It is built to run with a read-only root filesystem;
+to try that locally:
+
+```bash
+docker build -t a2h-space build/space && docker run --rm --read-only --tmpfs /tmp --cap-drop ALL -p 7860:7860 a2h-space
 ```
 
 ### 2. Frontend: Cloudflare Pages
@@ -161,6 +182,10 @@ npx wrangler pages project create athlete2humanoid --production-branch main
 npx wrangler pages deploy dist --project-name athlete2humanoid
 ```
 
+The build writes `dist/_headers`, which Cloudflare Pages applies: a Content-Security-Policy that allows scripts
+and styles from the site itself and network/media requests only to `API_BASE`, plus the usual hardening headers.
+If you later add a third-party origin (fonts, analytics), add it in `web/vite.config.ts`.
+
 Open the printed `*.pages.dev` URL. If it isn't `https://athlete2humanoid.pages.dev`, allow it on the API (see
 "Changing the allowed origin" below).
 
@@ -180,6 +205,37 @@ To add a custom domain to the frontend: Cloudflare dashboard → Workers & Pages
 domains → add `your-domain.com`. The API can stay on `hf.space`. To move it under your domain too (for example
 `api.your-domain.com`), proxy it with a Cloudflare Worker or a CNAME, then rebuild the frontend with the new
 `API_BASE`.
+
+## CI/CD (GitHub Actions)
+
+`.github/workflows/ci.yml` runs on every pull request and push to `main`: ruff, the server tests, the unit tests
+(CPU torch + MuJoCo + the G1 model), the frontend typecheck and build (plus a scan of the bundle for secrets and a
+check of the CSP headers), `pip-audit` and `npm audit` (reported, never blocking), and a build of the Space image
+that is then started read-only and probed. No secrets are needed for any of it.
+
+`.github/workflows/deploy.yml` runs on push to `main` (and by hand from the Actions tab). Each half runs only when
+its secrets and variables exist; otherwise it is skipped, not failed. To turn them on, in the GitHub repo go to
+Settings → Secrets and variables → Actions:
+
+| Kind | Name | Value |
+|---|---|---|
+| Secret | `HF_TOKEN` | A Hugging Face token with **write** access to the Space (a fine-grained token scoped to that one Space is best) |
+| Variable | `HF_SPACE` | `<hf-user>/athlete2humanoid-api` |
+| Variable (optional) | `A2H_CORS` | The frontend origin(s), comma-separated. Default `https://athlete2humanoid.pages.dev` |
+| Variable (optional) | `A2H_DEMO_RUN` | Run id the demo runner replays for uploads |
+| Secret | `CLOUDFLARE_API_TOKEN` | A Cloudflare API token with the **Cloudflare Pages: Edit** permission (dashboard → My Profile → API Tokens → Create Token → Custom) |
+| Secret | `CLOUDFLARE_ACCOUNT_ID` | Your account id (dashboard → Workers & Pages, right-hand column) |
+| Variable | `API_BASE` | `https://<hf-user>-athlete2humanoid-api.hf.space` |
+| Variable (optional) | `CF_PAGES_PROJECT` | The Pages project name, default `athlete2humanoid` |
+
+The Space deploy uploads **code only** (`server/`, `Dockerfile`, `README.md`), because the runs it serves come from
+`outputs/`, which isn't in git. So do the first deploy by hand (section 1 above) to put `data/runs` on the Space;
+after that every push to `main` updates the code and leaves the data alone, and the job waits until `/readyz`
+answers. To ship new runs, run `make space` and `hf upload` by hand again. The Pages project must exist
+(`wrangler pages project create`, section 2) before the first automatic deploy.
+
+Both deploy jobs use a GitHub environment named `production`; to require a manual approval before each deploy,
+add yourself as a required reviewer under Settings → Environments → production.
 
 ## Before recording the demo
 
