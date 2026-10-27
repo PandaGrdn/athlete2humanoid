@@ -7,6 +7,7 @@ import json
 import shutil
 import time
 from pathlib import Path
+from unittest import mock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -102,7 +103,9 @@ def test_health_lists_only_demo_by_default(client, make_client):
     assert [s["key"] for s in h["stages"]] == ["silhouette", "pose", "retarget", "latent", "train", "eval"]
     # colab needs both the runner list and the explicit enable flag
     assert make_client(runners=["demo", "colab"]).get("/api/health").json()["runners"] == ["demo"]
-    assert make_client(runners=["demo", "colab"], enable_colab=True).get("/api/health").json()["runners"] == ["demo", "colab"]
+    # ... and, to be offered, its CLI on PATH (CI machines don't have one)
+    with mock.patch("server.main.shutil.which", return_value="/usr/local/bin/colab"):
+        assert make_client(runners=["demo", "colab"], enable_colab=True).get("/api/health").json()["runners"] == ["demo", "colab"]
 
 
 def test_run_listing_is_tolerant(client):

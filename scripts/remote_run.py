@@ -26,7 +26,6 @@ docs/FARMSHARE.md): for when Colab compute units run out. Colab stays the defaul
 import argparse
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tarfile

@@ -237,7 +237,7 @@ class TaskCmdEnvTest(unittest.TestCase):
             cls.env_c, cls.venv_c = CE.make_env(CE.TASK, DATA / "motion_squat_jump_head.npz", 4, "cpu")
             cls.env_p, cls.venv_p = CE.make_env(CE.PHASE_TASK, DATA / "motion_squat_jump_head.npz", 4, "cpu")
         except Exception as e:  # e.g. G1 assets missing
-            raise unittest.SkipTest(f"mjlab env unavailable: {e}")
+            raise unittest.SkipTest(f"mjlab env unavailable: {e}") from e
 
     def test_command_inputs_are_last(self):
         from mjlab.tasks.registry import load_env_cfg
@@ -278,7 +278,6 @@ class TaskCmdEnvTest(unittest.TestCase):
         self.assertEqual(worst, 0.0)
 
     def test_grounded_starts_and_landing_term(self):
-        import mjlab_tasks as mt
         cmd_c = self.env_c.command_manager.get_term("motion")
         cmd_p = self.env_p.command_manager.get_term("motion")
         self.venv_c.reset()

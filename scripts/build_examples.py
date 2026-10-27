@@ -420,7 +420,7 @@ def ex_goal_relevance(runs, media):
     motion = (speed / speed.max()).round(3).tolist()
 
     ev = {e["kind"]: e for e in imp["events"] if e["kind"] in ("propulsion", "absorb")}
-    prop, absorb = ev["propulsion"], ev["absorb"]
+    prop = ev["propulsion"]
     win = lambda e: max(w[int(e["window_s"][0] * fps): int(e["window_s"][1] * fps) + 1])  # noqa: E731
     events = [{"t": r(e["t_s"]), "label": {"propulsion": "Takeoff push", "absorb": "Landing"}[e["kind"]],
                "peak": r(win(e), 2)}
@@ -467,8 +467,8 @@ def ex_goal_relevance(runs, media):
                     f"get {legs_prop:.0%} of the takeoff credit, the arms {arms_prop:.0%}. After the waving the "
                     + ("weights are identical to the clean clip's. " if same_after < 5e-4 else
                        f"weights match the clean clip's to within {same_after:.3f}. ")
-                    + f"Training scales the imitation (style) "
-                    f"terms by this weight, so the policy isn't paid to copy the waving."),
+                    + "Training scales the imitation (style) "
+                    "terms by this weight, so the policy isn't paid to copy the waving."),
         },
         "duration_s": r(len(w) / fps, 2),
         "stages": task_stages(spec),
@@ -699,7 +699,7 @@ def ex_final(runs, media):
                         "note": f"the retarget itself scores {ev['retarget']['aligned']:.2f}"})
     stage_txt = " → ".join(STAGE_LABEL.get(s["kind"], s["kind"]) for s in spec["stages"]) if spec else "the action's stages"
     return {**base, "status": "ready",
-            "tagline": (f"Rewarded for the action, not for copying the clip: "
+            "tagline": ("Rewarded for the action, not for copying the clip: "
                         + (f"the {_and([POLICY_INFO.get(k, (k,))[0] for k in succ])} "
                            f"polic{'y' if len(succ) == 1 else 'ies'} completed every stage ({e.get('task_stages')})"
                            if succ else f"the best policy completed {e.get('task_stages', '?')} stages")

@@ -15,7 +15,6 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from argparse import Namespace
 from pathlib import Path
 
 if not all(importlib.util.find_spec(m) for m in ("numpy", "torch")):  # e.g. a bare system Python
@@ -140,7 +139,7 @@ class TestTaskSpecRequired(unittest.TestCase):
 def fake_result(task_metrics=True):
     a = R.parse(["--runs", "x"])
     conds = []
-    for i, (suite, level, p) in enumerate(R.conditions(a)):
+    for suite, level, p in R.conditions(a):
         pol = {}
         for n, base in (("tracking", 0.9), ("taskphase", 0.8)):
             r = {"fall_rate": 0.1, "joint_err_rad": 0.1, "dtw_joint_rad": 0.05 if n == "tracking" else 0.15,
