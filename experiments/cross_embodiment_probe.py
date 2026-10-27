@@ -27,7 +27,8 @@ from latent.video_latent import video_latent  # noqa: E402
 from latent.vjepa import VJepa  # noqa: E402
 
 # Which bank motions count as "the same action" for each clip name.
-CATEGORY = {"squat_jump": ("vertical_jump", "squat_"), "squat": "squat_", "lunge": "lunge_", "jacks": "jumping_jacks", "kick": "kick_",
+CATEGORY = {"squat_jump": ("vertical_jump", "squat_"), "squat": "squat_", "lunge": "lunge_",
+            "front_kick": "kick_", "jumping_jacks": "jumping_jacks", "punches": "punch", "jacks": "jumping_jacks", "kick": "kick_",
             "arms": "arms_raise_", "jump": "vertical_jump", "march": "march", "punch": "punch"}
 
 
