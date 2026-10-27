@@ -237,7 +237,31 @@ answers. To ship new runs, run `make space` and `hf upload` by hand again. The P
 Both deploy jobs use a GitHub environment named `production`; to require a manual approval before each deploy,
 add yourself as a required reviewer under Settings → Environments → production.
 
+## Demo examples (work offline)
+
+`/examples` presents curated results as short stories: what the robot was shown, what it learned, and how we
+know, with synchronized videos and the numbers from each run's own files. They are static files in
+`web/public/examples/` (about 4 MB), so the Pages deploy is a full demo even when the Space is asleep or down. The
+header then shows "Offline demo", uploads are disabled, and the page keeps checking the API every 30 s.
+
+Rebuild them after a new run lands in `outputs/` (needs `imageio-ffmpeg`; MuJoCo and the G1 assets are optional,
+for the arm-waving render and the squat's stage timeline):
+
+```bash
+python scripts/build_examples.py
+```
+
+The squat-jump task policy slot fills itself from `outputs/remote_latent_final/` (`eval.json`, `policy_*/policy.mp4`)
+and moves to the top. To validate the built files (no `outputs/` needed; also run by `make test`):
+
+```bash
+python scripts/build_examples.py --check
+```
+
 ## Before recording the demo
+
+- `/examples/<id>` pages are made for recording: one shared play/pause, scrubber and 0.5× speed for every video
+  on the page, with the action's stages on the timeline.
 
 - Load the Space URL once so it is awake (free Spaces sleep after 48 h idle).
 - Gallery → "Replay pipeline" on the main run gives a ~40 s job with live stages, logs and training curves,

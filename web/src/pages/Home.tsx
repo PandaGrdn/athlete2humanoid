@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, fmt, policyColor, type RunSummary } from "../api";
 import { useHealth } from "../App";
 import { Icon, LoopVideo } from "../components/ui";
+import { exUrl } from "../examples";
+import { ExampleCards, useExampleIndex } from "./Examples";
 
 const PIPELINE = [
   { title: "Silhouette", text: "Segment and track the person through every frame.", model: "SAM 3.1" },
@@ -16,12 +18,16 @@ const PIPELINE = [
 export default function Home() {
   const [runs, setRuns] = useState<RunSummary[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const { health } = useHealth();
+  const { health, error: apiError } = useHealth();
+  const exIdx = useExampleIndex();
 
   useEffect(() => {
-    api.runs().then(setRuns).catch((e) => setErr(e.message));
-  }, []);
+    if (health) api.runs().then(setRuns).catch((e) => setErr(e.message));
+  }, [health]);
   const featured = runs?.find((r) => r.id === health?.demo_run) ?? runs?.[0];
+  // The hero is the lead curated example (static, so it shows at once and offline); else the newest run.
+  const lead = exIdx.items?.find((e) => e.status === "ready" && e.video);
+  const offline = !!apiError && !health;
 
   return (
     <div className="container">
@@ -40,12 +46,18 @@ export default function Home() {
             like the clip, not only for matching its joint angles.
           </p>
           <div className="cta">
-            <a className="btn primary" href="#run"><Icon name="upload" size={16} />Run a video</a>
-            {featured && <Link className="btn" to={`/runs/${featured.id}`}>See a finished run <Icon name="arrow" size={16} /></Link>}
+            <Link className="btn primary" to="/examples"><Icon name="play" size={16} />See the examples</Link>
+            <a className="btn" href="#run"><Icon name="upload" size={16} />Run a video</a>
+            {featured && <Link className="btn ghost" to={`/runs/${featured.id}`}>Latest run <Icon name="arrow" size={16} /></Link>}
           </div>
         </div>
         <div className="fade-in">
-          {featured?.hero ? (
+          {lead?.video ? (
+            <Link to={`/examples/${lead.id}`} className="video-frame" style={{ display: "block" }}>
+              <LoopVideo src={exUrl(lead.video)} poster={lead.poster ? exUrl(lead.poster) : undefined} label={lead.title} />
+              <div className="tag"><span className="pill">Phone video</span><span className="pill accent">Unitree G1</span></div>
+            </Link>
+          ) : featured?.hero ? (
             <div className="video-frame">
               <LoopVideo src={featured.hero.url} poster={featured.poster?.url} label="Source clip next to the G1 retarget" />
               <div className="tag"><span className="pill">Source clip</span><span className="pill accent">Unitree G1</span></div>
@@ -54,6 +66,18 @@ export default function Home() {
             <div className="skeleton" style={{ aspectRatio: "751 / 480" }} />
           )}
         </div>
+      </section>
+
+      <section className="section" id="examples">
+        <div className="section-head">
+          <div>
+            <div className="eyebrow">Examples</div>
+            <h2 style={{ marginTop: 6 }}>What the robot learned, and how we know</h2>
+            <p>Recorded results, each as a short story with synchronized videos and the numbers behind it.</p>
+          </div>
+          <Link className="btn sm" to="/examples">All examples <Icon name="arrow" size={14} /></Link>
+        </div>
+        <ExampleCards {...exIdx} />
       </section>
 
       <section className="section" id="how">
@@ -83,8 +107,16 @@ export default function Home() {
             <p>Upload a clip of one person, full body in frame, or replay one of the finished runs below.</p>
           </div>
         </div>
+        {offline && (
+          <div className="notice" style={{ marginBottom: 16 }}>
+            <Icon name="cube" />
+            <div><strong>The live pipeline is offline right now.</strong> The hosted API sleeps when idle; this page
+              keeps checking and uploads come back when it answers. Everything under{" "}
+              <Link to="/examples" style={{ color: "var(--accent)" }}>Examples</Link> works without it.</div>
+          </div>
+        )}
         <div className="upload-grid">
-          <UploadPanel />
+          <UploadPanel offline={offline} />
           <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div className="eyebrow">What a job produces</div>
             <ul style={{ margin: 0, paddingLeft: 18, color: "var(--text-2)", fontSize: 14, display: "grid", gap: 8 }}>
@@ -114,7 +146,11 @@ export default function Home() {
           </div>
         </div>
         {err && <div className="error-box">Couldn't load runs: {err}</div>}
-        {!runs && !err && <div className="gallery">{[0, 1].map((i) => <div key={i} className="skeleton" style={{ height: 380 }} />)}</div>}
+        {offline && !runs && (
+          <div className="notice"><Icon name="film" /><div>Finished runs are listed by the pipeline API, which isn't
+            reachable. The <Link to="/examples" style={{ color: "var(--accent)" }}>examples</Link> show the same runs' results.</div></div>
+        )}
+        {!runs && !err && !offline && <div className="gallery">{[0, 1].map((i) => <div key={i} className="skeleton" style={{ height: 380 }} />)}</div>}
         {runs && runs.length === 0 && <div className="notice">No finished runs found in the runs folder yet.</div>}
         {runs && runs.length > 0 && <div className="gallery">{runs.map((r) => <RunCard key={r.id} run={r} />)}</div>}
       </section>
@@ -166,7 +202,7 @@ function RunCard({ run }: { run: RunSummary }) {
   );
 }
 
-function UploadPanel() {
+function UploadPanel({ offline }: { offline: boolean }) {
   const { health } = useHealth();
   const nav = useNavigate();
   const input = useRef<HTMLInputElement>(null);
@@ -230,7 +266,8 @@ function UploadPanel() {
       )}
       {err && <div className="error-box" style={{ marginTop: 14 }}>{err}</div>}
       <div className="upload-actions">
-        <button className="btn primary" disabled={!file || busy} onClick={submit}>
+        <button className="btn primary" disabled={!file || busy || offline} onClick={submit}
+          title={offline ? "The pipeline API is offline" : undefined}>
           <Icon name="play" size={16} />{busy ? "Uploading…" : "Run pipeline"}
         </button>
         {health && health.runners.length > 1 && (

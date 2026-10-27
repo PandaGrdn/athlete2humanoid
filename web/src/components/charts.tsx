@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 
 /** The element's width in CSS pixels, so the SVG draws 1:1 and its text stays legible at any size. */
-function useWidth(fallback = 640) {
+export function useWidth(fallback = 640) {
   const ref = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(fallback);
   useEffect(() => {

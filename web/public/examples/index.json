@@ -1,0 +1,51 @@
+{
+ "version": 1,
+ "generated_at": "2026-10-27T20:02:58+00:00",
+ "examples": [
+  {
+   "id": "squat-v1",
+   "kicker": "Learning the action",
+   "title": "Squat: three rewards, one skill",
+   "tagline": "Shown one phone video of two squats, three policies trained with different rewards all complete it (5/5 stages, no falls), though their V-JEPA 2 similarity to the clip ranges from 0.53 to 0.71.",
+   "status": "ready",
+   "poster": "squat-v1/source.jpg",
+   "video": "squat-v1/source.mp4"
+  },
+  {
+   "id": "retarget",
+   "kicker": "Retargeting",
+   "title": "A human body on G1 proportions",
+   "tagline": "Rebuilding the person on the G1's own bone lengths keeps their joint angles (2.4–10× smaller angle error) and plants the feet: foot sliding drops from 29.1 to 0.4 cm/s, averaged over 7 clips.",
+   "status": "ready",
+   "poster": "retarget/compare.jpg",
+   "video": "retarget/compare.mp4"
+  },
+  {
+   "id": "goal-relevance",
+   "kicker": "What matters",
+   "title": "Imitate what serves the jump",
+   "tagline": "Arm-waving added before the jump gets the minimum weight (0.10, the same as standing still) while the takeoff push and the landing peak at 0.97–1.00.",
+   "status": "ready",
+   "poster": "goal-relevance/hype.jpg",
+   "video": "goal-relevance/hype.mp4"
+  },
+  {
+   "id": "robustness",
+   "kicker": "Stress test",
+   "title": "Pushed, tripped, re-weighted",
+   "tagline": "64 simulated rollouts per condition: the squat policies barely notice friction and mass changes, and tracking is the sturdiest under shoves and noisy starts. Latent falls most, which is why the task reward only pays while the robot stays upright.",
+   "status": "ready",
+   "poster": "squat-v1/policy_tracking.jpg",
+   "video": null
+  },
+  {
+   "id": "squat-jump-final",
+   "kicker": "The task policy",
+   "title": "Squat jump: stand, squat, jump, land",
+   "tagline": "The final run: a policy rewarded for completing the squat jump's stages in order, without falling. Results appear here when training finishes.",
+   "status": "pending",
+   "poster": null,
+   "video": null
+  }
+ ]
+}

@@ -1,0 +1,20 @@
+{
+ "id": "squat-jump-final",
+ "kicker": "The task policy",
+ "title": "Squat jump: stand, squat, jump, land",
+ "status": "pending",
+ "tagline": "The final run: a policy rewarded for completing the squat jump's stages in order, without falling. Results appear here when training finishes.",
+ "story": {
+  "shown": "The squat-jump phone video: two countermovement jumps.",
+  "learned": "Training on an A100: a policy rewarded for the stages, not for matching the clip frame by frame.",
+  "how": "Stage completion, falls and jump height, judged on the robot's own body."
+ },
+ "duration_s": null,
+ "stages": null,
+ "primary": null,
+ "grid": [],
+ "extra": [],
+ "metrics": [],
+ "sources": [],
+ "notes": []
+}

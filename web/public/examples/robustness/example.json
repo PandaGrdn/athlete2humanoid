@@ -1,0 +1,342 @@
+{
+ "id": "robustness",
+ "kicker": "Stress test",
+ "title": "Pushed, tripped, re-weighted",
+ "tagline": "64 simulated rollouts per condition: the squat policies barely notice friction and mass changes, and tracking is the sturdiest under shoves and noisy starts. Latent falls most, which is why the task reward only pays while the robot stays upright.",
+ "story": {
+  "shown": "The three squat policies, each run from scratch under conditions they never saw in training: random shoves of increasing strength, starts from a perturbed pose at a random point in the clip, wider friction and mass ranges, and the clip played faster or slower.",
+  "learned": "Whether a policy learned to squat or only memorised one trajectory. A policy that learned the action keeps its balance and its motion as conditions move away from training.",
+  "how": "A fall is the torso dropping below 0.35 m or tilting past 1.4 rad. Each cell is the fall rate over 64 rollouts; underneath, V-JEPA 2 similarity to the clip on 2 of them. Under a 0.5 m/s shove, falls are tracking 0%, hybrid 5%, latent 16%. Even as trained, the latent policy falls in 12% of randomised rollouts."
+ },
+ "duration_s": null,
+ "stages": null,
+ "primary": null,
+ "grid": [
+  {
+   "src": "squat-v1/policy_tracking.mp4",
+   "poster": "squat-v1/policy_tracking.jpg",
+   "label": "Tracking",
+   "width": 416,
+   "height": 312,
+   "duration_s": 10.13,
+   "color": "#3987e5",
+   "policy": "tracking"
+  },
+  {
+   "src": "squat-v1/policy_hybrid.mp4",
+   "poster": "squat-v1/policy_hybrid.jpg",
+   "label": "Hybrid",
+   "width": 416,
+   "height": 312,
+   "duration_s": 10.13,
+   "color": "#d95926",
+   "policy": "hybrid"
+  },
+  {
+   "src": "squat-v1/policy_latent.mp4",
+   "poster": "squat-v1/policy_latent.jpg",
+   "label": "Latent",
+   "width": 416,
+   "height": 312,
+   "duration_s": 10.13,
+   "color": "#199e70",
+   "policy": "latent"
+  }
+ ],
+ "grid_caption": "The same three policies, as trained (no perturbation).",
+ "extra": [],
+ "metrics": [
+  {
+   "label": "Rollouts per condition",
+   "display": "64",
+   "note": "13 conditions × 3 policies"
+  },
+  {
+   "label": "Falls under friction & mass changes",
+   "display": "0% / 0% / 14%",
+   "note": "tracking / hybrid / latent"
+  },
+  {
+   "label": "Falls under a 0.5 m/s shove",
+   "display": "0% / 5% / 16%",
+   "note": "tracking / hybrid / latent"
+  }
+ ],
+ "robust": {
+  "policies": [
+   {
+    "key": "tracking",
+    "label": "Tracking",
+    "color": "#3987e5"
+   },
+   {
+    "key": "hybrid",
+    "label": "Hybrid",
+    "color": "#d95926"
+   },
+   {
+    "key": "latent",
+    "label": "Latent",
+    "color": "#199e70"
+   }
+  ],
+  "conditions": [
+   {
+    "suite": "clean",
+    "suite_label": "As trained",
+    "level": "nominal",
+    "cells": {
+     "tracking": {
+      "fall_rate": 0.0,
+      "vjepa": 0.707
+     },
+     "hybrid": {
+      "fall_rate": 0.0,
+      "vjepa": 0.571
+     },
+     "latent": {
+      "fall_rate": 0.125,
+      "vjepa": 0.535
+     }
+    }
+   },
+   {
+    "suite": "push",
+    "suite_label": "Pushed",
+    "level": "0.5 m/s shove",
+    "cells": {
+     "tracking": {
+      "fall_rate": 0.0,
+      "vjepa": 0.674
+     },
+     "hybrid": {
+      "fall_rate": 0.047,
+      "vjepa": 0.551
+     },
+     "latent": {
+      "fall_rate": 0.156,
+      "vjepa": 0.522
+     }
+    }
+   },
+   {
+    "suite": "push",
+    "suite_label": "Pushed",
+    "level": "0.75 m/s shove",
+    "cells": {
+     "tracking": {
+      "fall_rate": 0.172,
+      "vjepa": 0.616
+     },
+     "hybrid": {
+      "fall_rate": 0.266,
+      "vjepa": 0.548
+     },
+     "latent": {
+      "fall_rate": 0.391,
+      "vjepa": 0.465
+     }
+    }
+   },
+   {
+    "suite": "push",
+    "suite_label": "Pushed",
+    "level": "1 m/s shove",
+    "cells": {
+     "tracking": {
+      "fall_rate": 0.5,
+      "vjepa": 0.545
+     },
+     "hybrid": {
+      "fall_rate": 0.609,
+      "vjepa": 0.54
+     },
+     "latent": {
+      "fall_rate": 0.688,
+      "vjepa": 0.461
+     }
+    }
+   },
+   {
+    "suite": "push",
+    "suite_label": "Pushed",
+    "level": "1.5 m/s shove",
+    "cells": {
+     "tracking": {
+      "fall_rate": 0.875,
+      "vjepa": 0.452
+     },
+     "hybrid": {
+      "fall_rate": 0.922,
+      "vjepa": 0.415
+     },
+     "latent": {
+      "fall_rate": 1.0,
+      "vjepa": 0.386
+     }
+    }
+   },
+   {
+    "suite": "init",
+    "suite_label": "Noisy start",
+    "level": "1× start noise",
+    "cells": {
+     "tracking": {
+      "fall_rate": 0.0,
+      "vjepa": 0.46
+     },
+     "hybrid": {
+      "fall_rate": 0.0,
+      "vjepa": 0.313
+     },
+     "latent": {
+      "fall_rate": 0.078,
+      "vjepa": 0.273
+     }
+    }
+   },
+   {
+    "suite": "init",
+    "suite_label": "Noisy start",
+    "level": "2× start noise",
+    "cells": {
+     "tracking": {
+      "fall_rate": 0.047,
+      "vjepa": 0.306
+     },
+     "hybrid": {
+      "fall_rate": 0.141,
+      "vjepa": 0.182
+     },
+     "latent": {
+      "fall_rate": 0.188,
+      "vjepa": 0.007
+     }
+    }
+   },
+   {
+    "suite": "init",
+    "suite_label": "Noisy start",
+    "level": "4× start noise",
+    "cells": {
+     "tracking": {
+      "fall_rate": 0.75,
+      "vjepa": 0.17
+     },
+     "hybrid": {
+      "fall_rate": 0.672,
+      "vjepa": 0.186
+     },
+     "latent": {
+      "fall_rate": 0.844,
+      "vjepa": -0.035
+     }
+    }
+   },
+   {
+    "suite": "dynamics",
+    "suite_label": "Friction & mass",
+    "level": "friction 0.3–1.2, mass ×0.9–1.1",
+    "cells": {
+     "tracking": {
+      "fall_rate": 0.0,
+      "vjepa": 0.707
+     },
+     "hybrid": {
+      "fall_rate": 0.0,
+      "vjepa": 0.572
+     },
+     "latent": {
+      "fall_rate": 0.078,
+      "vjepa": 0.536
+     }
+    }
+   },
+   {
+    "suite": "dynamics",
+    "suite_label": "Friction & mass",
+    "level": "friction 0.2–1.6, mass ×0.8–1.2",
+    "cells": {
+     "tracking": {
+      "fall_rate": 0.0,
+      "vjepa": 0.707
+     },
+     "hybrid": {
+      "fall_rate": 0.0,
+      "vjepa": 0.569
+     },
+     "latent": {
+      "fall_rate": 0.141,
+      "vjepa": 0.521
+     }
+    }
+   },
+   {
+    "suite": "dynamics",
+    "suite_label": "Friction & mass",
+    "level": "friction 0.1–2, mass ×0.7–1.3",
+    "cells": {
+     "tracking": {
+      "fall_rate": 0.0,
+      "vjepa": 0.716
+     },
+     "hybrid": {
+      "fall_rate": 0.0,
+      "vjepa": 0.58
+     },
+     "latent": {
+      "fall_rate": 0.203,
+      "vjepa": 0.527
+     }
+    }
+   },
+   {
+    "suite": "speed",
+    "suite_label": "Tempo",
+    "level": "0.8× speed",
+    "cells": {
+     "tracking": {
+      "fall_rate": 0.0,
+      "vjepa": 0.704
+     },
+     "hybrid": {
+      "fall_rate": 0.0,
+      "vjepa": 0.569
+     },
+     "latent": {
+      "fall_rate": 0.0,
+      "vjepa": 0.529
+     }
+    }
+   },
+   {
+    "suite": "speed",
+    "suite_label": "Tempo",
+    "level": "1.2× speed",
+    "cells": {
+     "tracking": {
+      "fall_rate": 0.0,
+      "vjepa": 0.709
+     },
+     "hybrid": {
+      "fall_rate": 0.0,
+      "vjepa": 0.562
+     },
+     "latent": {
+      "fall_rate": 0.688,
+      "vjepa": 0.541
+     }
+    }
+   }
+  ],
+  "reps": 64
+ },
+ "sources": [
+  "outputs/remote_robust/robust.json"
+ ],
+ "notes": [
+  "Policies are the squat v1 checkpoints; the reference check reproduces their eval.json scores.",
+  "The robustness suite randomises starts, so 'as trained' falls can differ from the single deterministic evaluation rollout."
+ ],
+ "status": "ready"
+}

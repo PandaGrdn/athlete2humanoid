@@ -1,11 +1,12 @@
 import { useEffect, useRef } from "react";
 import { url } from "../api";
 
-type IconName = "upload" | "play" | "download" | "arrow" | "cube" | "chart" | "file" | "film" | "x" | "check" | "github";
+type IconName = "upload" | "play" | "pause" | "download" | "arrow" | "cube" | "chart" | "file" | "film" | "x" | "check" | "github";
 
 const PATHS: Record<IconName, string> = {
   upload: "M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5M4 16v2.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V16",
   play: "M7 5.5v13l11-6.5-11-6.5Z",
+  pause: "M8.5 5v14m7-14v14",
   download: "M12 4v12m0 0-4.5-4.5M12 16l4.5-4.5M4 20h16",
   arrow: "M5 12h14m0 0-5-5m5 5-5 5",
   cube: "m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Zm0 0v18m8-13.5-8 4.5-8-4.5",
