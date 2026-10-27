@@ -91,6 +91,22 @@ python3 scripts/remote_run.py latent --target squat --min-clips 7 --iters 2000 #
 ```
 It waits for the clips, checks the token, creates an A100, clones this repo from GitHub (so push first), runs SAM, distillation, three trainings and the evaluation, then downloads `results.tar.gz` to `outputs/remote_latent/` and stops the VM.
 
+**Saved weights: build off them instead of retraining** ([`scripts/weights.py`](scripts/weights.py), [`policy_weights.py`](policy_weights.py)).
+
+- **What's kept automatically**
+  - Every training saves a checkpoint every 250 iterations, plus `weights.json` recording what the policy was trained from.
+  - Remote runs pull the latest checkpoints back about every 10 minutes. If the VM is lost, the retry continues from there instead of starting over.
+- **How to start from saved weights**
+  - `--init` starts from another policy's weights, even one from another task. A policy whose observations grew starts out acting exactly like its source.
+  - `--resume-from` continues the same task for more iterations.
+
+```bash
+python scripts/weights.py list                                         # every trained policy + scores
+python scripts/weights.py keep remote_latent_v2 hybrid --name v2_hybrid  # -> weights/v2_hybrid/
+python3 scripts/remote_run.py latent --reuse outputs/remote_latent_v2 --with-weights \
+    --args "--reward /content/a2h/inputs/reward.pt --policies task --init /content/a2h/inputs"   # Task <- Hybrid
+```
+
 **Colab notebook, interactive:** [`notebooks/video_to_policy.ipynb`](notebooks/video_to_policy.ipynb) on an L4 or A100 (SAM 3.1 needs more than a T4) covers clip → SAM → retarget → tracking policy.
 
 ## Repo map

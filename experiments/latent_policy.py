@@ -182,8 +182,12 @@ def main(a):
         if (d / "policy_metrics.json").exists():
             continue
         d.mkdir(exist_ok=True)
+        seed_checkpoint(d, name, a.resume_from)
         cmd = [sys.executable, ROOT / "train_motion.py", "--csv", tgt["csv"], "--fps", 30, "--out", d,
                "--iters", a.iters, "--num-envs", a.num_envs, "--task", task, "--bundle", bundle]
+        init = init_checkpoint(name, a.init)
+        if init:
+            cmd += ["--init", init]
         if name in TASK_FIRST:
             cmd += ["--task-spec", spec_f] + (["--importance", Path(a.importance).resolve()] if a.importance else [])
         if a.reward_config and name != "tracking":
@@ -246,6 +250,43 @@ def eval_bank(bank, bucket, vj, g1, out, smoke):
             bank = dict(list(bank.items())[:4])
         np.savez(f, **{k: vj.embed_dense(silhouette.robot_silhouettes(g1, q, azimuth=bucket)) for k, q in bank.items()})
     return dict(np.load(f))
+
+
+# A task-first policy can build off these when no weights of its own name are given.
+INIT_FALLBACK = {"task": ("hybrid", "tracking"), "taskphase": ("phase",)}
+
+
+def _newest(d):
+    c = sorted(Path(d).glob("model_*.pt"), key=lambda p: int(p.stem.split("_")[1]))
+    return c[-1] if c else None
+
+
+def init_checkpoint(name, specs):
+    """--init entries (name=checkpoint, or a run folder with policy_<name>/model_*.pt) -> the
+    checkpoint this policy starts from, or None. policy_weights.py adapts other tasks' weights."""
+    for s in specs:
+        if "=" in s:
+            k, v = s.split("=", 1)
+            if k == name:
+                return Path(v)
+    for s in (s for s in specs if "=" not in s):
+        for src in (name, *INIT_FALLBACK.get(name, ())):
+            c = _newest(Path(s) / f"policy_{src}")
+            if c:
+                return c
+    return None
+
+
+def seed_checkpoint(d, name, resume_from):
+    """--resume-from DIR: put DIR/policy_<name>'s newest checkpoint where train_motion.py looks for
+    an interrupted attempt, so it continues from there (same task, same motion)."""
+    c = resume_from and _newest(Path(resume_from) / f"policy_{name}")
+    if c and not any(d.glob("logs/*/*/model_*.pt")):
+        dst = d / "logs" / "resumed" / "from" / c.name
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        import shutil
+        shutil.copy(c, dst)
+        log(f"{name}: resuming from {c}")
 
 
 def retarget_bundle(bundle, tgt, g1, bucket, name):
@@ -329,6 +370,11 @@ if __name__ == "__main__":
                                             "next_reward_config.json (its iterations override --iters)")
     ap.add_argument("--importance", help="importance.json (per reference frame goal relevance) weighting the "
                                          "task-first policies' style terms")
+    ap.add_argument("--init", nargs="*", default=[],
+                    help="build policies off saved weights: name=model_*.pt, or a run folder (policy_<name>/"
+                         "model_*.pt; task <- hybrid/tracking, taskphase <- phase if it has none of its own)")
+    ap.add_argument("--resume-from", help="a run folder whose policy_<name>/model_*.pt checkpoints these policies "
+                                          "continue from (same task and motion); --iters is the new total")
     ap.add_argument("--max-clearance", type=float, default=0.30, help="most jump clearance (m) asked of the G1")
     ap.add_argument("--smoke", action="store_true")
     a = ap.parse_args()

@@ -20,6 +20,7 @@ Progress goes to outputs/remote_<job>/runner.log. Needs `colab` logged in (oauth
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -33,6 +34,10 @@ REMOTE = "/content/a2h"
 OUT = SESSION = None  # set in main()
 
 
+def latent_out(a):
+    return f"{REMOTE}/outputs/latent_{'smoke' if a.smoke else a.tag or a.target}"
+
+
 def job_spec(a):
     """(setup flag, command run in the repo after setup, {local name: remote path} to fetch)."""
     if a.job == "probe":
@@ -43,7 +48,7 @@ def job_spec(a):
         out, inp = f"{REMOTE}/outputs/robust" + (f"_{a.tag}" if a.tag else ""), f"{REMOTE}/inputs"
         return ("--with-main", f"python3 experiments/robustness_eval.py --runs {inp} --out {out} --target {a.target} {a.args}",
                 {"robust.json": f"{out}/robust.json", "rollouts.npz": f"{out}/rollouts.npz"})
-    out = f"{REMOTE}/outputs/latent_{'smoke' if a.smoke else a.tag or a.target}"
+    out = latent_out(a)
     cmd = f"python3 experiments/latent_policy.py {{clips}} --target {a.target} --out {out} --iters {a.iters} {a.args}"
     if a.reuse:
         inp = f"{REMOTE}/inputs"
@@ -98,11 +103,18 @@ def check_token():
         raise SystemExit("HF token in .env is invalid or lacks SAM 3.1 access; update .env and rerun.")
 
 
-def pack_reuse(src, policies=False):
-    """An earlier run's processed clips and policy rollouts, as one archive to upload."""
-    src = Path(src)
+def pack_reuse(src, policies=False, checkpoints=None):
+    """An earlier run's processed clips and policy rollouts, as one archive to upload. policies: its
+    trained weights too (robust job; latent jobs with --with-weights, for --init/--resume-from).
+    checkpoints: this run's own synced checkpoints (retry after a lost VM) -> inputs/checkpoints."""
     f = OUT / "inputs.tar.gz"
     with tarfile.open(f, "w:gz") as tar:
+        if checkpoints:
+            for q in Path(checkpoints).glob("policy_*/model_*.pt"):
+                tar.add(q, f"checkpoints/{q.parent.name}/{q.name}")
+        if not src:
+            return f
+        src = Path(src)
         tar.add(src / "clips", "clips")
         for q in src.glob("policy_*/policy_qpos.npy"):
             tar.add(q, f"{q.parent.name}/{q.name}")
@@ -183,6 +195,34 @@ def pull_log():
         log(f"could not download job.log: {e}")
 
 
+def sync_checkpoints(a):
+    """Newest checkpoint of every policy still training -> OUT/checkpoints/policy_*/ (a few MB each),
+    so a lost VM costs at most the last sync interval of training, not the run."""
+    if a.job != "latent":
+        return
+    tar = f"{REMOTE}/ckpt_sync.tar"
+    try:
+        _exec(f"""
+import glob, os, tarfile
+out = "{latent_out(a)}"
+with tarfile.open("{tar}", "w") as t:
+    for d in glob.glob(out + "/policy_*"):
+        c = sorted(glob.glob(d + "/logs/*/*/model_*.pt"), key=lambda p: int(p.rsplit("_", 1)[1][:-3]))
+        if c:
+            t.add(c[-1], os.path.basename(d) + "/" + os.path.basename(c[-1]))
+""")
+        colab("download", "-s", SESSION, tar, str(OUT / "ckpt_sync.tar"), timeout=600)
+        with tarfile.open(OUT / "ckpt_sync.tar") as t:
+            names = t.getnames()
+            if names:
+                shutil.rmtree(OUT / "checkpoints", ignore_errors=True)
+                t.extractall(OUT / "checkpoints", filter="data")
+        if names:
+            log("synced checkpoints: " + ", ".join(names))
+    except Exception as e:
+        log(f"checkpoint sync failed: {e}")
+
+
 def fetch_results(fetch):
     pull_log()
     for local, remote in fetch.items():
@@ -206,7 +246,7 @@ def main(a):
     found = [] if a.smoke or a.reuse else wait_for_clips(a.min_clips, a.max_wait_h)
     if a.job == "robust" and not a.reuse:
         raise SystemExit("robust needs --reuse <a latent run's results folder>")
-    inputs = pack_reuse(a.reuse, policies=a.job == "robust") if a.reuse else None
+    inputs = pack_reuse(a.reuse, policies=a.job == "robust" or a.with_weights) if a.reuse else None
     if found:
         log(f"clips ready: {', '.join(p.name for p in found)}")
         check_token()
@@ -224,6 +264,7 @@ def main(a):
                 keeper = keep_busy()  # the exec connection dropped; keep the VM busy again
             if state == "running" and polls % 5 == 0:
                 pull_log()
+                sync_checkpoints(a)
         keeper.kill()
         log(f"job state: {state} (attempt {attempt})")
         if state in ("done", "failed"):
@@ -231,6 +272,11 @@ def main(a):
             break
         log("VM lost; retrying on a fresh one")
         colab("stop", "-s", SESSION, check=False)
+        if any((OUT / "checkpoints").glob("policy_*/model_*.pt")):  # carry on from the last sync
+            inputs = pack_reuse(a.reuse, policies=a.job == "robust" or a.with_weights, checkpoints=OUT / "checkpoints")
+            if "--resume-from" not in cmd:
+                cmd += f" --resume-from {REMOTE}/inputs/checkpoints"
+            log("retry resumes from the synced checkpoints")
     colab("stop", "-s", SESSION, check=False)
     log(f"VM stopped. Results in {OUT}")
 
@@ -245,5 +291,7 @@ if __name__ == "__main__":
     ap.add_argument("--smoke", action="store_true")
     ap.add_argument("--tag", default="", help="names the run (outputs/remote_<job>_<tag>)")
     ap.add_argument("--reuse", help="an earlier latent run's results folder: its clips and rollouts")
+    ap.add_argument("--with-weights", action="store_true",
+                    help="with --reuse: upload its trained policies too (for --args '--init/--resume-from /content/a2h/inputs')")
     ap.add_argument("--args", default="", help="extra flags for the job's script (latent_policy.py, robustness_eval.py)")
     main(ap.parse_args())

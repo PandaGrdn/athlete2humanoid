@@ -262,5 +262,7 @@ for task, scale, phase in (("A2H-Task-Flat-Unitree-G1", 0.1, False), ("A2H-TaskP
 
 
 if __name__ == "__main__":
+    import policy_weights
     from mjlab.scripts.train import main
+    policy_weights.patch_mjlab_train()  # A2H_INIT_CHECKPOINT: resume or build off saved weights
     main()

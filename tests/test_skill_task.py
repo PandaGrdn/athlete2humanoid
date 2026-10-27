@@ -4,12 +4,16 @@ and success depends on doing the stages in order, not on copying the reference's
     python -m unittest tests.test_skill_task
 """
 
+import importlib.util
 import unittest
 
-import numpy as np
-import torch
+if all(importlib.util.find_spec(m) for m in ("numpy", "torch")):
+    import numpy as np
+    import torch
 
-from skill import task as T
+    from skill import task as T
+else:  # e.g. a bare system Python: the rest of the suite still runs
+    raise unittest.SkipTest("needs numpy and torch")
 
 FPS = 30.0
 

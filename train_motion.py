@@ -5,6 +5,12 @@ Runs in the main env; mjlab steps run in mjlab's own virtualenv (A2H_MJLAB_PYTHO
     python train_motion.py --csv outputs/squat/motion.csv --fps 30 --out outputs/squat --iters 1500
     python train_motion.py ... --task A2H-Hybrid-Flat-Unitree-G1 --bundle reward.pt  # latent reward
     python train_motion.py ... --reward-config next_reward_config.json  # muse/reward_agent.py's proposal
+    python train_motion.py ... --init outputs/run/policy_hybrid/model_1999.pt   # build off saved weights
+
+Weights are never thrown away: checkpoints every 250 iterations, and weights.json records what the
+policy was trained from. If an earlier attempt in the same --out left checkpoints (the VM died), it
+resumes from the newest instead of starting over. --init starts from another policy's weights, of
+the same or another task (policy_weights.py adapts grown observations).
 """
 
 import argparse
@@ -27,7 +33,7 @@ def run(cmd, **kw):
 
 
 def train_motion(csv, fps, out, iters=1500, num_envs=4096, mjlab_python=None, task=TASK, bundle=None,
-                 reward_config=None, task_spec=None, importance=None):
+                 reward_config=None, task_spec=None, importance=None, init=None):
     py = Path(mjlab_python or os.environ.get("A2H_MJLAB_PYTHON", "/content/mjlab_env/bin/python"))
     out = Path(out).resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -45,8 +51,21 @@ def train_motion(csv, fps, out, iters=1500, num_envs=4096, mjlab_python=None, ta
         iters = int(rc.get("iterations", iters))
         (out / "reward_config.json").write_text(json.dumps(rc | {"iterations": iters}, indent=1))
         env["A2H_REWARD_CONFIG"] = str(out / "reward_config.json")
-    # Our tasks (mjlab_tasks.py) register themselves and then hand over to mjlab's trainer.
-    trainer = [py.parent / "train"] if task == TASK else [py, ROOT / "mjlab_tasks.py"]
+    log_root = out / "logs"
+    done = sorted(glob.glob(f"{log_root}/*/*/model_*.pt"), key=lambda p: int(Path(p).stem.split("_")[1]))
+    start = {}
+    if done:  # an interrupted attempt: carry on from its newest checkpoint
+        last = int(Path(done[-1]).stem.split("_")[1])
+        start = {"mode": "resume", "checkpoint": done[-1], "iteration": last}
+        iters = max(iters - last, 1)
+    elif init:
+        start = {"mode": "init", "checkpoint": str(Path(init).resolve())}
+    if start:
+        env["A2H_INIT_CHECKPOINT"], env["A2H_INIT_MODE"] = start["checkpoint"], start["mode"]
+        print(f"starting from {start}", flush=True)
+    # Our tasks (mjlab_tasks.py) register themselves and then hand over to mjlab's trainer, which
+    # (policy_weights.py) starts from A2H_INIT_CHECKPOINT when set.
+    trainer = [py.parent / "train"] if task == TASK and not start else [py, ROOT / "mjlab_tasks.py"]
 
     # 1. CSV -> motion.npz (forward kinematics at 50 fps). The converter always writes
     #    /tmp/motion.npz and then "uploads" it to W&B, which WANDB_MODE=disabled makes a no-op.
@@ -58,7 +77,6 @@ def train_motion(csv, fps, out, iters=1500, num_envs=4096, mjlab_python=None, ta
         shutil.copy("/tmp/motion.npz", npz)
 
     # 2. PPO motion tracking.
-    log_root = out / "logs"
     run([*trainer, task, "--env.commands.motion.motion-file", npz,
          "--env.scene.num-envs", num_envs, "--agent.max-iterations", iters,
          "--agent.save-interval", 250, "--agent.logger", "tensorboard", "--log-root", log_root],
@@ -66,6 +84,12 @@ def train_motion(csv, fps, out, iters=1500, num_envs=4096, mjlab_python=None, ta
 
     # 3. Roll out the last checkpoint headless.
     ckpt = max(glob.glob(f"{log_root}/*/*/model_*.pt"), key=lambda p: int(Path(p).stem.split("_")[1]))
+    ck = Path(ckpt).resolve()
+    meta = {"task": task, "checkpoint": str(ck.relative_to(out) if ck.is_relative_to(out) else ck), "iterations": int(Path(ckpt).stem.split("_")[1]) + 1,
+            "started_from": start or None, "motion_csv": str(csv), "fps": fps, "num_envs": num_envs,
+            **{k: str(Path(v).resolve()) for k, v in (("bundle", bundle), ("task_spec", task_spec),
+                                                     ("importance", importance), ("reward_config", reward_config)) if v}}
+    (out / "weights.json").write_text(json.dumps(meta, indent=1))
     run([py, ROOT / "mjlab_rollout.py", "--checkpoint", ckpt, "--motion", npz, "--out", out, "--task", task], env=env)
     return out
 
@@ -82,6 +106,7 @@ if __name__ == "__main__":
     ap.add_argument("--reward-config", help="reward settings for the A2H tasks (JSON); its iterations override --iters")
     ap.add_argument("--task-spec", help="skill/task.py task_spec.json for the A2H-Task tasks")
     ap.add_argument("--importance", help="importance.json weighting the A2H-Task tasks' style terms")
+    ap.add_argument("--init", help="start from this checkpoint (model_*.pt) instead of from scratch")
     a = ap.parse_args()
     train_motion(a.csv, a.fps, a.out, a.iters, a.num_envs, task=a.task, bundle=a.bundle, reward_config=a.reward_config,
-                 task_spec=a.task_spec, importance=a.importance)
+                 task_spec=a.task_spec, importance=a.importance, init=a.init)

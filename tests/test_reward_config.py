@@ -125,7 +125,8 @@ class RewardConfigTest(unittest.TestCase):
         calls = []
         with mock.patch.object(train_motion, "run", lambda cmd, **kw: calls.append((cmd, kw))), \
                 mock.patch.object(train_motion.shutil, "copy"), \
-                mock.patch.object(train_motion.glob, "glob", lambda p: [f"{self.tmp}/logs/a/b/model_7.pt"]), \
+                mock.patch.object(train_motion.glob, "glob",  # no checkpoints until training has run
+                                  lambda p: [f"{self.tmp}/logs/a/b/model_7.pt"] if len(calls) > 1 else []), \
                 mock.patch.object(train_motion, "open", mock.mock_open(), create=True), \
                 mock.patch.object(train_motion.fcntl, "flock"):
             train_motion.train_motion(self.tmp / "m.csv", 30, self.tmp / "out", iters=1500,
