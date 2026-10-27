@@ -12,6 +12,11 @@ Runs inside mjlab's virtualenv; takes the same flags as mjlab's `train`:
   either: its inputs are its own body state and a clock (the motion's phase). The retarget only
   gives the starting states and, for the critic during training, privileged information.
 
+- A2H-Task-Flat-Unitree-G1 / A2H-TaskPhase-Flat-Unitree-G1: task first. A2H_TASK_SPEC=task_spec.json
+  (skill/task.py) says what the action is, as stages (stand, squat, jump, land); the reward is for
+  doing them in order, however and whenever. The latent (and, for Task, 0.1x tracking) is a weak
+  style term, optionally weighted in time by A2H_IMPORTANCE; episodes end on falls only.
+
 A2H_REWARD_CONFIG=next_reward_config.json (muse/reward_agent.py's format; train_motion.py
 --reward-config sets it) overrides the latent weight, SIGMA, tracking scale and termination
 thresholds below. The latent-only tasks keep tracking_scale 0.
@@ -27,10 +32,12 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from latent.reward_net import BODIES, FPS, WINDOW, load_bundle, window_center_step  # noqa: E402
+from skill import task as skill_task  # noqa: E402
 
 import mjlab.tasks  # noqa: E402,F401  (registers mjlab's own tasks)
 from mjlab.managers.observation_manager import ObservationTermCfg  # noqa: E402
 from mjlab.managers.reward_manager import RewardTermCfg  # noqa: E402
+from mjlab.managers.termination_manager import TerminationTermCfg  # noqa: E402
 from mjlab.tasks.registry import register_mjlab_task  # noqa: E402
 from mjlab.tasks.tracking.config.g1.env_cfgs import unitree_g1_flat_tracking_env_cfg  # noqa: E402
 from mjlab.tasks.tracking.config.g1.rl_cfg import unitree_g1_tracking_ppo_runner_cfg  # noqa: E402
@@ -140,10 +147,117 @@ def latent_env_cfg(tracking_scale, play=False, phase_only=False):
     return cfg
 
 
+TASK_SPEC_ENV, IMPORTANCE_ENV = "A2H_TASK_SPEC", "A2H_IMPORTANCE"
+
+
+class TaskReward:
+    """skill/task.py's stage machine as a reward term: the video's action (e.g. stand, squat, jump,
+    land, in that order) scored on the robot's own body. Poses and timing are free; an episode that
+    starts mid-motion starts at the stage the reference is in then."""
+
+    def __init__(self, cfg, env):
+        self.cmd = env.command_manager.get_term("motion")
+        assert tuple(self.cmd.cfg.body_names) == BODIES, "skill/task.py indexes mjlab's G1 tracking bodies"
+        spec = json.loads(Path(os.environ[TASK_SPEC_ENV]).read_text())
+        self.m = skill_task.StageMachine(spec, env.num_envs, env.device, env.step_dt)
+        self.dt = env.step_dt
+        self.last_ts = torch.full((env.num_envs,), -10, dtype=torch.long, device=env.device)
+        env.a2h_task = self.m  # for the task_stage observation
+
+    def reset(self, env_ids=None):
+        self.last_ts[slice(None) if env_ids is None else env_ids] = -10
+
+    def __call__(self, env, **kwargs):
+        ts, pos = self.cmd.time_steps, self.cmd.robot_body_pos_w
+        jumped = (ts != self.last_ts + 1).nonzero().squeeze(1)  # reset, or motion wrapped around
+        if len(jumped):
+            self.m.reset(jumped, ts[jumped] * self.dt, pos[jumped])
+        self.last_ts = ts.clone()
+        return self.m.step(pos)
+
+
+def task_stage(env):
+    """The policy's view of the task: which stage it is in (one-hot), its progress, finished."""
+    m = getattr(env, "a2h_task", None)
+    if m is None:  # observations are sized before the reward terms exist
+        return torch.zeros(env.num_envs, skill_task.MAX_STAGES + 2, device=env.device)
+    return m.obs()
+
+
+def fallen(env, command_name="motion"):
+    """Absolute fall rule (torso low or tilted; robustness_eval's), not distance from the retarget."""
+    return skill_task.fallen(env.command_manager.get_term(command_name).robot_body_pos_w)
+
+
+class TimeWeighted:
+    """A style term (latent or tracking) weighted by how much the reference's current moment matters
+    for the goal: A2H_IMPORTANCE = importance.json {"fps": f, "weight": [per reference frame, 0..1]}
+    from the goal-relevance analysis. E.g. arm-waving before a jump gets ~0: not imitated."""
+
+    def __init__(self, cfg, env):
+        inner = cfg.params["inner"]
+        self.inner = inner(cfg, env) if isinstance(inner, type) else inner
+        imp = json.loads(Path(os.environ[IMPORTANCE_ENV]).read_text())
+        self.w = torch.tensor(imp["weight"], dtype=torch.float32, device=env.device)
+        self.fps, self.dt = float(imp["fps"]), env.step_dt
+        self.cmd = env.command_manager.get_term("motion")
+
+    def reset(self, env_ids=None):
+        if hasattr(self.inner, "reset"):
+            self.inner.reset(env_ids)
+
+    def __call__(self, env, inner=None, inner_params=None, **kwargs):
+        i = (self.cmd.time_steps * self.dt * self.fps).long().clamp(0, len(self.w) - 1)
+        return self.inner(env, **(inner_params or {})) * self.w[i]
+
+
+def task_config():
+    """Weights of the task-first tasks: the stage reward leads, V-JEPA latent style follows (both in
+    seconds of unit reward; see skill/task.py WEIGHTS). Overridable via A2H_REWARD_CONFIG."""
+    tc = {"task_weight": 2.0, "style_weight": 1.0}
+    path = os.environ.get(REWARD_CONFIG_ENV)
+    if path:
+        user = json.loads(Path(path).read_text())
+        tc |= {k: float(user[k]) for k in tc if k in user}
+    return tc
+
+
+def task_env_cfg(tracking_scale, play=False, phase_only=False):
+    """Task-first hybrid: the semantic stage reward leads; the V-JEPA latent and (when
+    tracking_scale > 0) the tracking terms are weak style terms, weighted in time by goal importance
+    when A2H_IMPORTANCE is set; episodes end on falls only, never for leaving the retarget."""
+    cfg = latent_env_cfg(tracking_scale, play=play, phase_only=phase_only)
+    tc = task_config()
+    cfg.rewards["task"] = RewardTermCfg(func=TaskReward, weight=tc["task_weight"])
+    if tc["style_weight"] and os.environ.get("A2H_LATENT_BUNDLE"):
+        cfg.rewards["latent"].weight = tc["style_weight"]
+    else:
+        del cfg.rewards["latent"]
+    if os.environ.get(IMPORTANCE_ENV):
+        for k in ("latent", *TRACKING_TERMS):
+            if k in cfg.rewards:
+                t = cfg.rewards[k]
+                cfg.rewards[k] = RewardTermCfg(func=TimeWeighted, weight=t.weight,
+                                               params={"inner": t.func, "inner_params": t.params})
+    for group in ("actor", "critic"):
+        if group in cfg.observations:
+            cfg.observations[group].terms["task_stage"] = ObservationTermCfg(func=task_stage)
+    for k in ("anchor_pos", "anchor_ori", "ee_body_pos"):
+        cfg.terminations.pop(k, None)
+    cfg.terminations["fallen"] = TerminationTermCfg(func=fallen)
+    return cfg
+
+
 for task, scale, phase in (("A2H-Hybrid-Flat-Unitree-G1", 0.2, False), ("A2H-Latent-Flat-Unitree-G1", 0.0, False),
                           ("A2H-LatentPhase-Flat-Unitree-G1", 0.0, True)):
     register_mjlab_task(task_id=task, env_cfg=latent_env_cfg(scale, phase_only=phase),
                         play_env_cfg=latent_env_cfg(scale, play=True, phase_only=phase),
+                        rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
+# Task-first: Task keeps the retarget as the policy's input and a 0.1x tracking style term;
+# TaskPhase sees only its own body, the clock and the task stage, and is never scored on the retarget.
+for task, scale, phase in (("A2H-Task-Flat-Unitree-G1", 0.1, False), ("A2H-TaskPhase-Flat-Unitree-G1", 0.0, True)):
+    register_mjlab_task(task_id=task, env_cfg=task_env_cfg(scale, phase_only=phase),
+                        play_env_cfg=task_env_cfg(scale, play=True, phase_only=phase),
                         rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
 
 

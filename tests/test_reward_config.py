@@ -26,6 +26,7 @@ DATA = ROOT / "tests" / "data" / "remote_latent"
 TRACKING = ("motion_global_root_pos", "motion_global_root_ori", "motion_body_pos",
             "motion_body_ori", "motion_body_lin_vel", "motion_body_ang_vel")
 HYBRID, LATENT = "A2H-Hybrid-Flat-Unitree-G1", "A2H-Latent-Flat-Unitree-G1"
+TASK, TASK_PHASE = "A2H-Task-Flat-Unitree-G1", "A2H-TaskPhase-Flat-Unitree-G1"
 
 
 class RewardTermCfg:
@@ -36,32 +37,36 @@ class RewardTermCfg:
 def stub_env_cfg(play=False):
     """The parts of mjlab's G1 tracking env cfg that mjlab_tasks edits; tracking weights 1, thresholds 0.25."""
     actor = {k: None for k in ("command", "motion_anchor_pos_b", "motion_anchor_ori_b", "joint_pos")}
-    return SimpleNamespace(observations={"actor": SimpleNamespace(terms=actor)},
-                           rewards={k: SimpleNamespace(weight=1.0) for k in TRACKING},
+    critic = {k: None for k in ("command", "joint_pos")}
+    return SimpleNamespace(observations={"actor": SimpleNamespace(terms=actor), "critic": SimpleNamespace(terms=critic)},
+                           rewards={k: SimpleNamespace(weight=1.0, func=k, params={}) for k in TRACKING},
                            terminations={k: SimpleNamespace(params={"threshold": 0.25})
                                          for k in ("anchor_pos", "anchor_ori", "ee_body_pos")})
 
 
-def import_mjlab_tasks(reward_config=None):
+def import_mjlab_tasks(reward_config=None, extra_env=None):
     """-> (module, {task_id: env_cfg}) with mjlab, torch, numpy and latent.reward_net stubbed."""
     registered = {}
     mods = {n: types.ModuleType(n) for n in (
         "torch", "numpy", "latent.reward_net", "mjlab", "mjlab.tasks", "mjlab.managers",
-        "mjlab.managers.reward_manager", "mjlab.managers.observation_manager", "mjlab.tasks.registry", "mjlab.tasks.tracking",
+        "mjlab.managers.reward_manager", "mjlab.managers.observation_manager", "mjlab.managers.termination_manager",
+        "mjlab.tasks.registry", "mjlab.tasks.tracking",
         "mjlab.tasks.tracking.config", "mjlab.tasks.tracking.config.g1", "mjlab.tasks.tracking.config.g1.env_cfgs",
         "mjlab.tasks.tracking.config.g1.rl_cfg", "mjlab.tasks.tracking.rl")}
     rn = mods["latent.reward_net"]
     rn.BODIES, rn.FPS, rn.WINDOW, rn.load_bundle, rn.window_center_step = (), 30.0, 32, None, None
     mods["mjlab.managers.reward_manager"].RewardTermCfg = RewardTermCfg
     mods["mjlab.managers.observation_manager"].ObservationTermCfg = lambda **kw: SimpleNamespace(**kw)
+    mods["mjlab.managers.termination_manager"].TerminationTermCfg = lambda **kw: SimpleNamespace(**kw)
     mods["mjlab.tasks.registry"].register_mjlab_task = lambda task_id, env_cfg, **kw: registered.update({task_id: env_cfg})
     mods["mjlab.tasks.tracking.config.g1.env_cfgs"].unitree_g1_flat_tracking_env_cfg = stub_env_cfg
     mods["mjlab.tasks.tracking.config.g1.rl_cfg"].unitree_g1_tracking_ppo_runner_cfg = lambda: None
     mods["mjlab.tasks.tracking.rl"].MotionTrackingOnPolicyRunner = object
-    env = {"A2H_REWARD_CONFIG": str(reward_config)} if reward_config else {}
+    env = ({"A2H_REWARD_CONFIG": str(reward_config)} if reward_config else {}) | (extra_env or {})
     with mock.patch.dict(sys.modules, mods), mock.patch.dict(os.environ, env):
-        if not reward_config:
-            os.environ.pop("A2H_REWARD_CONFIG", None)
+        for k in ("A2H_REWARD_CONFIG", "A2H_IMPORTANCE", "A2H_LATENT_BUNDLE"):
+            if k not in env:
+                os.environ.pop(k, None)
         sys.modules.pop("mjlab_tasks", None)
         module = importlib.import_module("mjlab_tasks")
         sys.modules.pop("mjlab_tasks", None)
@@ -139,6 +144,31 @@ class RewardConfigTest(unittest.TestCase):
         c = mc.make_client(dry_run=True, default_fixture="reward_proposal_remote_latent.json")
         p = ra.propose(run, c, "hybrid", self.tmp / "out", frames=False)
         self.assertEqual(p["_meta"]["config"]["sigma"], 0.15)
+
+    def test_task_first_tasks(self):
+        mt, tasks = import_mjlab_tasks(extra_env={"A2H_LATENT_BUNDLE": "reward.pt"})
+        task, phase = tasks[TASK], tasks[TASK_PHASE]
+        for cfg in (task, phase):
+            self.assertIs(cfg.rewards["task"].func, mt.TaskReward)
+            self.assertEqual(cfg.rewards["task"].weight, 2.0)
+            self.assertEqual(cfg.rewards["latent"].weight, 1.0)
+            self.assertEqual(set(cfg.terminations), {"fallen"})  # never for leaving the retarget
+            self.assertIn("task_stage", cfg.observations["actor"].terms)
+        self.assertEqual({task.rewards[k].weight for k in TRACKING}, {0.1})
+        self.assertFalse(any(k in phase.rewards for k in TRACKING))
+        self.assertFalse(any(k in phase.observations["actor"].terms for k in mt.REFERENCE_OBS))
+        self.assertIn("command", task.observations["actor"].terms)
+
+    def test_task_without_latent_bundle_or_with_importance(self):
+        _, tasks = import_mjlab_tasks()
+        self.assertNotIn("latent", tasks[TASK].rewards)
+        mt, tasks = import_mjlab_tasks(extra_env={"A2H_LATENT_BUNDLE": "reward.pt", "A2H_IMPORTANCE": "imp.json"})
+        r = tasks[TASK].rewards
+        self.assertIs(r["latent"].func, mt.TimeWeighted)
+        self.assertIs(r["latent"].params["inner"], mt.LatentReward)
+        self.assertIs(r["motion_body_pos"].func, mt.TimeWeighted)
+        self.assertAlmostEqual(r["motion_body_pos"].weight, 0.1)
+        self.assertIs(r["task"].func, mt.TaskReward)  # the goal itself is never down-weighted
 
     def test_latent_variant_cannot_add_tracking(self):
         c = mc.make_client(dry_run=True, default_fixture="reward_proposal_remote_latent.json")

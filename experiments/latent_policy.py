@@ -9,7 +9,8 @@
 3. reward network (robot body trajectory -> V-JEPA latent), bundled with the target's latent
 4. policies on the target clip, in parallel: tracking (copy the retarget), hybrid (latent reward
    + weak tracking), latent (latent reward only), phase (latent reward only, and the policy sees
-   only its own state and a clock, not the retarget)
+   only its own state and a clock, not the retarget); task / taskphase: task first, the semantic
+   stage reward from skill/task.py's spec of the target (task_spec.json) leads, the latent is style
 5. evaluation with the real V-JEPA (not the distilled network): each rollout re-rendered as a
    silhouette and compared with the video, time-aligned and with DTW, against the bank
 
@@ -38,7 +39,9 @@ from latent import bank as motion_bank  # noqa: E402
 from latent.distill import unit  # noqa: E402
 
 TASKS = {"tracking": "Mjlab-Tracking-Flat-Unitree-G1", "hybrid": "A2H-Hybrid-Flat-Unitree-G1",
-         "latent": "A2H-Latent-Flat-Unitree-G1", "phase": "A2H-LatentPhase-Flat-Unitree-G1"}
+         "latent": "A2H-Latent-Flat-Unitree-G1", "phase": "A2H-LatentPhase-Flat-Unitree-G1",
+         "task": "A2H-Task-Flat-Unitree-G1", "taskphase": "A2H-TaskPhase-Flat-Unitree-G1"}
+TASK_FIRST = ("task", "taskphase")  # trained on the semantic task spec (skill/task.py)
 
 
 def log(msg):
@@ -112,12 +115,25 @@ def main(a):
     bucket = int(round(tgt["az"] / AZ_BUCKET) * AZ_BUCKET)
     log(f"target {a.target}: viewpoint {tgt['az']:.0f} deg (renders at {bucket}), {len(tgt['dense'])} latent steps")
 
+    # What the action is, read off the target's retarget (G1-sized) and Muse's skill spec if any.
+    from skill import task as skill_task
+    spec_f = out / "task_spec.json"
+    if not spec_f.exists():
+        sk = tgt["dir"] / "skill_spec.json"
+        spec = skill_task.compile_spec(distill.body_positions(g1, tgt["qpos"]), 30.0,
+                                       json.loads(sk.read_text()) if sk.exists() else None,
+                                       a.max_clearance, name=a.target)
+        spec_f.write_text(json.dumps(spec, indent=1))
+    spec = json.loads(spec_f.read_text())
+    log(f"task spec: {spec['summary']}" + "".join(f"; warning: {w}" for w in spec["warnings"]))
+
     bundle = out / "reward.pt"
     if a.reward and not bundle.exists():  # an earlier run's reward network: skips stages 2 and 3
         import shutil
         shutil.copy(a.reward, bundle)
         if (Path(a.reward).parent / "distill_report.json").exists():
             shutil.copy(Path(a.reward).parent / "distill_report.json", out / "distill_report.json")
+        retarget_bundle(bundle, tgt, g1, bucket, a.target)
 
     # 2. distillation dataset
     ds_f = out / "distill_dataset.npz"
@@ -168,6 +184,8 @@ def main(a):
         d.mkdir(exist_ok=True)
         cmd = [sys.executable, ROOT / "train_motion.py", "--csv", tgt["csv"], "--fps", 30, "--out", d,
                "--iters", a.iters, "--num-envs", a.num_envs, "--task", task, "--bundle", bundle]
+        if name in TASK_FIRST:
+            cmd += ["--task-spec", spec_f] + (["--importance", Path(a.importance).resolve()] if a.importance else [])
         if a.reward_config and name != "tracking":
             cmd += ["--reward-config", Path(a.reward_config).resolve()]
         procs[name] = subprocess.Popen(list(map(str, cmd)), stdout=open(d / "train.log", "w"), stderr=subprocess.STDOUT)
@@ -202,6 +220,9 @@ def main(a):
         res = {"aligned": aligned(H, R), "dtw": float(score), "chamfer": float(chamfer(H, R)),
                "dtw_rank_vs_bank": 1 + int(sum(v > score for v in others.values())),
                "reward_net_aligned": aligned(target_k.numpy(), pred), "real_aligned_in_reward_space": aligned(target_k.numpy(), real_k)}
+        sem = skill_task.evaluate(spec, distill.body_positions(g1, q), 30.0)
+        res |= {"task_success": sem["success"], "task_stages": f"{sem['stages_completed']}/{sem['stages_total']}",
+                "task_jump_quality": sem["jump_quality"], "task_fell_at_s": sem["fell_at_s"]}
         m = out / f"policy_{name}" / "policy_metrics.json"
         if m.exists():
             res |= {k: v for k, v in json.loads(m.read_text()).items() if k != "checkpoint"}
@@ -227,6 +248,25 @@ def eval_bank(bank, bucket, vj, g1, out, smoke):
     return dict(np.load(f))
 
 
+def retarget_bundle(bundle, tgt, g1, bucket, name):
+    """Point a reused reward bundle at this run's target: its network maps robot motion into the
+    latent space of every clip rendered at its viewpoint, so only the target latent and cos_ref
+    (how well this target's retarget scores) change."""
+    from latent.reward_net import load_bundle
+    net, _, b = load_bundle(bundle)
+    if int(round(b["azimuth"])) != bucket:
+        raise SystemExit(f"--reward was distilled at {b['azimuth']:.0f} deg; {name} renders at {bucket}")
+    target = distill.video_target(tgt["centred"], b["h_mean"], b["basis"])
+    pred = distill.predict(net, distill.body_positions(g1, tgt["qpos"]))
+    n = min(len(pred), len(target))
+    cos = (unit(pred[:n]) * unit(target[:n])).sum(-1)
+    cos_ref = uniform_filter1d(np.pad(cos, (0, len(target) - n), mode="edge"), 5)
+    rep = dict(b["report"], target=name, cos_ref_mean=float(cos_ref.mean()))
+    distill.save_bundle(bundle, net, b["basis"], b["r_mean"], b["h_mean"], target, cos_ref,
+                        b["video_fps"], rep, b["azimuth"])
+    log(f"reward bundle retargeted to {name}: cos_ref_mean {cos_ref.mean():.3f}")
+
+
 def comparison_video(tgt, sils, path):
     """Video silhouette next to each robot's silhouette, same framing V-JEPA saw."""
     import cv2
@@ -249,7 +289,7 @@ def comparison_video(tgt, sils, path):
 def pack(out, hum):
     """One small archive with everything worth keeping (pulled back to the laptop)."""
     with tarfile.open(out / "results.tar.gz", "w:gz") as tar:
-        for f in ["eval.json", "distill_report.json", "reward.pt", "comparison.mp4"]:
+        for f in ["eval.json", "distill_report.json", "reward.pt", "comparison.mp4", "task_spec.json"]:
             if (out / f).exists():
                 tar.add(out / f, f)
         for d in out.glob("policy_*"):
@@ -286,6 +326,9 @@ if __name__ == "__main__":
     ap.add_argument("--num-envs", type=int, default=4096)
     ap.add_argument("--reward-config", help="hybrid/latent reward settings, e.g. muse/reward_agent.py's "
                                             "next_reward_config.json (its iterations override --iters)")
+    ap.add_argument("--importance", help="importance.json (per reference frame goal relevance) weighting the "
+                                         "task-first policies' style terms")
+    ap.add_argument("--max-clearance", type=float, default=0.30, help="most jump clearance (m) asked of the G1")
     ap.add_argument("--smoke", action="store_true")
     a = ap.parse_args()
     if a.smoke:

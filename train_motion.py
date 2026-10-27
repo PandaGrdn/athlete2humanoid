@@ -27,13 +27,17 @@ def run(cmd, **kw):
 
 
 def train_motion(csv, fps, out, iters=1500, num_envs=4096, mjlab_python=None, task=TASK, bundle=None,
-                 reward_config=None):
+                 reward_config=None, task_spec=None, importance=None):
     py = Path(mjlab_python or os.environ.get("A2H_MJLAB_PYTHON", "/content/mjlab_env/bin/python"))
     out = Path(out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, MUJOCO_GL="egl", WANDB_MODE="disabled")
     if bundle:
         env["A2H_LATENT_BUNDLE"] = str(Path(bundle).resolve())
+    if task_spec:  # the task-first tasks' stage reward (skill/task.py)
+        env["A2H_TASK_SPEC"] = str(Path(task_spec).resolve())
+    if importance:  # per reference frame goal relevance, weighting their style terms
+        env["A2H_IMPORTANCE"] = str(Path(importance).resolve())
     if reward_config:
         # Read by mjlab_tasks.latent_env_cfg (the A2H tasks); its iterations replace `iters`. The copy
         # in `out` records what this policy was trained with, for muse/reward_agent.py.
@@ -76,5 +80,8 @@ if __name__ == "__main__":
     ap.add_argument("--task", default=TASK)
     ap.add_argument("--bundle", help="latent reward bundle (latent/distill.py) for the A2H tasks")
     ap.add_argument("--reward-config", help="reward settings for the A2H tasks (JSON); its iterations override --iters")
+    ap.add_argument("--task-spec", help="skill/task.py task_spec.json for the A2H-Task tasks")
+    ap.add_argument("--importance", help="importance.json weighting the A2H-Task tasks' style terms")
     a = ap.parse_args()
-    train_motion(a.csv, a.fps, a.out, a.iters, a.num_envs, task=a.task, bundle=a.bundle, reward_config=a.reward_config)
+    train_motion(a.csv, a.fps, a.out, a.iters, a.num_envs, task=a.task, bundle=a.bundle, reward_config=a.reward_config,
+                 task_spec=a.task_spec, importance=a.importance)
