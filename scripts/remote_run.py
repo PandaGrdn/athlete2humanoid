@@ -5,6 +5,8 @@
     python3 scripts/remote_run.py latent --smoke            # the same, tiny, no clips: plumbing test
     python3 scripts/remote_run.py latent --tag v2 --reuse outputs/remote_latent   # a follow-up run:
         # an earlier run's processed clips (no SAM) and its policies' rollouts (DAgger data)
+    python3 scripts/remote_run.py robust --reuse outputs/remote_latent   # that run's policies under
+        # perturbation (experiments/robustness_eval.py) -> outputs/remote_robust/robust.json
 
 1. waits until at least --min-clips videos sit in clips/ and stop changing (copy finished)
 2. checks the HF token in .env before spending GPU time
@@ -37,6 +39,10 @@ def job_spec(a):
         out = f"{REMOTE}/outputs/cross_embodiment"
         return ("--with-sam", f"python3 experiments/cross_embodiment_probe.py {{clips}} --out {out}",
                 {"cross_embodiment.json": f"{out}/cross_embodiment.json"})
+    if a.job == "robust":
+        out, inp = f"{REMOTE}/outputs/robust" + (f"_{a.tag}" if a.tag else ""), f"{REMOTE}/inputs"
+        return ("--with-main", f"python3 experiments/robustness_eval.py --runs {inp} --out {out} --target {a.target} {a.args}",
+                {"robust.json": f"{out}/robust.json", "rollouts.npz": f"{out}/rollouts.npz"})
     out = f"{REMOTE}/outputs/latent_{'smoke' if a.smoke else a.tag or a.target}"
     cmd = f"python3 experiments/latent_policy.py {{clips}} --target {a.target} --out {out} --iters {a.iters} {a.args}"
     if a.reuse:
@@ -92,7 +98,7 @@ def check_token():
         raise SystemExit("HF token in .env is invalid or lacks SAM 3.1 access; update .env and rerun.")
 
 
-def pack_reuse(src):
+def pack_reuse(src, policies=False):
     """An earlier run's processed clips and policy rollouts, as one archive to upload."""
     src = Path(src)
     f = OUT / "inputs.tar.gz"
@@ -100,9 +106,14 @@ def pack_reuse(src):
         tar.add(src / "clips", "clips")
         for q in src.glob("policy_*/policy_qpos.npy"):
             tar.add(q, f"{q.parent.name}/{q.name}")
-        for f in ("reward.pt", "distill_report.json"):  # used only with --args "--reward ..."
-            if (src / f).exists():
-                tar.add(src / f, f)
+        for name in ("reward.pt", "distill_report.json"):  # used only with --args "--reward ..."
+            if (src / name).exists():
+                tar.add(src / name, name)
+        if policies:  # the robust job: the trained policies themselves, and their eval
+            for q in [*src.glob("policy_*/model_*.pt"), *src.glob("policy_*/motion.npz")]:
+                tar.add(q, f"{q.parent.name}/{q.name}")
+            if (src / "eval.json").exists():
+                tar.add(src / "eval.json", "eval.json")
     return f
 
 
@@ -193,7 +204,9 @@ def main(a):
     OUT.mkdir(parents=True, exist_ok=True)
     setup, cmd, fetch = job_spec(a)
     found = [] if a.smoke or a.reuse else wait_for_clips(a.min_clips, a.max_wait_h)
-    inputs = pack_reuse(a.reuse) if a.reuse else None
+    if a.job == "robust" and not a.reuse:
+        raise SystemExit("robust needs --reuse <a latent run's results folder>")
+    inputs = pack_reuse(a.reuse, policies=a.job == "robust") if a.reuse else None
     if found:
         log(f"clips ready: {', '.join(p.name for p in found)}")
         check_token()
@@ -224,7 +237,7 @@ def main(a):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("job", choices=["probe", "latent"])
+    ap.add_argument("job", choices=["probe", "latent", "robust"])
     ap.add_argument("--min-clips", type=int, default=6)
     ap.add_argument("--max-wait-h", type=float, default=8)
     ap.add_argument("--target", default="squat")
@@ -232,5 +245,5 @@ if __name__ == "__main__":
     ap.add_argument("--smoke", action="store_true")
     ap.add_argument("--tag", default="", help="names the run (outputs/remote_<job>_<tag>)")
     ap.add_argument("--reuse", help="an earlier latent run's results folder: its clips and rollouts")
-    ap.add_argument("--args", default="", help="extra flags for experiments/latent_policy.py")
+    ap.add_argument("--args", default="", help="extra flags for the job's script (latent_policy.py, robustness_eval.py)")
     main(ap.parse_args())
