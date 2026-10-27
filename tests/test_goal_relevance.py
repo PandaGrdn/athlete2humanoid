@@ -219,6 +219,11 @@ class TestPredictorPlumbing(unittest.TestCase):
         self.assertTrue(np.isfinite(S).all() and (S >= 0).all())
         self.assertEqual(len(d["rows"]), 2 * 6)  # 2 windows x (all + 5 groups)
         self.assertTrue((S[:69] == 0).all() and (S[86:] == 0).all())  # only the context is credited
+        S2, _ = pr.scores(model, q, ev, FPS, predictor=P, context=16, occlude=8, log=lambda *_: None, mode="encoder")
+        self.assertTrue(np.isfinite(S2).all() and (S2 >= 0).all() and (S2[:69] == 0).all())
+        # mixed into the weights only on request
+        phys = np.ones((120, len(I.GROUPS)))
+        np.testing.assert_array_equal(I.combine(phys, S2)[0], I.combine(phys)[0])
         # removing motion keeps the window's end points
         q2 = pr.remove_motion(q, 10, 18, pr.GROUP_COLS["left_arm"])
         np.testing.assert_array_equal(q2[18:], q[18:])

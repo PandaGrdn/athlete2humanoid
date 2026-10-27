@@ -1,5 +1,7 @@
 """Goal relevance from V-JEPA 2's predictor (Meta's video world model): which moments, and which
-body parts' motion, the goal events of a clip are predicted from.
+body parts' motion, the goal events of a clip are predicted from. A diagnostic: on squat_jump the
+predictor's signal is at noise level and the encoder's is salience, not goal relevance (it rises
+for injected arm-waving), so skill/importance.py doesn't mix it in by default; docs/GOAL_RELEVANCE.md.
 
 For each goal event (squat bottom, takeoff, apex, landing; skill/importance.goal_events) the clip's
 retarget is rendered as a robot silhouette (MuJoCo segmentation, the reward's own domain) over the
@@ -14,7 +16,7 @@ occlusion attribution (Zeiler & Fergus 1311.2901) with a world model as the func
 counterfactual "what if the arms hadn't moved then".
 
 Cost: per event (1 + windows x 6) clips of context + target frames through ViT-L; squat_jump with
-the defaults is ~200 clips of 36 frames: about a minute on an A100, ~30 min on a laptop CPU.
+the defaults is ~200 clips of 36 frames: about a minute on an A100, ~10 min on an M-series GPU (mps).
 """
 
 import numpy as np
@@ -136,6 +138,34 @@ class Predictor:
         x = self.preprocess(torch.from_numpy(np.ascontiguousarray(videos)).permute(0, 1, 4, 2, 3))
         return x.to(self.device, dtype=next(self.model.parameters()).dtype)
 
+    def _body_patches(self, video, context_frames):
+        """The patches the body covers in the event frames (dilated by one patch), (target tokens,)."""
+        from scipy.ndimage import binary_dilation
+        body = video[context_frames:, :, :, 0] > 0
+        h = video.shape[1] // self.grid
+        cov = body.reshape(len(body), self.grid, h, self.grid, h).any((2, 4))
+        cov = cov.reshape(-1, TUBELET, self.grid, self.grid).any(1)
+        return np.stack([binary_dilation(c, iterations=1) for c in cov]).reshape(-1)
+
+    def shifts(self, videos, context_frames):
+        """videos (N, L, H, W, 3): row 0 the baseline. The encoder attends across the whole clip, so
+        its tokens of the event frames [context_frames, L) depend on the motion before them: per
+        video, the L1 distance of its (layer-normed) event tokens from the baseline's, over the
+        body's patches -> ((N,), body patch count)."""
+        torch = self.torch
+        F = torch.nn.functional
+        steps, ctx_steps, P = videos.shape[1] // TUBELET, context_frames // TUBELET, self.grid ** 2
+        cov = self._body_patches(videos[0], context_frames)
+        sel = torch.as_tensor(cov, device=self.device)
+        toks = []
+        with torch.no_grad():
+            for i in range(0, len(videos), self.batch):
+                h = self.model(pixel_values_videos=self._pixels(videos[i:i + self.batch]), skip_predictor=True).last_hidden_state
+                h = h[:, ctx_steps * P:steps * P].float()
+                toks.append(F.layer_norm(h, h.shape[-1:])[:, sel].cpu())
+        toks = torch.cat(toks)
+        return (toks - toks[:1]).abs().mean((1, 2)).numpy(), int(cov.sum())
+
     def errors(self, videos, context_frames):
         """videos (N, L, H, W, 3): row 0 the baseline. Predict the tokens of frames
         [context_frames, L) from the context frames of each video (event frames blanked) ->
@@ -148,13 +178,7 @@ class Predictor:
             tokens = self.model(pixel_values_videos=self._pixels(videos[:1]), skip_predictor=True).last_hidden_state
             tgt = tokens[0, ctx_steps * P:steps * P].float()
             tgt = F.layer_norm(tgt, tgt.shape[-1:])
-            # the patches the body covers in the event frames (dilated by one patch)
-            body = videos[0, context_frames:, :, :, 0] > 0
-            h = videos.shape[2] // self.grid
-            cov = body.reshape(L - context_frames, self.grid, h, self.grid, h).any((2, 4))
-            cov = cov.reshape(-1, TUBELET, self.grid, self.grid).any(1)
-            from scipy.ndimage import binary_dilation
-            cov = np.stack([binary_dilation(c, iterations=1) for c in cov]).reshape(-1)
+            cov = self._body_patches(videos[0], context_frames)
             sel = torch.as_tensor(cov, device=self.device)
             cm = torch.arange(ctx_steps * P, device=self.device)[None]
             tm = torch.arange(ctx_steps * P, steps * P, device=self.device)[None]
@@ -172,10 +196,12 @@ class Predictor:
 
 
 def scores(model, qpos, events, fps, azimuth=-150, device=None, predictor=None, context=CONTEXT,
-           target=TARGET, occlude=OCCLUDE, log=print):
+           target=TARGET, occlude=OCCLUDE, log=print, mode="predictor"):
     """-> (scores (T, len(GROUPS)) >= 0 per frame and body group, detail dict for the npz).
-    Each event's relative error increase when a group's motion is removed from a window is
-    credited to that group over that window's frames, times the event's weight."""
+    mode "predictor": each event's relative error increase when a group's motion is removed from a
+    window; mode "encoder": the shift of the event's encoder tokens (Predictor.shifts), relative to
+    the shift from removing all motion in the window nearest the event. Credited to that group over
+    that window's frames, times the event's weight."""
     predictor = predictor or Predictor(device=device)
     T = len(qpos)
     S = np.zeros((T, len(GROUPS)))
@@ -187,8 +213,13 @@ def scores(model, qpos, events, fps, azimuth=-150, device=None, predictor=None, 
         seen.add(ev["frame"])
         q = event_clip(qpos, ev["frame"], context, target)
         videos, keys = counterfactuals(model, q, azimuth, context, occlude)
-        err, n_body = predictor.errors(videos, context)
-        base = max(err[0], 1e-6)
+        if mode == "predictor":
+            err, n_body = predictor.errors(videos, context)
+            base = max(err[0], 1e-6)
+        else:
+            err, n_body = predictor.shifts(videos, context)
+            base = max(err[1 + keys.index((keys[-1][0], keys[-1][1], "all"))], 1e-6)
+            err = base + err  # so that e / base - 1 is the shift relative to base
         start = ev["frame"] - context
         for (a, b, g), e in zip(keys, err[1:]):
             rel = max(e / base - 1.0, 0.0)
@@ -198,7 +229,7 @@ def scores(model, qpos, events, fps, azimuth=-150, device=None, predictor=None, 
             else:
                 S[fa:fb, GROUPS.index(g)] += EVENT_WEIGHT[ev["kind"]] * rel
             rows.append((ev["frame"], start + a, start + b, ["all", *GROUPS].index(g), e / base - 1.0))
-        log(f"  V-JEPA predictor, {ev['kind']} at {ev['frame'] / fps:.2f} s: baseline L1 {base:.3f} over "
-            f"{n_body} body patches; largest increase {max(err[1:] / base - 1):+.3f}")
+        log(f"  V-JEPA {mode}, {ev['kind']} at {ev['frame'] / fps:.2f} s: reference L1 {base:.3f} over "
+            f"{n_body} body patches; largest relative increase {max(err[1:] / base - 1):+.3f}")
     return S, {"whole": whole, "rows": np.array(rows, dtype=np.float32),
                "row_columns": np.array(["event_frame", "start", "end", "group(0=all)", "rel_increase"])}

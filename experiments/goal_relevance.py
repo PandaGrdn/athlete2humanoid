@@ -1,14 +1,15 @@
 """Counterfactual check of goal relevance in simulation: does weighting the style terms by
 importance.json stop the robot from copying movements that don't serve the goal, without costing
-the task? GPU job (scripts/remote_run.py relevance); also the V-JEPA 2 predictor scoring.
+the task? GPU job (scripts/remote_run.py relevance).
 
     python experiments/goal_relevance.py --inputs outputs/remote_latent_v2 --target squat_jump \
         --out outputs/goal_relevance_cf --iters 1000            # what the GPU job runs
-    python experiments/goal_relevance.py ... --vjepa-only        # importance.json only, no training
+    python experiments/goal_relevance.py ... --importance-only   # importance.json only, no training
 
 1. the target's retarget, and a "hype" variant with arm-waving injected before the countermovement
    (skill/importance.inject_hype, --hype START END)
-2. importance.json for both: physics attribution + V-JEPA 2 predictor masking (GPU, a few minutes)
+2. importance.json for both: physics attribution (--vjepa predictor|encoder adds the V-JEPA 2
+   masking scores as a diagnostic, vjepa_scores.npz, not mixed into the weights)
 3. A2H-Task policies on the hype variant, in parallel: `plain` (no importance) and `weighted`
    (--importance), optionally `clean` (the clean clip, no importance) as a reference. The hype
    variant's latent target is V-JEPA's embedding of its robot-silhouette render (centred on the
@@ -42,7 +43,8 @@ def log(msg):
 
 
 def importance_for(name, qpos, spec, model, out, vjepa, azimuth, fps=30.0, hype=None):
-    """importance.json (+ png) for one motion, with the V-JEPA predictor scores when vjepa."""
+    """importance.json (+ png) for one motion; with vjepa = (Predictor, mode), also its V-JEPA
+    masking scores (vjepa_scores.npz, a diagnostic: not mixed into the weights)."""
     d = out / name
     d.mkdir(parents=True, exist_ok=True)
     f = d / "importance.json"
@@ -53,7 +55,7 @@ def importance_for(name, qpos, spec, model, out, vjepa, azimuth, fps=30.0, hype=
         from latent import predictor_relevance as pr
         events = I.goal_events(spec, I.kinematics(model, qpos)["pos"], fps)
         t0 = time.time()
-        V, detail = pr.scores(model, qpos, events, fps, azimuth=azimuth, predictor=vjepa, log=log)
+        V, detail = pr.scores(model, qpos, events, fps, azimuth=azimuth, predictor=vjepa[0], log=log, mode=vjepa[1])
         np.savez(d / "vjepa_scores.npz", scores=V, **detail)
         log(f"{name}: V-JEPA predictor scoring took {time.time() - t0:.0f} s")
     res = I.analyse(model, qpos, spec, fps, V)
@@ -130,13 +132,13 @@ def main(a):
     spec_f.write_text(json.dumps(spec, indent=1))
     log(f"{a.target}: {spec['summary']}; hype {a.hype[0]}-{a.hype[1]} s; viewpoint {azimuth} deg")
 
-    predictor = None if a.no_vjepa else pr.Predictor()
+    predictor = None if a.vjepa == "off" else (pr.Predictor(), a.vjepa)
     imp = {"clean": importance_for(a.target, clean_q, spec, model, out, predictor, azimuth, fps),
            "hype": importance_for(f"{a.target}_hype", hype_q, spec, model, out, predictor, azimuth, fps, a.hype)}
     for k, f in imp.items():
         log(f"importance ({k}): " + json.dumps(I.summarize(json.loads(f.read_text()), spec,
                                                            [("hype", *a.hype)])))
-    if a.vjepa_only:
+    if a.importance_only:
         return pack(out)
     del predictor
     import torch
@@ -194,6 +196,7 @@ if __name__ == "__main__":
     ap.add_argument("--iters", type=int, default=1000)
     ap.add_argument("--num-envs", type=int, default=4096)
     ap.add_argument("--with-clean", action="store_true", help="also train on the clean clip (a third policy)")
-    ap.add_argument("--vjepa-only", action="store_true", help="importance.json only (a few minutes of GPU)")
-    ap.add_argument("--no-vjepa", action="store_true", help="physics attribution only")
+    ap.add_argument("--importance-only", action="store_true", help="importance.json only, no training")
+    ap.add_argument("--vjepa", default="off", choices=["off", "predictor", "encoder"],
+                    help="also save V-JEPA 2 masking scores (diagnostic, a few GPU minutes)")
     main(ap.parse_args())
