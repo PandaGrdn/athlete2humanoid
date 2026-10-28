@@ -15,9 +15,10 @@ list of action types: a squat jump, a front kick, a punch and a lunge all compil
    explained by a straight line between its neighbours: the bottom of a squat, a kick's apex, a
    punch's extension, the return to standing. Flights (both feet off the floor) are found from
    contacts, as in skill/task.py.
-   RDP is hierarchical: each key moment's level is the deviation at which it split the path. Moments
-   at the top levels are required; the finer ones (how this person happened to do it: the in-between
-   crouch, an arm swing) are optional, so the policy is paid for them but may skip them.
+   RDP is hierarchical: each key moment's level is the deviation at which it split the path. A loose
+   task: the end goal, the contacts and the REQUIRED_TOP moments at the top of the hierarchy are
+   required; the finer ones (how this person happened to do it: the in-between crouch, an arm swing)
+   are optional, so the policy is paid for them but may skip them. Once done, holding the end pose pays.
 3. Goal relevance (relevance): each feature's share of the mass-weighted, noise-corrected motion into
    that key moment. A kick's goal is mostly the kicking ankle; arms waving through a squat move
    little mass and get a loose tolerance or none.
@@ -67,9 +68,10 @@ OVERSHOOT = 0.5  # going further than the key moment along its motion is free up
 POSE, FLIGHT, SETTLE = range(3)
 KINDS = ("pose", "flight", "settle")
 HOLD = {POSE: 0.0, SETTLE: 0.3}  # a key pose may be passed through (one control step)
-REQUIRED = 2.5  # RDP level (deviation / tolerance) from which a key moment is required ...
-REQUIRED_FRAC = 0.5  # ... or this share of the clip's top level, if lower; the rest are optional
-WEIGHTS = {"progress": 1.0, "stage": 1.0, "jump": 2.0, "done": 4.0}
+REQUIRED_TOP = 2  # a loose task: the end goal, the contacts (jumps, landings) and the 2 key moments at the
+# top of the hierarchy are required; the rest (how this person happened to do it) pay but may be skipped
+WEIGHTS = {"progress": 1.0, "stage": 1.0, "jump": 2.0, "done": 4.0,
+           "hold": 1.0}  # per s in the finish pose once done: the end goal is a state to keep
 
 
 def heading(pos):
@@ -251,7 +253,7 @@ def _compile(pos, fps, skill, max_clearance, name, scale):
     keys, eps, sig, dev = key_moments(F, fps, air_mask, scale)
     yaw = np.unwrap(heading(torch.as_tensor(pos)).numpy())
     finite = [dev[k] for k in keys if np.isfinite(dev[k])]
-    need = min(REQUIRED, REQUIRED_FRAC * max(finite, default=REQUIRED))
+    need = sorted(finite, reverse=True)[REQUIRED_TOP - 1] if len(finite) >= REQUIRED_TOP else 0.0
 
     events = [("pose", k) for k in keys] + [("flight", s, e) for s, e in flights]
     events.sort(key=lambda ev: ev[1])
@@ -373,6 +375,7 @@ class KeyposeMachine:
         self.q_min, self.steps = torch.ones(num_envs, device=device), z(torch.long)
         self.skipped = z(torch.long)
         self.extra_depth = z()  # StageMachine's commanded extra squat depth (mjlab_tasks fall rule): none here
+        self.style_until_done = True  # mjlab_tasks.TimeWeighted: no style terms once the task is done
 
     def _eval(self, stage, pos, vz, ids=slice(None)):
         """Progress in [0, 1] and whether the predicate holds, for envs ids (state buffers indexed by
@@ -443,6 +446,7 @@ class KeyposeMachine:
         z = pos[:, PELVIS, 2]
         vz, self.z_prev = (z - self.z_prev) / self.dt, z
         p, sat, _ = self._eval(self.stage, pos, vz)
+        hold_end = self.done & sat  # done: the stage stays the last one, whose predicate is the end pose
         # An optional key moment (a detail of how the clip did it) may be skipped: if the next stage
         # already holds, move on to it, without the optional one's bonus.
         opt = (self.optional[self.stage] & ~sat & ~self.done).nonzero().squeeze(1)
@@ -497,7 +501,7 @@ class KeyposeMachine:
         self.stats["jump_q"] = torch.where(adv & (jg > 0), q, self.stats["jump_q"])
         self.q_min = torch.where(adv & (jg > 0), torch.minimum(self.q_min, q), self.q_min)
         self.steps += 1
-        r = prog + bonus
+        r = prog + bonus + hold_end * self.w["hold"] * self.dt
         self.banked = self.banked + r
         if fell is not None:
             r = torch.where(fell, r - self.banked, r)

@@ -217,7 +217,7 @@ class SlurmStates(Base):
 class RemoteRunDispatch(unittest.TestCase):
     def args(self, **kw):
         base = dict(job="latent", min_clips=1, max_wait_h=0, target="squat", iters=10, smoke=False, tag="t",
-                    reuse=None, with_weights=False, args="", backend="farmshare", fs_host="farmshare", fs_root="a2h",
+                    reuse=None, with_weights=False, init_weights=None, args="", backend="farmshare", fs_host="farmshare", fs_root="a2h",
                     fs_partition="gpu", fs_qos="gpu", fs_gres="gpu:1", fs_cpus=8, fs_mem="64G", fs_time="01:00:00")
         base.update(kw)
         return argparse.Namespace(**base)

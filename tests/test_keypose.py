@@ -173,3 +173,24 @@ def test_noise_alone_has_no_key_moments():
     still = np.repeat(REST[None], 120, 0) + np.random.default_rng(1).normal(0, 0.003, (120, 14, 3)).astype(np.float32)
     spec = K.compile_keypose_spec(still, FPS)
     assert not [s for s in spec["stages"] if s["kind"] == "pose" and not s.get("optional")]
+
+
+def test_done_the_end_pose_is_held():
+    pos = torch.as_tensor(motion("squat"))
+    spec = K.compile_keypose_spec(pos.numpy(), FPS)
+    m = T.machine(spec, 2, dt=1 / FPS)
+    m.reset(torch.arange(2), 0.0, pos[:1].expand(2, -1, -1))
+    for t in range(1, len(pos)):
+        m.step(pos[t:t + 1].expand(2, -1, -1))
+    assert m.done.all() and m.style_until_done
+    end = pos[-1:].expand(2, -1, -1)
+    held = sum(m.step(end) * m.dt for _ in range(int(FPS)))
+    assert torch.allclose(held, torch.full((2,), K.WEIGHTS["hold"]), atol=1e-3)  # 1 s in the end pose
+    r = m.step(end, fell=torch.tensor([True, False])) * m.dt
+    assert r[0] < -K.WEIGHTS["hold"] + 0.1 and r[1] > 0  # falling after the finish gives it back
+
+
+def test_loose_task_requires_few_moments():
+    spec = K.compile_keypose_spec(motion("squat", reps=3), FPS)
+    inner = [s for s in spec["stages"] if s["kind"] == "pose" and s["level"] < 99]  # not the clip's end
+    assert len(inner) > K.REQUIRED_TOP and sum(not s["optional"] for s in inner) == K.REQUIRED_TOP

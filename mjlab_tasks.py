@@ -481,7 +481,14 @@ class TimeWeighted:
 
     def __call__(self, env, inner=None, inner_params=None, **kwargs):
         i = (self.cmd.time_steps * self.dt * self.fps).long().clamp(0, len(self.w) - 1)
-        return self.inner(env, **(inner_params or {})) * self.w[i]
+        w = self.w[i]
+        m = getattr(env, "a2h_task", None)
+        if getattr(m, "style_until_done", False):
+            # A keypose task done early must not then be asked to look like the rest of the clip:
+            # kp_sj taskphase did the 9 s clip in ~3 s, then toppled imitating it from the finish pose.
+            # It also means finishing early forfeits the style reward still ahead.
+            w = w * ~m.done
+        return self.inner(env, **(inner_params or {})) * w
 
 
 def task_config():

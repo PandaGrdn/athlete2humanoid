@@ -16,6 +16,8 @@ POLICY_INFO = {
     "tracking": ("Tracking", "Joint-target imitation (mjlab baseline)"),
     "hybrid": ("Hybrid", "Joint targets + V-JEPA 2 latent reward"),
     "latent": ("Latent", "V-JEPA 2 latent reward; retarget used only as observation and resets"),
+    "task": ("Task", "The video's key moments as the reward (keypose spec); retarget as input, weak style terms"),
+    "taskphase": ("Task (blind)", "The keypose task with only a clock and the stage as input, no retarget"),
 }
 METRIC_KEYS = ["aligned", "dtw", "chamfer", "dtw_rank_vs_bank", "reward_net_aligned", "real_aligned_in_reward_space",
                "steps", "fps", "falls", "mean_joint_error_rad", "mean_torso_position_error_m", "max_torso_position_error_m"]
@@ -124,7 +126,7 @@ def _policies(folder, rid, ev):
             "curve": train_curve(pdir) if pdir.is_dir() else [],
             "iterations": _total_iters(folder, pdir) if pdir.is_dir() else None,
         })
-    order = {"tracking": 0, "hybrid": 1, "latent": 2}
+    order = {"task": 0, "tracking": 1, "hybrid": 2, "latent": 3, "taskphase": 4}
     out.sort(key=lambda p: (p["previous"], order.get(p["base"], 9)))
     return out
 

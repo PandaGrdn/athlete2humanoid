@@ -263,5 +263,5 @@ export const fmt = {
 };
 
 // Categorical identity per policy: validated on the dark surface (blue / orange / aqua).
-export const POLICY_COLOR: Record<string, string> = { tracking: "#3987e5", hybrid: "#d95926", latent: "#199e70" };
+export const POLICY_COLOR: Record<string, string> = { tracking: "#3987e5", hybrid: "#d95926", latent: "#199e70", task: "#8e5cd9", taskphase: "#c2569b" };
 export const policyColor = (base: string) => POLICY_COLOR[base] ?? "#8a96a3";

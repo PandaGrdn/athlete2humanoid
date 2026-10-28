@@ -60,6 +60,8 @@ def job_spec(a):
                 f"--iters {a.iters} {a.args}", {"results.tar.gz": f"{out}/results.tar.gz"})
     out = latent_out(a)
     cmd = f"python3 experiments/latent_policy.py {{clips}} --target {a.target} --out {out} --iters {a.iters} {a.args}"
+    if a.init_weights and not a.reuse:  # a new video, its policies built off an earlier run's (pack_weights)
+        cmd += f" --init {REMOTE}/inputs"
     if a.reuse:
         inp = f"{REMOTE}/inputs"
         # clips/*/: directories only, so a config file next to them isn't read as a clip
@@ -138,6 +140,17 @@ def pack_reuse(src, policies=False, checkpoints=None):
             for name in ("eval.json", "task_spec.json", "importance.json"):  # task-first policies need the spec
                 if (src / name).exists():
                     tar.add(src / name, name)
+    return f
+
+
+def pack_weights(src):
+    """An earlier run's newest checkpoint per policy, alone (no clips): --init-weights for a new video."""
+    f = OUT / "inputs.tar.gz"
+    with tarfile.open(f, "w:gz") as tar:
+        for d in sorted(Path(src).glob("policy_*")):
+            ck = sorted(d.glob("model_*.pt"), key=lambda q: int(q.stem.split("_")[1]))
+            if ck:
+                tar.add(ck[-1], f"{d.name}/{ck[-1].name}")
     return f
 
 
@@ -301,7 +314,8 @@ def main(a):
     found = [] if a.smoke or a.reuse else wait_for_clips(a.min_clips, a.max_wait_h)
     if a.job in ("robust", "relevance") and not a.reuse:
         raise SystemExit(f"{a.job} needs --reuse <a latent run's results folder>")
-    inputs = pack_reuse(a.reuse, policies=a.job == "robust" or a.with_weights) if a.reuse else None
+    inputs = (pack_reuse(a.reuse, policies=a.job == "robust" or a.with_weights) if a.reuse
+              else pack_weights(a.init_weights) if a.init_weights else None)
     if found:
         log(f"clips ready: {', '.join(p.name for p in found)}")
         check_token()
@@ -350,6 +364,8 @@ def parser():
     ap.add_argument("--reuse", help="an earlier latent run's results folder: its clips and rollouts")
     ap.add_argument("--with-weights", action="store_true",
                     help="with --reuse: upload its trained policies too (for --args '--init/--resume-from /content/a2h/inputs')")
+    ap.add_argument("--init-weights", help="an earlier run's results folder whose policies this run's start from "
+                                           "(a new video: its weights only; with --reuse use --with-weights)")
     ap.add_argument("--args", default="", help="extra flags for the job's script (latent_policy.py, robustness_eval.py)")
     fs = ap.add_argument_group("FarmShare (--backend farmshare; docs/FARMSHARE.md)")
     ap.add_argument("--backend", choices=["colab", "farmshare"], default="colab")

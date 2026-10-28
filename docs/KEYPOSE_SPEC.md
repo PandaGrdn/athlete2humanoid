@@ -25,7 +25,12 @@ python -m skill.keypose outputs/remote_latent_final/clips/front_kick    # -> tas
    - A moment must also be a real change from the last one kept, so a foot shuffle while standing is dropped.
 3. **Required or optional: its level in the hierarchy.**
    - Each moment's level is its deviation from the path between its neighbours, in tolerances. Foot placement is left out, since a step shows in the root's motion and a kick in the foot's height.
-   - Moments at the top levels are required: at least 2.5, or half the clip's top level if that is lower. The finer ones are how this person happened to do it (an in-between crouch, an arm swing); they pay a bonus but may be skipped.
+   - **A loose task.** Required:
+     - the end goal (the clip's last pose);
+     - the contacts (each jump and its landing);
+     - the 2 key moments at the top of the hierarchy (`REQUIRED_TOP`).
+
+     Every other moment is how this person happened to do it (an in-between crouch, an arm swing). It pays a bonus but may be skipped. Squat jump: 3 required poses and 2 jumps out of 12 stages. Lunge: 3 of 16.
 4. **Goal relevance per feature.**
    - What counts is each feature's motion into that moment, beyond what its noise or its minimum tolerance would accept anyway, weighted by the square root of the mass it moves.
    - A kick's goal is the kicking foot; arms swinging through a squat get a loose tolerance or none.
@@ -43,6 +48,8 @@ The reward machine (`KeyposeMachine`) has `StageMachine`'s interface and rules, 
 - a bonus per stage, plus jump quality and a finish bonus;
 - a fall refunds the attempt;
 - the stage is part of the policy's observation, the same 18 numbers as before.
+
+**Once done, the end goal is a state to keep.** Holding the end pose pays 1 per second, and a fall gives that back. The style terms stop: the clip is no longer imitated once the task is complete, so finishing early forfeits the style reward still ahead.
 
 **The robot chooses its own timing:** only the order of the moments counts. The style terms (V-JEPA 2) are time-weighted toward the approach to each key moment and each landing (`keypose.importance`).
 
@@ -126,6 +133,31 @@ The squat-jump run is the regression check against the old spec's results.
 - One that starts at exactly frame 0 begins in "ready", which asks the robot to be still (the jumping-jacks clip's first frame moves at 1.1 m/s).
 
 Training starts at frame 0 about once in 264 episodes, so a policy that doesn't see the retarget (taskphase) never learned "ready". In play, which always starts at frame 0, it fell within 5 steps of every reset; from any other start frame, it never fell. `KeyposeMachine.reset` now starts past a zero-length first stage and counts it as completed, so frame 0 behaves like frame 1. Re-scored on CPU (mjlab's play rollout, scored with `skill.task.evaluate` at 50 Hz); the Colab numbers in the other rows come from the GPU simulator and differ slightly.
+
+## Why the policies fall (2026-10-28)
+
+**Not physical impossibility.** On all three clips, the tracking and task policies complete every key moment without falling. The end pose of the squat jump asks only for the pelvis at 0.78 ± 0.04 m with the feet down, which is standing.
+
+**Partly too little training.** Falls per training iteration flatten out at:
+
+| Clip | Task | Taskphase (blind) |
+|---|---|---|
+| Squat jump | 0.2 | 1.5 (still falling: 5.0 → 2.5 → 1.6 → 1.5 at iterations 500/1,000/1,250/1,500) |
+| Jumping jacks | 0.75 | 1.7 (flat since iteration 750) |
+| Front kick | 0.4 | 1.3 (flat since iteration 1,000) |
+
+**Mostly two reward faults, both fixed:**
+1. **Frame 0** (above): taskphase fell at every reset of the evaluation.
+2. **After the finish.** Every squat-jump taskphase fall comes after it has completed 12/12:
+   - Timing is free, and PPO discounts, so it did the 9 s clip in about 3 s.
+   - Then the task paid nothing, and the clock-based style terms asked it to look like the clip's middle (crouching, jumping) from the finish pose.
+   - It tipped over within 0.3 s, each time.
+
+   Now holding the end pose pays, and the style terms stop once done.
+
+**What works best so far: the task policy.** It gets the keypose reward, sees the retarget as input, and has weak style terms (V-JEPA 2, plus 0.1× tracking). It completes all three actions without falling, including two it had never trained on, from the same squat-jump warm start. Seeing the retarget keeps it in time with the clip, so it neither rushes nor drifts. The blind taskphase policy is the stronger generalisation claim, since it needs only a clock at run time, but it learns more slowly and falls 2–7× more.
+
+`experiments/latent_policy.py` now trains `task` by default. The web app's Colab job runs `--policies task` with `--init-weights outputs/remote_latent_final` (`A2H_COLAB_POLICIES`, `A2H_COLAB_INIT`).
 
 ## For the live demo
 

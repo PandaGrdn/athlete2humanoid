@@ -423,7 +423,9 @@ class JobStore:
         out = self.colab_out(job)
         cmd = [sys.executable, str(REPO / "scripts" / "remote_run.py"), "latent", "--target", stem,
                "--tag", tag, "--min-clips", "1", "--iters", str(self.settings.colab_iters),
-               "--backend", self.settings.remote_backend]
+               "--backend", self.settings.remote_backend, "--args", "--policies " + " ".join(self.settings.colab_policies)]
+        if self.settings.colab_init and Path(self.settings.colab_init).is_dir():
+            cmd += ["--init-weights", self.settings.colab_init]
         self.log(job, "silhouette", f"{self.settings.remote_backend} runner: remote_run.py {' '.join(cmd[3:])}")
         proc = subprocess.Popen(cmd, cwd=REPO, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         seen = {"runner.log": 0, "job.log": 0}

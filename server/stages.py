@@ -26,8 +26,8 @@ _PATTERNS = [
     ("environment", r"^task spec\b"),
     ("latent", r"windows, \d+ dense steps|^target \w+: viewpoint|^distillation dataset|motions rendered \+ embedded"
                r"|^training the reward network|^epoch \d+:|^reward bundle ready"),
-    ("train", r"^training (tracking|hybrid|latent)|finished with code|Learning iteration"),
-    ("eval", r"^(retarget|tracking|hybrid|latent|prev_\w+)\s*: aligned|^done: "),
+    ("train", r"^training (tracking|hybrid|latent|phase|task\w*)|finished with code|Learning iteration"),
+    ("eval", r"^(retarget|tracking|hybrid|latent|phase|task\w*|prev_\w+)\s*: aligned|^done: "),
 ]
 _COMPILED = [(k, re.compile(p)) for k, p in _PATTERNS]
 _TS = re.compile(r"^\[\d\d:\d\d:\d\d\]\s*")

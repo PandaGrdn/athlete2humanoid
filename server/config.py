@@ -100,6 +100,10 @@ class Settings:
     run_exclude: list = field(default_factory=lambda: _list("A2H_RUN_EXCLUDE", "*smoke*"))
     static_dir: str = field(default_factory=lambda: _env("A2H_STATIC_DIR", ""))
     colab_iters: int = field(default_factory=lambda: _num("A2H_COLAB_ITERS", 2000, int))
+    # The approach that has worked best: the task policy on the video's keypose spec (docs/KEYPOSE_SPEC.md),
+    # built off a finished run's weights ("" trains from scratch).
+    colab_policies: list = field(default_factory=lambda: _list("A2H_COLAB_POLICIES", "task"))
+    colab_init: str = field(default_factory=lambda: _env("A2H_COLAB_INIT", str(REPO / "outputs" / "remote_latent_final")))
     parse_errors: list = field(default_factory=lambda: _errors[:], repr=False)
 
     def __post_init__(self):

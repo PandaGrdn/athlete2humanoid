@@ -406,7 +406,7 @@ if __name__ == "__main__":
     ap.add_argument("--extra-motions", nargs="*", default=[],
                     help="earlier policies' policy_qpos.npy (50 Hz), added to the distillation data")
     ap.add_argument("--reward", help="reuse this reward bundle (reward.pt) instead of distilling one")
-    ap.add_argument("--policies", nargs="+", default=["tracking", "hybrid", "latent"], choices=list(TASKS))
+    ap.add_argument("--policies", nargs="+", default=["task"], choices=list(TASKS))
     ap.add_argument("--iters", type=int, default=1500)
     ap.add_argument("--num-envs", type=int, default=4096)
     ap.add_argument("--reward-config", help="hybrid/latent reward settings, e.g. muse/reward_agent.py's "
