@@ -1,0 +1,480 @@
+{
+ "id": "jumping-jacks",
+ "title": "Jumping jacks",
+ "clip": "jumping_jacks.mov",
+ "recorded": "2026-10-28",
+ "stages": [
+  {
+   "key": "video",
+   "label": "Video check"
+  },
+  {
+   "key": "pose",
+   "label": "Pose"
+  },
+  {
+   "key": "retarget",
+   "label": "Retarget"
+  },
+  {
+   "key": "environment",
+   "label": "Task environment"
+  },
+  {
+   "key": "policy",
+   "label": "Policy"
+  }
+ ],
+ "events": [
+  {
+   "t": 0.19,
+   "stage": "video",
+   "progress": 0.1
+  },
+  {
+   "t": 10.53,
+   "stage": "video",
+   "done": true,
+   "log": "video: 5.3 s at 30 fps, 360x640 (first 20 s, rescaled)"
+  },
+  {
+   "t": 11.65,
+   "stage": "pose",
+   "progress": 0.0
+  },
+  {
+   "t": 12.13,
+   "stage": "pose",
+   "progress": 0.056962025316455694
+  },
+  {
+   "t": 12.26,
+   "stage": "pose",
+   "progress": 0.12025316455696203
+  },
+  {
+   "t": 12.39,
+   "stage": "pose",
+   "progress": 0.18354430379746836
+  },
+  {
+   "t": 12.52,
+   "stage": "pose",
+   "progress": 0.2468354430379747
+  },
+  {
+   "t": 12.65,
+   "stage": "pose",
+   "progress": 0.310126582278481
+  },
+  {
+   "t": 12.79,
+   "stage": "pose",
+   "progress": 0.37341772151898733
+  },
+  {
+   "t": 12.93,
+   "stage": "pose",
+   "progress": 0.43670886075949367
+  },
+  {
+   "t": 13.06,
+   "stage": "pose",
+   "progress": 0.5
+  },
+  {
+   "t": 13.19,
+   "stage": "pose",
+   "progress": 0.5632911392405063
+  },
+  {
+   "t": 13.31,
+   "stage": "pose",
+   "progress": 0.6265822784810127
+  },
+  {
+   "t": 13.44,
+   "stage": "pose",
+   "progress": 0.689873417721519
+  },
+  {
+   "t": 13.58,
+   "stage": "pose",
+   "progress": 0.7531645569620253
+  },
+  {
+   "t": 13.71,
+   "stage": "pose",
+   "progress": 0.8164556962025317
+  },
+  {
+   "t": 13.84,
+   "stage": "pose",
+   "progress": 0.879746835443038
+  },
+  {
+   "t": 13.97,
+   "stage": "pose",
+   "progress": 0.9430379746835443
+  },
+  {
+   "t": 14.26,
+   "stage": "pose",
+   "done": true,
+   "log": "pose found in 100% of frames"
+  },
+  {
+   "t": 14.36,
+   "stage": "retarget",
+   "progress": 0.1
+  },
+  {
+   "t": 14.49,
+   "stage": "retarget",
+   "progress": 0.4
+  },
+  {
+   "t": 15.51,
+   "stage": "retarget",
+   "done": true,
+   "log": "retarget error 0.7 cm (mean over end effectors)"
+  },
+  {
+   "t": 16.68,
+   "stage": "environment",
+   "progress": 0.2
+  },
+  {
+   "t": 16.8,
+   "stage": "environment",
+   "done": true,
+   "log": "task spec: 11 key moments: ready -> left hand up, right hand up -> left hand down, right hand down -> left hand up, right hand up -> left hand down, right hand down -> left hand up, right hand up -> left hand down, right hand down -> left hand up, rise -> crouch, right hand up -> left hand down, right hand down -> left hand up, right hand up -> left hand down, right hand down (finish) (the retarget scores 12/12)"
+  }
+ ],
+ "policies": [
+  {
+   "key": "task",
+   "label": "Task",
+   "video": "policy_task.mp4",
+   "poster": "policy_task.jpg",
+   "run": "remote_latent_kp_jacks",
+   "curve": {
+    "iterations": 1500,
+    "points": [
+     [
+      0,
+      -2.94,
+      17.71
+     ],
+     [
+      25,
+      -4.28,
+      65.58
+     ],
+     [
+      50,
+      -2.73,
+      109.64
+     ],
+     [
+      75,
+      0.55,
+      153.43
+     ],
+     [
+      100,
+      1.12,
+      116.56
+     ],
+     [
+      125,
+      -0.76,
+      106.45
+     ],
+     [
+      150,
+      -0.7,
+      73.43
+     ],
+     [
+      175,
+      7.66,
+      101.42
+     ],
+     [
+      200,
+      12.38,
+      116.68
+     ],
+     [
+      225,
+      10.16,
+      100.06
+     ],
+     [
+      250,
+      16.14,
+      133.89
+     ],
+     [
+      275,
+      62.7,
+      403.2
+     ],
+     [
+      300,
+      75.73,
+      466.14
+     ],
+     [
+      325,
+      69.1,
+      423.98
+     ],
+     [
+      350,
+      74.61,
+      441.5
+     ],
+     [
+      375,
+      75.78,
+      447.42
+     ],
+     [
+      400,
+      76.0,
+      443.31
+     ],
+     [
+      425,
+      78.87,
+      451.94
+     ],
+     [
+      450,
+      83.27,
+      478.9
+     ],
+     [
+      475,
+      82.63,
+      468.74
+     ],
+     [
+      500,
+      80.48,
+      458.56
+     ],
+     [
+      525,
+      82.7,
+      471.23
+     ],
+     [
+      550,
+      77.96,
+      457.99
+     ],
+     [
+      575,
+      78.69,
+      460.85
+     ],
+     [
+      600,
+      77.93,
+      470.91
+     ],
+     [
+      625,
+      81.24,
+      475.65
+     ],
+     [
+      650,
+      78.92,
+      465.11
+     ],
+     [
+      675,
+      76.51,
+      462.18
+     ],
+     [
+      700,
+      78.83,
+      469.89
+     ],
+     [
+      725,
+      79.99,
+      479.96
+     ],
+     [
+      750,
+      79.3,
+      468.99
+     ],
+     [
+      775,
+      79.83,
+      474.54
+     ],
+     [
+      800,
+      80.71,
+      478.31
+     ],
+     [
+      825,
+      84.16,
+      481.65
+     ],
+     [
+      850,
+      83.97,
+      481.0
+     ],
+     [
+      875,
+      84.23,
+      491.21
+     ],
+     [
+      900,
+      80.17,
+      476.11
+     ],
+     [
+      925,
+      80.68,
+      478.15
+     ],
+     [
+      950,
+      79.74,
+      465.8
+     ],
+     [
+      975,
+      82.12,
+      482.68
+     ],
+     [
+      1000,
+      81.34,
+      464.61
+     ],
+     [
+      1025,
+      84.45,
+      483.76
+     ],
+     [
+      1050,
+      82.63,
+      478.54
+     ],
+     [
+      1075,
+      83.79,
+      479.36
+     ],
+     [
+      1100,
+      87.82,
+      494.33
+     ],
+     [
+      1125,
+      85.27,
+      489.61
+     ],
+     [
+      1150,
+      83.89,
+      472.9
+     ],
+     [
+      1175,
+      84.79,
+      474.31
+     ],
+     [
+      1200,
+      88.08,
+      495.76
+     ],
+     [
+      1225,
+      85.73,
+      485.03
+     ],
+     [
+      1250,
+      81.45,
+      467.4
+     ],
+     [
+      1275,
+      90.51,
+      487.31
+     ],
+     [
+      1300,
+      87.91,
+      499.31
+     ],
+     [
+      1325,
+      83.35,
+      470.88
+     ],
+     [
+      1350,
+      82.26,
+      464.89
+     ],
+     [
+      1375,
+      86.87,
+      479.04
+     ],
+     [
+      1400,
+      85.01,
+      483.73
+     ],
+     [
+      1425,
+      90.76,
+      498.79
+     ],
+     [
+      1450,
+      81.59,
+      465.77
+     ],
+     [
+      1475,
+      83.26,
+      485.81
+     ],
+     [
+      1499,
+      84.08,
+      469.61
+     ]
+    ]
+   },
+   "checker": {
+    "stages_completed": 1,
+    "stages_total": 13,
+    "success": false,
+    "fell_at_s": null
+   }
+  }
+ ],
+ "named_by": "muse-spark-1.3"
+}

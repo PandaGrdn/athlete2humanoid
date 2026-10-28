@@ -5,7 +5,7 @@ import { Icon } from "./components/ui";
 import { ExampleDetail, ExamplesIndex } from "./pages/Examples";
 import Home from "./pages/Home";
 import JobPage from "./pages/JobPage";
-import LivePage from "./pages/LivePage";
+import LivePage, { LiveReplayPage } from "./pages/LivePage";
 import RunPage from "./pages/RunPage";
 
 const HealthCtx = createContext<{ health: Health | null; error: string | null }>({ health: null, error: null });
@@ -70,6 +70,7 @@ export default function App() {
       <main>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/live/demo/:demoId" element={<LiveReplayPage />} />
           <Route path="/live/:id?" element={<LivePage />} />
           <Route path="/jobs/:id" element={<JobPage />} />
           <Route path="/runs/:id" element={<RunPage />} />

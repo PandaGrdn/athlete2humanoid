@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # One-command deploy. The frontend always goes to Cloudflare Pages; the API goes where the mode says.
 #
-#   scripts/deploy.sh web                # the website only: static examples work, the API shows offline
-#                                        #   (API_BASE=<url> to point it at an API that's already up)
+#   scripts/deploy.sh static             # the website only, no API: the examples, and /live replaying recorded
+#                                        #   builds (web/public/live-demo; REBUILD=1 re-records them and the
+#                                        #   examples first, which needs the repo's Python environment)
+#   scripts/deploy.sh web                # the website only (API_BASE=<url> to point it at an API that's already up)
 #   scripts/deploy.sh tunnel             # the API on this machine (e.g. a Mac mini) in Docker, public through a
 #                                        #   Cloudflare Tunnel, then the website pointed at it
 #   scripts/deploy.sh [space] [hf-user]  # the API on a Hugging Face Space (Docker Spaces need HF PRO)
@@ -26,7 +28,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO"
 MODE=space
-case "${1:-}" in web|tunnel|space) MODE="$1"; shift ;; esac
+case "${1:-}" in static|web|tunnel|space) MODE="$1"; shift ;; esac
 SPACE_NAME="${SPACE_NAME:-athlete2humanoid-api}"
 PAGES_PROJECT="${PAGES_PROJECT:-athlete2humanoid}"
 WRANGLER="wrangler@4.149.0"
@@ -40,7 +42,7 @@ die() { printf 'deploy: %s\n' "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || die "$1 not found. $2"; }
 
 [ "${SKIP_WEB:-}" = 1 ] || { need node "Install Node 18+ (brew install node)."; need npx "It comes with Node."; }
-[ "$MODE" = web ] || need uv "Install it: https://docs.astral.sh/uv/ (curl -LsSf https://astral.sh/uv/install.sh | sh)"
+[ "$MODE" = web ] || [ "$MODE" = static ] || need uv "Install it: https://docs.astral.sh/uv/ (curl -LsSf https://astral.sh/uv/install.sh | sh)"
 hf() {  # always the pinned hf CLI (an hf on PATH may be older, without the flags used here); same stored login
   uvx --quiet --from "$HF_VERSION" hf "$@"
 }
@@ -93,6 +95,17 @@ wait_ready() {  # wait_ready <url> <tries> <what to look at if it never answers>
 
 API_BASE="${API_BASE:-}"
 case "$MODE" in
+# --- no API: what the site shows without one --------------------------------------------------------
+static)
+  API_BASE=""
+  if [ "${REBUILD:-}" = 1 ]; then
+    PY="${PYTHON:-python3}"
+    say "Re-recording the live builds and rebuilding the examples ($PY)"
+    "$PY" scripts/build_live_demo.py ${MUSE:+--muse}
+    "$PY" scripts/build_examples.py
+  fi
+  [ -f web/public/live-demo/index.json ] || die "no recorded builds in web/public/live-demo: run with REBUILD=1"
+  ;;
 # --- the API on a Hugging Face Space --------------------------------------------------------------
 space)
   HF_USER="${1:-}"

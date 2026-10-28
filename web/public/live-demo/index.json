@@ -1,0 +1,56 @@
+{
+ "clips": [
+  {
+   "id": "front-kick",
+   "title": "Front kick",
+   "summary": "4 key moments: ready -> right front kick -> neutral stance -> right side kick -> neutral stance -> finish",
+   "duration_s": 5.5,
+   "poster": "processed.jpg",
+   "policies": [
+    "Tracking",
+    "Task + tracking"
+   ]
+  },
+  {
+   "id": "squat-jump",
+   "title": "Squat jump",
+   "summary": "6 key moments, 2 jumps: ready -> deep crouch -> jump -> land -> landing stance -> deep squat -> rising crouch -> jump -> land -> crouch arms forward -> standing upright (finish)",
+   "duration_s": 9.0,
+   "poster": "processed.jpg",
+   "policies": [
+    "Tracking",
+    "Task + tracking"
+   ]
+  },
+  {
+   "id": "jumping-jacks",
+   "title": "Jumping jacks",
+   "summary": "11 key moments: ready -> arms overhead -> standing arms down -> arms overhead -> standing arms down -> arms overhead -> standing arms down -> midair arms wide -> arms overhead -> standing arms down -> arms overhead -> standing arms down (finish)",
+   "duration_s": 5.3,
+   "poster": "processed.jpg",
+   "policies": [
+    "Task"
+   ]
+  },
+  {
+   "id": "lunge",
+   "title": "Lunge",
+   "summary": "13 key moments: ready -> right foot forward -> right kneeling lunge -> standing rise -> feet together stance -> left knee lifted -> left foot forward -> left kneeling lunge -> standing rise -> feet together stance -> right foot forward -> right kneeling lunge -> standing rise -> neutral standing (finish)",
+   "duration_s": 9.9,
+   "poster": "processed.jpg",
+   "policies": [
+    "Task"
+   ]
+  },
+  {
+   "id": "punches",
+   "title": "Punches",
+   "summary": "7 key moments: ready -> boxing guard stance -> right punch extended -> right cross extended -> right punch extended -> right cross extended -> right punch extended -> hands lowered (finish)",
+   "duration_s": 5.6,
+   "poster": "processed.jpg",
+   "policies": [
+    "Task"
+   ]
+  }
+ ]
+}

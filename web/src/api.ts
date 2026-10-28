@@ -305,3 +305,42 @@ export const fmt = {
 // Categorical identity per policy: validated on the dark surface (blue / orange / aqua).
 export const POLICY_COLOR: Record<string, string> = { tracking: "#3987e5", hybrid: "#d95926", latent: "#199e70", task: "#8e5cd9", taskhybrid: "#b08a1e", taskphase: "#c2569b" };
 export const policyColor = (base: string) => POLICY_COLOR[base] ?? "#8a96a3";
+
+/** Recorded live builds (scripts/build_live_demo.py), served with the site: /live replays them when no
+ *  pipeline API is reachable. Each is a real run of the live worker, its stage messages at the times
+ *  they arrived, plus the policies trained on that clip and their training curves. */
+export type ReplayEvent = { t: number; stage: string; progress?: number; done?: boolean; log?: string };
+export type ReplayPolicy = {
+  key: string;
+  label: string;
+  video: string;
+  poster: string;
+  run: string;
+  curve: { iterations: number; points: [number, number, number][] } | null; // [iteration, mean reward, mean episode length]
+  checker: { stages_completed: number; stages_total: number; success: boolean; fell_at_s: number | null };
+};
+export type Replay = {
+  id: string;
+  title: string;
+  clip: string;
+  recorded: string;
+  stages: { key: string; label: string }[];
+  events: ReplayEvent[];
+  policies: ReplayPolicy[];
+  named_by: string | null;
+};
+export type ReplayIndex = { clips: { id: string; title: string; summary: string | null; duration_s: number; poster: string; policies: string[] }[] };
+
+const DEMO = "/live-demo";
+async function staticJson<T>(path: string): Promise<T> {
+  const r = await fetch(`${DEMO}/${path}`);
+  if (!r.ok || !(r.headers.get("content-type") ?? "").includes("json")) throw new Error(`${path}: not found`);
+  return r.json() as Promise<T>;
+}
+export const demo = {
+  index: () => staticJson<ReplayIndex>("index.json"),
+  replay: (id: string) => staticJson<Replay>(`${encodeURIComponent(id)}/replay.json`),
+  live: (id: string) => staticJson<LiveData>(`${encodeURIComponent(id)}/live.json`),
+  spec: (id: string) => staticJson<TaskSpec>(`${encodeURIComponent(id)}/task_spec.json`),
+  file: (id: string, name: string) => `${DEMO}/${encodeURIComponent(id)}/${name}`,
+};

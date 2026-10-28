@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { api, checkVideo, fmt, url, watchJob, type Job, type LiveData, type RunSummary, type TaskSpec } from "../api";
+import { api, checkVideo, demo, fmt, url, watchJob, type Job, type LiveData, type Replay, type ReplayIndex, type RunSummary, type TaskSpec } from "../api";
 import { useHealth } from "../App";
 import { EnvironmentPanel } from "../components/environment";
 import { PoseOverlay, RewardBox, RobotView, TaskBreakdown } from "../components/live";
@@ -133,13 +133,7 @@ function LiveStart({ onFile, err }: { onFile: (f: File) => void; err: string | n
       </div>
 
       {!health && !apiError && <div className="skeleton" style={{ height: 220 }} />}
-      {!health && apiError && (
-        <div className="notice">
-          <Icon name="cube" />
-          <div><strong>The pipeline API isn't reachable right now.</strong> The hosted API sleeps when idle; this page keeps
-            checking. Meanwhile the <Link to="/examples" style={{ color: "var(--accent)" }}>examples</Link> show finished results.</div>
-        </div>
-      )}
+      {!health && apiError && <OfflineDrop />}
       {health && !available && (
         <div className="notice">
           <Icon name="cube" />
@@ -167,11 +161,74 @@ function LiveStart({ onFile, err }: { onFile: (f: File) => void; err: string | n
           </p>
         </div>
       )}
+      <RecordedBuilds live={!!health && available} />
     </div>
   );
 }
 
-function LiveView({ job, file, uploading, err }: { job: Job | null; file: File | null; uploading: boolean; err: string | null }) {
+/** No API: a dropped video stays in the browser; the page says what would happen and offers the recordings. */
+function OfflineDrop() {
+  const [name, setName] = useState<string | null>(null);
+  const [drag, setDrag] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <div className="card card-pad" style={{ maxWidth: 780 }}>
+      <div className={`dropzone ${drag ? "drag" : ""}`} role="button" tabIndex={0}
+        onClick={() => input.current?.click()}
+        onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && input.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+        onDragLeave={() => setDrag(false)}
+        onDrop={(e) => { e.preventDefault(); setDrag(false); setName(e.dataTransfer.files[0]?.name ?? null); }}>
+        <div className="icon"><Icon name="upload" size={22} /></div>
+        <h3>Drop a video, or click to choose</h3>
+        <p>The pipeline API is offline on this static site, so nothing is uploaded.</p>
+        <input ref={input} type="file" accept="video/*" hidden onChange={(e) => setName(e.target.files?.[0]?.name ?? null)} />
+      </div>
+      <div className="notice" style={{ marginTop: 14 }}>
+        <Icon name="cube" />
+        <div>
+          {name ? <><strong>{name} stays on your computer.</strong> </> : <><strong>Live builds need the pipeline API, which isn't running right now.</strong> </>}
+          With it, your clip would go through the same stages as the recordings below: video check, pose, retarget onto the
+          G1, then the task environment, in about half a minute; training a policy takes 1–2 h on a GPU. Pick a recording
+          to watch one end to end.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The recorded builds (scripts/build_live_demo.py), each a real run of this page's pipeline. */
+function RecordedBuilds({ live }: { live: boolean }) {
+  const [index, setIndex] = useState<ReplayIndex | null>(null);
+  useEffect(() => { demo.index().then(setIndex).catch(() => setIndex({ clips: [] })); }, []);
+  if (index && !index.clips.length) return null;
+  return (
+    <div className="section" style={{ paddingTop: 28 }}>
+      <div className="eyebrow">{live ? "Or replay a recorded build" : "Recorded builds"}</div>
+      <p className="muted" style={{ fontSize: 14, margin: "6px 0 14px", maxWidth: 720 }}>
+        Each is a real run of this pipeline on a phone video, replayed at the speed it ran, followed by the policies
+        trained on that environment.
+      </p>
+      <div className="replay-grid">
+        {(index?.clips ?? Array.from({ length: 3 }, () => null)).map((c, i) => c ? (
+          <Link key={c.id} to={`/live/demo/${c.id}`} className="card replay-card">
+            <div className="replay-thumb"><img src={demo.file(c.id, c.poster)} alt="" loading="lazy" /><span className="pill">{c.duration_s.toFixed(1)} s</span></div>
+            <div className="card-pad">
+              <h3>{c.title}</h3>
+              {c.summary && <p className="faint" style={{ fontSize: 12.5 }}>{c.summary.split(":")[0]}</p>}
+              <p className="muted" style={{ fontSize: 13 }}>Trained: {c.policies.join(", ") || "none yet"}</p>
+            </div>
+          </Link>
+        ) : <div key={i} className="skeleton" style={{ height: 220 }} />)}
+      </div>
+    </div>
+  );
+}
+
+/** Where LiveView reads a build's data: the API (a live job), or a recording (Replay). */
+type Source = { live: () => Promise<LiveData>; spec: () => Promise<TaskSpec>; video: string; policy: ReactNode; title: string };
+
+function LiveView({ job, file, uploading, err, source }: { job: Job | null; file: File | null; uploading: boolean; err: string | null; source?: Source }) {
   const [video, setVideo] = useState<HTMLVideoElement | null>(null);
   const [blob, setBlob] = useState<string | null>(null);
   const [procFailed, setProcFailed] = useState(false);
@@ -189,12 +246,12 @@ function LiveView({ job, file, uploading, err }: { job: Job | null; file: File |
   useEffect(() => setProcFailed(false), [id]);
 
   const st = (k: string) => job?.stages.find((s) => s.key === k)?.status ?? "pending";
-  const live = useWhenReady<LiveData>(done(job, "pose"), `${st("retarget")}/${st("environment")}`, running, () => api.live(id));
-  const spec = useWhenReady<TaskSpec>(done(job, "environment"), "1", running, () => api.jobTaskSpec(id));
+  const live = useWhenReady<LiveData>(done(job, "pose"), `${st("retarget")}/${st("environment")}`, running, () => source ? source.live() : api.live(id));
+  const spec = useWhenReady<TaskSpec>(done(job, "environment"), "1", running, () => source ? source.spec() : api.jobTaskSpec(id));
 
   // The processed copy once it exists (trimmed and rescaled, so the landmarks line up); until then the local file.
-  const processed = done(job, "video") && !procFailed ? api.liveVideo(id) : null;
-  const src = processed ?? blob ?? (job?.input ? url(job.input.url) : null);
+  const processed = done(job, "video") && !procFailed ? (source ? source.video : api.liveVideo(id)) : null;
+  const src = processed ?? blob ?? (source ? source.video : job?.input ? url(job.input.url) : null);
   const aligned = !!processed && src === processed;
   const aspect = live?.video && aligned ? live.video.width / live.video.height : ratio;
 
@@ -211,12 +268,12 @@ function LiveView({ job, file, uploading, err }: { job: Job | null; file: File |
     <div className="container">
       <div className="job-head">
         <div style={{ flex: 1, minWidth: 240 }}>
-          <div className="eyebrow">Live build{job && <> · job {job.id}</>}</div>
+          <div className="eyebrow">{source ? source.title : <>Live build{job && <> · job {job.id}</>}</>}</div>
           <h1 style={{ marginTop: 4 }}>{title}</h1>
         </div>
         {job && <StatusPill status={job.status} />}
         {job && <span className="mono muted" style={{ fontSize: 14 }}>{clock(Math.max(0, elapsed))}</span>}
-        {job && running && <button className="btn sm" onClick={() => api.cancel(job.id).catch(() => undefined)}>Cancel</button>}
+        {job && running && !source && <button className="btn sm" onClick={() => api.cancel(job.id).catch(() => undefined)}>Cancel</button>}
         <Link className="btn sm ghost" to="/live"><Icon name="upload" size={14} />New video</Link>
       </div>
       <div className="progress" style={{ marginBottom: 20 }}><div style={{ width: `${(job?.progress ?? 0) * 100}%` }} /></div>
@@ -235,7 +292,7 @@ function LiveView({ job, file, uploading, err }: { job: Job | null; file: File |
             )}
             {live && aligned && <PoseOverlay video={video} data={live} />}
             <div className="tag">
-              <span className="pill">{aligned ? "Processed clip" : file ? `Your upload · ${file.name}` : "Your upload"}</span>
+              <span className="pill">{source ? "Recorded clip" : aligned ? "Processed clip" : file ? `Your upload · ${file.name}` : "Your upload"}</span>
               {live?.landmarks && aligned && <span className="pill accent">pose landmarks</span>}
             </div>
           </div>
@@ -299,7 +356,7 @@ function LiveView({ job, file, uploading, err }: { job: Job | null; file: File |
             </div>
           )}
 
-          {job && <PolicyCard job={job} file={file} />}
+          {job && (source ? source.policy : <PolicyCard job={job} file={file} />)}
 
           {job && job.logs.length > 0 && (
             <details className="live-log">
@@ -395,6 +452,170 @@ function PolicyCard({ job, file }: { job: Job; file: File | null }) {
         </>
       )}
       {err && <div className="error-box">{err}</div>}
+    </div>
+  );
+}
+
+const TRAIN_REPLAY_S = 24; // the recorded 1,500 PPO iterations (~1 h on an A100), replayed in this many seconds
+
+/** A recorded build as a Job that grows with the clock, as the API's would: stages start and finish at
+ *  the times the worker reported them; then the policy stage replays training. */
+function replayJob(r: Replay, e: number, t0: number): Job {
+  const seen = r.events.filter((x) => x.t <= e);
+  const doneAt = (k: string) => r.events.find((x) => x.stage === k && x.done)?.t ?? Infinity;
+  const envDone = doneAt("environment");
+  const trains = r.policies.length > 0;
+  const end = trains ? envDone + TRAIN_REPLAY_S : envDone;
+  let prevDone = 0;
+  const stages = r.stages.map((s) => {
+    let status: Job["stages"][number]["status"] = "pending";
+    let progress = 0;
+    let started: number | null = null;
+    let finished: number | null = null;
+    if (s.key === "policy") {
+      if (e >= envDone) {
+        started = envDone;
+        if (!trains) status = "skipped";
+        else {
+          progress = Math.min(1, (e - envDone) / TRAIN_REPLAY_S);
+          status = progress >= 1 ? "done" : "running";
+          finished = progress >= 1 ? end : null;
+        }
+      }
+    } else {
+      const mine = seen.filter((x) => x.stage === s.key);
+      const d = doneAt(s.key);
+      if (e >= d) { status = "done"; progress = 1; finished = d; }
+      else if (mine.length || e >= prevDone) { status = "running"; progress = mine.filter((x) => x.progress != null).at(-1)?.progress ?? 0; }
+      if (status !== "pending") started = prevDone;
+      prevDone = d;
+    }
+    return { key: s.key, label: s.label, description: "", status, progress,
+             started_at: started == null ? null : t0 + started, finished_at: finished == null ? null : t0 + finished };
+  });
+  const logs: Job["logs"] = seen.filter((x) => x.log).map((x) => [t0 + x.t, x.stage, x.log as string]);
+  if (trains && e >= envDone) {
+    const p = r.policies[0];
+    logs.push([t0 + envDone, "policy", `PPO on 4,096 simulated G1s in mjlab, ${p.curve?.iterations ?? 1500} iterations (recorded run ${p.run}; ~1 h on an A100, replayed in ${TRAIN_REPLAY_S} s)`]);
+    if (e >= end) logs.push([t0 + end, "policy", `trained: ${r.policies.map((x) => x.label).join(", ")}`]);
+  }
+  const running = stages.find((s) => s.status === "running");
+  return {
+    id: r.id, runner: "replay", status: e >= end ? "succeeded" : "running", stage: running?.key ?? null,
+    progress: stages.reduce((a, s) => a + (s.status === "done" || s.status === "skipped" ? 1 : s.status === "running" ? s.progress : 0), 0) / stages.length,
+    stages, logs, curves: {}, input: null, source_run: null, result_run: null, error: null,
+    created_at: t0, updated_at: t0 + Math.min(e, end), demo: true,
+  };
+}
+
+/** /live/demo/:demoId: a recorded build (scripts/build_live_demo.py) replayed through the live view. */
+export function LiveReplayPage() {
+  const { demoId = "" } = useParams();
+  const [replay, setReplay] = useState<Replay | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [t0, setT0] = useState(() => Date.now() / 1000);
+  const [now, setNow] = useState(t0);
+  useEffect(() => {
+    setReplay(null);
+    setErr(null);
+    demo.replay(demoId).then((r) => { setReplay(r); const t = Date.now() / 1000; setT0(t); setNow(t); }).catch((e) => setErr(e.message));
+  }, [demoId]);
+  const job = useMemo(() => (replay ? replayJob(replay, now - t0, t0) : null), [replay, now, t0]);
+  const finished = job?.status === "succeeded";
+  useEffect(() => {
+    if (!replay || finished) return;
+    const i = window.setInterval(() => setNow(Date.now() / 1000), 200);
+    return () => window.clearInterval(i);
+  }, [replay, finished]);
+  const retargeted = useRef(false);
+  retargeted.current = done(job, "retarget");
+  const source = useMemo<Source | null>(() => replay && {
+    title: `Recorded build · ${replay.title} · ${replay.recorded}`,
+    // the recording has everything; hand it out stage by stage, as the API would
+    live: () => demo.live(demoId).then((d) => (retargeted.current ? d : { ...d, robot: null, retarget_error_cm: null })),
+    spec: () => demo.spec(demoId),
+    video: demo.file(demoId, "processed.mp4"),
+    policy: null,
+  }, [replay, demoId]);
+
+  if (err) return <div className="container section"><div className="error-box">Recorded build {demoId}: {err}</div></div>;
+  if (!replay || !job || !source) return <div className="container section"><div className="skeleton" style={{ height: 320 }} /></div>;
+  return (
+    <>
+      <div className="container"><div className="notice" style={{ marginTop: 18 }}>
+        <Icon name="cube" />
+        <div><strong>Recorded build.</strong> This replays a real run of the pipeline on {replay.clip}, at the speed it ran;
+          training is replayed fast. <button className="linklike" onClick={() => { const t = Date.now() / 1000; setT0(t); setNow(t); }}>Replay from the start</button></div>
+      </div></div>
+      <LiveView job={job} file={null} uploading={false} err={null}
+        source={{ ...source, policy: <ReplayPolicies replay={replay} job={job} demoId={demoId} /> }} />
+    </>
+  );
+}
+
+function ReplayPolicies({ replay, job, demoId }: { replay: Replay; job: Job; demoId: string }) {
+  const stage = job.stages.find((s) => s.key === "policy");
+  if (!replay.policies.length) {
+    return <div className="card card-pad live-policy"><div className="eyebrow">Policy</div>
+      <p className="muted" style={{ fontSize: 14 }}>No policy has been trained on this clip yet.</p></div>;
+  }
+  if (!stage || stage.status === "pending") {
+    return <div className="card card-pad live-policy"><div className="eyebrow">Policy</div>
+      <p className="muted" style={{ fontSize: 14 }}>Training starts once the task environment is ready.</p></div>;
+  }
+  const lead = replay.policies[0];
+  if (stage.status === "running") {
+    const iters = lead.curve?.iterations ?? 1500;
+    return (
+      <div className="card card-pad live-policy">
+        <div className="eyebrow">Policy · training (replay)</div>
+        <p className="muted" style={{ fontSize: 14 }}>
+          PPO on 4,096 simulated G1s: iteration {Math.round(stage.progress * iters).toLocaleString()} of {iters.toLocaleString()}.
+        </p>
+        {lead.curve && <Curve points={lead.curve.points} upTo={stage.progress * iters} label={`${lead.label}: mean episode reward`} />}
+      </div>
+    );
+  }
+  return (
+    <div className="card card-pad live-policy">
+      <div className="eyebrow">Policies trained on this environment</div>
+      <div className="replay-policies">
+        {replay.policies.map((p) => (
+          <figure key={p.key} className="replay-policy">
+            <div className="video-frame"><video src={demo.file(demoId, p.video)} poster={demo.file(demoId, p.poster)} muted loop playsInline autoPlay controls /></div>
+            <figcaption>
+              <strong>{p.label}</strong>
+              <span className={`env-tag ${p.checker.success ? "req" : ""}`}>
+                {p.checker.success ? `passes today's checks: ${p.checker.stages_completed}/${p.checker.stages_total}` : `today's checks: ${p.checker.stages_completed}/${p.checker.stages_total}`}
+              </span>
+              {!p.checker.success && <span className="faint" style={{ fontSize: 12 }}>Trained under an earlier, looser checker (it allowed tuck-hops and flicked kicks).</span>}
+              {p.curve && <Curve points={p.curve.points} upTo={Infinity} label="mean episode reward" small />}
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+      <p className="faint" style={{ fontSize: 12.5 }}>Solid robot: the trained policy, physically simulated. Green ghost: the reference it was shown.</p>
+    </div>
+  );
+}
+
+/** Mean episode reward over PPO iterations, drawn up to iteration `upTo`. */
+function Curve({ points, upTo, label, small }: { points: [number, number, number][]; upTo: number; label: string; small?: boolean }) {
+  const W = 320, H = small ? 56 : 96;
+  const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs) || 1, y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const sx = (x: number) => ((x - x0) / (x1 - x0 || 1)) * (W - 8) + 4;
+  const sy = (y: number) => H - 4 - ((y - y0) / (y1 - y0 || 1)) * (H - 8);
+  const shown = points.filter((p) => p[0] <= upTo);
+  const last = shown.at(-1);
+  return (
+    <div className="curve">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${label}, ${last ? `${last[1].toFixed(1)} at iteration ${last[0]}` : "starting"}`}>
+        <polyline points={points.map((p) => `${sx(p[0])},${sy(p[1])}`).join(" ")} className="ghost" />
+        {shown.length > 1 && <polyline points={shown.map((p) => `${sx(p[0])},${sy(p[1])}`).join(" ")} />}
+        {last && <circle cx={sx(last[0])} cy={sy(last[1])} r={3} />}
+      </svg>
+      <div className="faint mono" style={{ fontSize: 11.5 }}>{label}{last ? ` · ${last[1].toFixed(1)}` : ""}</div>
     </div>
   );
 }

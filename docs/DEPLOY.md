@@ -116,9 +116,15 @@ failure modes and health endpoints: `docs/SYSTEM_DESIGN.md`.
   online, and training still needs a GPU (Colab).
 - **Free 512 MB tiers** (Render, Koyeb) are too small: the live pipeline peaks around 1-1.5 GB.
 
-**Until the API is hosted:** `scripts/deploy.sh web` deploys the website alone. The examples work and the header
-says "Offline demo"; uploads and `/live` say the API isn't reachable. Live at https://athlete2humanoid.pages.dev
-since 2026-10-28.
+**Until the API is hosted:** `scripts/deploy.sh static` deploys the website alone, live at
+https://athlete2humanoid.pages.dev. The header says "Offline demo". Without an API:
+- **Examples:** work as usual.
+- **`/live`:** replays recorded builds (`/live/demo/<clip>`) of five clips: front kick, squat jump, jumping jacks, lunge, punches.
+  - Each is a real run of the live worker, recorded by `scripts/build_live_demo.py`: its stage messages at the times they arrived, pose landmarks, the G1 retarget, and the task environment with Muse's moment names.
+  - Then a fast replay of PPO training (the real run's reward curve), and the policies trained on that clip, each scored under today's checker.
+- **Your own video:** a dropped file stays in the browser. The page says live builds need the API and points at the recordings.
+
+Re-record with `REBUILD=1 MUSE=1 PYTHON=<the repo's venv python> scripts/deploy.sh static` once newer policies exist (`CLIPS` in the script picks the runs).
 
 **Frontend: Cloudflare Pages.** The free tier has unlimited bandwidth and requests and allows commercial use
 (Vercel's Hobby plan doesn't). It serves the SPA fallback from `web/public/_redirects`, deploys with one
