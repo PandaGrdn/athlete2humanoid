@@ -83,6 +83,18 @@ All warm-started from the final squat-jump weights (same observation size):
 
 The squat-jump run is the regression check against the old spec's results.
 
+**Squat jump** (each policy scored on its keypose spec; one 9 s rollout from the first frame):
+
+| Policy | Stages | Jump quality | Falls | Torso error (mean / max) |
+|---|---|---|---|---|
+| retarget | 12/12 | 1.0, 1.0 | – | – |
+| final run's task (old spec) | 6/12 | 0.68 | 0 | – |
+| **keypose task** | **12/12** | **1.0, 1.0** | **0** | 0.18 / 0.42 m |
+| keypose taskphase | 0/12 | – | 9 | 0.17 / 0.72 m |
+
+- **The task policy learns the keypose spec:** 6/12 → 12/12 in 1,500 iterations, including the arm swing the old spec never asked for. Kept as `weights/kp_squat_jump_task`.
+- **Taskphase is not converged.** Its training episodes grew from 280 to 468 of 500 steps and were still rising at the end, but it falls in the evaluation rollout. It needs more iterations.
+
 ## For the live demo
 
 A new video becomes an environment within minutes: SAM 3.1, pose and retarget, then this spec and its self-check. The web app shows the key moments as soon as the spec exists; the trained policy follows after 1–2 hours of GPU training.
