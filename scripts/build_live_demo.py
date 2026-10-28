@@ -32,9 +32,11 @@ RUNS = REPO / "outputs"
 # id, clip (clips/<name>.*), title, [(policy label key, run/policy folder)]
 CLIPS = [
     ("front-kick", "front_kick", "Front kick",
-     [("tracking", "remote_latent_kp_kick/policy_tracking"), ("taskhybrid", "remote_latent_hyb_kick/policy_taskhybrid")]),
+     [("tracking", "remote_latent_kp_kick/policy_tracking"), ("taskhybrid", "remote_latent_fix_kick/policy_taskhybrid"),
+      ("task", "remote_latent_fix_kick/policy_task")]),
     ("squat-jump", "squat_jump", "Squat jump",
-     [("tracking", "remote_latent_final/policy_tracking"), ("taskhybrid", "remote_latent_hyb_sj/policy_taskhybrid")]),
+     [("tracking", "remote_latent_final/policy_tracking"), ("taskhybrid", "remote_latent_fix_sj/policy_taskhybrid"),
+      ("task", "remote_latent_fix_sj/policy_task")]),
     ("jumping-jacks", "jumping_jacks", "Jumping jacks", [("task", "remote_latent_kp_jacks/policy_task")]),
     ("lunge", "lunge", "Lunge", [("task", "remote_latent_loose_lunge/policy_task")]),
     ("punches", "punches", "Punches", [("task", "remote_latent_loose_punch/policy_task")]),

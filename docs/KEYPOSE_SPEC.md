@@ -195,7 +195,23 @@ The policies found two shortcuts the spec allowed:
 - squat jump: the reference 12/12, tracking 12/12, every task-family policy 1/12;
 - front kick: the reference 6/6, tracking 6/6, every task-family policy 1/6.
 
-Those policies had learned the shortcut, so the robustness numbers in `docs/GENERALIZATION.md` flatter them. Task and taskhybrid are being retrained on the fixed spec, warm-started from each clip's tracking policy (`outputs/remote_latent_fix_sj`, `outputs/remote_latent_fix_kick`).
+Those policies had learned the shortcut, so the robustness numbers in `docs/GENERALIZATION.md` flatter them.
+
+**Retrained on the fixed spec** (`outputs/remote_latent_fix_sj`, `outputs/remote_latent_fix_kick`): 1,500 iterations each, warm-started from the clip's tracking policy.
+
+| Clip | Policy | Checker | Falls | V-JEPA (before) | Measured |
+|---|---|---|---|---|---|
+| squat jump | task | 12/12 | 0 | 0.47 (0.33) | pelvis to 1.03 m, flights 0.40 / 0.38 s |
+| squat jump | taskhybrid | 12/12 | 0 | 0.54 (0.45) | pelvis to 1.02 m, flights 0.40 / 0.40 s |
+| squat jump | tracking (reference point) | 12/12 | 0 | 0.70 | pelvis to 1.05 m, flights 0.42 / 0.42 s |
+| front kick | task | 6/6 | 0 | 0.50 (0.36) | one high kick (1.08 m, 0.38 s above 0.35 m) |
+| front kick | taskhybrid | 6/6 | 0 | 0.61 (0.57) | one high kick (1.06 m, 0.39 s) |
+| front kick | tracking (reference point) | 6/6 | 0 | 0.73 | two kicks (0.74 m, ~0.5 s each) |
+
+- **Squat jump: fixed.** The task policies now really jump, nearly as high and as long as tracking.
+- **Front kick: better, not done.** The first kick is real and held, higher than the person's. The second (the sideways one) stays under 0.35 m but still meets its goal's tolerance.
+
+Muse's critic agrees on the kick: tracking > taskhybrid > task, the same order as V-JEPA. On the squat jump it ranked task first and said tracking "barely leaves the ground", which the measurements contradict; an earlier call had ranked tracking first. One critic call is noisy. Average several blind orders before trusting a ranking.
 
 ## For the live demo
 
