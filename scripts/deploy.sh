@@ -34,20 +34,26 @@ need() { command -v "$1" >/dev/null 2>&1 || die "$1 not found. $2"; }
 
 need uv "Install it: https://docs.astral.sh/uv/ (curl -LsSf https://astral.sh/uv/install.sh | sh)"
 [ "${SKIP_WEB:-}" = 1 ] || { need node "Install Node 18+ (brew install node)."; need npx "It comes with Node."; }
-hf() {  # the hf CLI on PATH, else a pinned one via uvx (same stored login either way)
-  if command -v hf >/dev/null 2>&1; then command hf "$@"; else uvx --quiet --from "$HF_VERSION" hf "$@"; fi
+hf() {  # always the pinned hf CLI (an hf on PATH may be older, without the flags used here); same stored login
+  uvx --quiet --from "$HF_VERSION" hf "$@"
 }
 wrangler() { npx --yes "$WRANGLER" "$@"; }
 
 # --- who: Hugging Face user, Cloudflare login ---------------------------------------------------------
 HF_USER="${1:-}"
 if [ -z "$HF_USER" ]; then
-  # only the account name is read out of whoami's answer
-  HF_USER="$(hf auth whoami --json 2>/dev/null | python3 -c '
-import sys, json
-d = json.load(sys.stdin)
-u = d.get("name") or d.get("user") or ""
-print(u.get("name", "") if isinstance(u, dict) else u)' 2>/dev/null || true)"
+  # only the account name is read out of whoami's answer: JSON on newer hf ({"user": ...} or {"name": ...}),
+  # "user=<name>" or the bare name on others
+  HF_USER="$( { hf auth whoami --json 2>/dev/null || hf auth whoami 2>/dev/null; } | python3 -c '
+import sys, json, re
+t = sys.stdin.read().strip()
+try:
+    d = json.loads(t.splitlines()[0])
+    u = d.get("name") or d.get("user") or ""
+    print(u.get("name", "") if isinstance(u, dict) else u)
+except (ValueError, IndexError, AttributeError):
+    m = re.search(r"user[=:]\s*(\S+)", t) or re.match(r"([A-Za-z0-9][A-Za-z0-9._-]*)\s*$", t.splitlines()[0] if t else "")
+    print(m.group(1) if m else "")' 2>/dev/null || true)"
   [ -n "$HF_USER" ] || die "not logged in to Hugging Face. Run: hf auth login (a token with write access), or pass your username."
 fi
 [[ "$HF_USER" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "odd Hugging Face username: $HF_USER"
