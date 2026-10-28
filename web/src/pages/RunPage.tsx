@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router";
 import { api, fmt, policyColor, url, type FileRef, type Policy, type Robust, type RunDetail, type TaskSpec } from "../api";
 import { BarChart, LineChart } from "../components/charts";
 import { EnvironmentPanel } from "../components/environment";

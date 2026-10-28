@@ -21,12 +21,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import logs, runs
+from . import live, logs, runs
 from .config import Settings
 from .journal import Journal
 from .jobs import TERMINAL, JobStore, job_event
 from .security import BodyLimit, Hardening, RateLimit, RateLimiter, anon, client_ip
-from .stages import STAGES
+from .stages import LIVE_STAGES, STAGES
 
 log = logging.getLogger("a2h.api")
 NON_UPLOAD_BODY = 64 * 1024  # every other request body is a tiny form or nothing
@@ -61,6 +61,7 @@ def create_app(settings=None):
     for w in warnings:
         log.warning("config", extra={"fields": {"warning": w}})
     settings.data_dir.mkdir(parents=True, exist_ok=True)
+    settings.live_ok = live.available(settings)  # imports checked once, in the worker's Python
     journal = Journal(settings.data_dir / "jobs.sqlite3")
     store = JobStore(settings, journal)
 
@@ -101,8 +102,9 @@ def create_app(settings=None):
         return (with_video or list(found) or [None])[0]
 
     def runners_now():
-        """Enabled runners whose backend is reachable right now: demo always, colab when its CLI is there."""
-        return [r for r in settings.enabled_runners if r == "demo" or gpu_backend_status(settings)[0]]
+        """Enabled runners whose backend is reachable right now: demo and live (this host) always, colab when
+        its CLI is there."""
+        return [r for r in settings.enabled_runners if r in ("demo", "live") or gpu_backend_status(settings)[0]]
 
     @app.get("/healthz", include_in_schema=False)
     def healthz():
@@ -139,6 +141,9 @@ def create_app(settings=None):
             "demo_run": demo_run(), "demo_seconds": settings.demo_seconds, "run_count": len(all_runs()),
             "limits": {"max_upload_mb": settings.max_upload_mb, "extensions": sorted(VIDEO_EXT)},
             "stages": [{"key": k, "label": label, "description": d} for k, label, d, _ in STAGES],
+            "live_stages": [{"key": k, "label": label, "description": d} for k, label, d, _ in LIVE_STAGES],
+            "live": {"max_seconds": settings.live_max_seconds, "concurrency": settings.live_concurrency}
+            if settings.live_ok else None,
         }
 
     @app.get("/api/runs")
@@ -191,8 +196,8 @@ def create_app(settings=None):
             raise HTTPException(400, "upload a video or pick a gallery run")
         if run_id and run_id not in all_runs():
             raise HTTPException(404, "run not found")
-        if runner == "colab" and file is None:
-            raise HTTPException(400, "the colab runner needs an uploaded video")
+        if runner in ("colab", "live") and file is None:
+            raise HTTPException(400, f"the {runner} runner needs an uploaded video")
         if file is not None and store.upload_bytes() > settings.max_upload_storage_mb * 1048576:
             raise HTTPException(503, "upload storage is full right now; try again later or pick a gallery run")
         upload = await _save_upload(file, store, settings) if file is not None else None
@@ -282,6 +287,28 @@ def create_app(settings=None):
         if view is None:
             raise HTTPException(404, "the task environment isn't compiled yet")
         return view
+
+    def _live_folder(jid):
+        job = store.get(jid)
+        if job is None or job.runner != "live":
+            raise HTTPException(404, "not a live job")
+        return store.live_dir(job)
+
+    @app.get("/api/jobs/{jid}/live")
+    def job_live(jid: str):
+        """What the live page draws (2D landmarks, the G1's bodies, timings), growing as stages finish."""
+        data = live.live_data(_live_folder(jid))
+        if data is None:
+            raise HTTPException(404, "no pose yet")
+        return data
+
+    @app.get("/api/jobs/{jid}/live/video")
+    def job_live_video(jid: str):
+        """The re-encoded clip the landmarks line up with (H.264, no audio or metadata)."""
+        p = runs.safe_path(_live_folder(jid), "processed.mp4")
+        if p is None:
+            raise HTTPException(404, "the video isn't processed yet")
+        return FileResponse(p, media_type="video/mp4", headers={"X-Content-Type-Options": "nosniff"})
 
     @app.get("/api/jobs/{jid}/input")
     def job_input(jid: str):

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type PointerEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router";
 import {
   examples, exUrl,
   type CompareRow, type ExVideo, type Example, type ExampleSummary, type ImportanceChart, type PolicyRow, type RobustTable,

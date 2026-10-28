@@ -115,6 +115,8 @@ export type TaskSpec = {
     source: "spec" | "eval";
   } | null;
   warnings: string[];
+  // The reward machine's weights (live jobs; newer specs) and plain-text notes on how it pays.
+  reward?: { weights: { progress: number; stage: number; jump: number; done: number; hold: number }; notes: string[] };
 };
 
 export type RunDetail = RunSummary & {
@@ -131,7 +133,7 @@ export type StageState = {
   key: string;
   label: string;
   description: string;
-  status: "pending" | "running" | "done" | "failed";
+  status: "pending" | "running" | "done" | "failed" | "skipped";
   progress: number;
   started_at: number | null;
   finished_at: number | null;
@@ -163,7 +165,24 @@ export type Health = {
   demo_seconds: number;
   run_count: number;
   limits: { max_upload_mb: number; extensions: string[] };
+  live?: { max_seconds: number; concurrency: number } | null; // set when runners include "live"
   stages: { key: string; label: string; description: string }[];
+};
+
+/** A live job's data (GET /api/jobs/{id}/live), growing as its stages finish. Times are seconds of the
+ *  processed video (GET /api/jobs/{id}/live/video), frames at `fps`. */
+export type LiveData = {
+  fps: number;
+  frames: number;
+  duration_s: number;
+  video: { width: number; height: number } | null; // null only before the video stage is done
+  // 2D, 0..1 of the processed frame (x right, y down); null where not detected.
+  landmarks: { names: string[]; edges: [number, number][]; frames: (([number, number] | null)[] | null)[] } | null;
+  pose_found: number | null;
+  // G1 bodies in metres, world frame, z up.
+  robot: { names: string[]; edges: [number, number][]; frames: [number, number, number][][] } | null;
+  retarget_error_cm: Record<string, [number, number]> | null;
+  timings_s: Record<string, number>;
 };
 
 export const url = (path: string) => (path.startsWith("http") ? path : API_BASE + path);
@@ -192,6 +211,8 @@ export const api = {
   run: (id: string) => request<RunDetail>(`/api/runs/${encodeURIComponent(id)}`),
   runTaskSpec: (id: string) => request<TaskSpec>(`/api/runs/${encodeURIComponent(id)}/task_spec`),
   job: (id: string) => request<Job>(`/api/jobs/${encodeURIComponent(id)}`),
+  live: (id: string) => request<LiveData>(`/api/jobs/${encodeURIComponent(id)}/live`),
+  liveVideo: (id: string) => url(`/api/jobs/${encodeURIComponent(id)}/live/video`),
   jobTaskSpec: (id: string) => request<TaskSpec>(`/api/jobs/${encodeURIComponent(id)}/task_spec`),
   cancel: (id: string) => request<Job>(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
   createJob: (opts: { file?: File; runId?: string; runner?: string }) => {
@@ -202,6 +223,18 @@ export const api = {
     return request<Job>("/api/jobs", { method: "POST", body: fd });
   },
 };
+
+/** Client-side upload check, for a quick message only: the server stays the authority. */
+export function checkVideo(f: File, health: Health | null): string | null {
+  const exts = health?.limits.extensions ?? [".mp4", ".mov", ".m4v", ".webm"];
+  const maxMb = health?.limits.max_upload_mb ?? 100;
+  const ext = f.name.includes(".") ? f.name.slice(f.name.lastIndexOf(".")).toLowerCase() : "";
+  // Some browsers leave .mov/.m4v untyped, so an empty type passes on the extension alone.
+  if (f.type && !f.type.startsWith("video/")) return `That isn't a video (${f.type}). Use ${exts.join(", ")}.`;
+  if (!exts.includes(ext)) return `Unsupported file type ${ext || "(no extension)"}. Use ${exts.join(", ")}.`;
+  if (f.size > maxMb * 1024 * 1024) return `That file is ${fmt.bytes(f.size)}; the limit is ${maxMb} MB.`;
+  return null;
+}
 
 /** Live job updates over SSE, falling back to polling if the stream fails. Returns a stop function. */
 export function watchJob(id: string, onJob: (j: Job) => void): () => void {

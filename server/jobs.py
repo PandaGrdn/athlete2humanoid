@@ -2,6 +2,8 @@
 
 demo   replays a finished run (its real log lines and training curves) on a compressed clock.
        Free hosting has no GPU, so this is what the hosted demo uses. Results are that run's.
+live   builds the uploaded video's real task environment on the host's CPU (server/live.py) and
+       stops before training, which needs a GPU. Works on the free Space.
 colab  shells out to scripts/remote_run.py (a real A100 job, hours long) and follows its
        runner.log / job.log / status.json. Local only, off unless A2H_ENABLE_COLAB=1.
 """
@@ -20,7 +22,8 @@ from pathlib import Path
 
 from . import runs
 from .config import REPO
-from .stages import STAGES, STAGE_KEYS, classify, redact
+from .live import LIVE_DIR, LiveRunner
+from .stages import LIVE_STAGES, STAGES, classify, redact
 
 log = logging.getLogger("a2h.jobs")
 TERMINAL = {"succeeded", "failed", "cancelled"}
@@ -41,6 +44,7 @@ class Stage:
     progress: float = 0.0
     started_at: float | None = None
     finished_at: float | None = None
+    share: float = 0.0  # of the job's progress
 
 
 @dataclass
@@ -96,6 +100,7 @@ class JobStore:
             self._recover()
         self._sweep_incoming(max_age=0)  # half-written uploads from before a restart
         self._flusher = None
+        self.live = LiveRunner(self)
 
     def start_background(self, interval=1.0):
         """The flush + expiry thread. Separate from __init__ so tests can drive sweep() themselves."""
@@ -211,8 +216,9 @@ class JobStore:
     # --- bookkeeping -------------------------------------------------------------------------
     def create(self, runner, source_run=None, upload=None, owner=None):
         jid = uuid.uuid4().hex  # 128 bits: a job id is the only key to its upload
+        table = LIVE_STAGES if runner == "live" else STAGES
         job = Job(id=jid, runner=runner, source_run=source_run,
-                  stages=[Stage(k, label, desc) for k, label, desc, _ in STAGES])
+                  stages=[Stage(k, label, desc, share=share) for k, label, desc, share in table])
         if upload:
             job.input = {**upload, "url": f"/api/jobs/{jid}/input"}
         with self.lock:
@@ -257,6 +263,9 @@ class JobStore:
             done = runs.find_runs(self.settings.runs_dir).get(job.result_run)
             if done is not None:
                 return done
+        if job.runner == "live":
+            out = self.live_dir(job)
+            return out if out.is_dir() else None
         if job.runner == "demo":
             env = next((s for s in job.stages if s.key == "environment"), None)
             if env is None or env.status == "pending":
@@ -264,6 +273,11 @@ class JobStore:
             return runs.find_runs(self.settings.runs_dir).get(job.source_run)
         out = self.colab_out(job)
         return out if out.is_dir() else None
+
+    def live_dir(self, job):
+        """A live job's outputs (server/live_worker.py): processed.mp4, live.json, task_spec.json. They are
+        part of the upload, so they expire with it (A2H_UPLOAD_TTL_H)."""
+        return self.upload_dir(job.id) / LIVE_DIR
 
     def get(self, jid):
         with self.lock:
@@ -290,7 +304,7 @@ class JobStore:
 
     def set_stage(self, job, key, progress=None, status=None):
         with self.lock:
-            i = STAGE_KEYS.index(key)
+            i = [s.key for s in job.stages].index(key)
             for s in job.stages[:i]:  # stages are sequential: everything before is done
                 if s.status != "done":
                     s.status, s.progress, s.finished_at = "done", 1.0, s.finished_at or _now()
@@ -312,8 +326,11 @@ class JobStore:
             self._recompute(job)
 
     def _recompute(self, job):
-        w = {k: share for k, _, _, share in STAGES}
-        job.progress = round(sum(w[s.key] * (1.0 if s.status == "done" else s.progress) for s in job.stages), 4)
+        w = {s.key: s.share for s in job.stages}
+        if not any(w.values()):  # a job journalled before stages carried their share
+            w = {k: share for k, _, _, share in STAGES}
+        job.progress = round(sum(w.get(s.key, 0) * (1.0 if s.status in ("done", "skipped") else s.progress)
+                                 for s in job.stages), 4)
         job.updated_at = _now()
         job.version += 1
         self.dirty.add(job.id)
@@ -322,7 +339,7 @@ class JobStore:
         with self.lock:
             if status == "succeeded":
                 for s in job.stages:
-                    if s.status != "done":
+                    if s.status not in ("done", "skipped"):
                         s.status, s.progress, s.finished_at = "done", 1.0, _now()
                         s.started_at = s.started_at or s.finished_at
             else:
@@ -338,11 +355,12 @@ class JobStore:
 
     # --- running -----------------------------------------------------------------------------
     def start(self, job):
-        target = {"demo": self._run_demo, "colab": self._run_colab}[job.runner]
+        target = {"demo": self._run_demo, "colab": self._run_colab, "live": self.live.run}[job.runner]
 
         def go():
             try:
-                self.update(job, status="running")
+                if job.runner != "live":  # a live job stays queued until a build slot is free
+                    self.update(job, status="running")
                 target(job)
             except Exception:  # a runner bug must not leave the job "running" forever
                 ref = uuid.uuid4().hex[:8]

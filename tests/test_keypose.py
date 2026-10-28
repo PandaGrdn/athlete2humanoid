@@ -194,3 +194,12 @@ def test_loose_task_requires_few_moments():
     spec = K.compile_keypose_spec(motion("squat", reps=3), FPS)
     inner = [s for s in spec["stages"] if s["kind"] == "pose" and s["level"] < 99]  # not the clip's end
     assert len(inner) > K.REQUIRED_TOP and sum(not s["optional"] for s in inner) == K.REQUIRED_TOP
+
+
+def test_a_foot_on_its_toes_is_not_required_down():
+    pos = motion("squat")
+    pos[:, 3, 2] += 0.08 * bump(np.arange(len(pos)) / FPS, 4.0 / 3, 0.6)  # left heel up 8 cm through the first rep
+    spec = K.compile_keypose_spec(pos, FPS)
+    first = next(s for s in spec["stages"] if s["kind"] == "pose")
+    assert first["feet_down"] == [False, True]  # low in the reference, but not planted by the robot's rule
+    assert T.evaluate(spec, pos, FPS)["success"]  # so the reference passes under the robot's own thresholds

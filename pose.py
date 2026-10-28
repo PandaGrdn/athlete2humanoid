@@ -16,10 +16,10 @@ NOSE, L_EAR, R_EAR = 0, 7, 8
 L_SHOULDER, R_SHOULDER, L_HIP, R_HIP = 11, 12, 23, 24
 
 
-def landmarks_from_crops(crops, fps, model_path=config.POSE_MODEL):
+def landmarks_from_crops(crops, fps, model_path=config.POSE_MODEL, progress=None):
     """crops: (T, S, S, 3) uint8. Returns world (T, 33, 3) metres, hip-centred, camera axes
     (x right, y down, z depth); image_xy (T, 33, 2) normalised to the crop; visibility (T, 33).
-    Frames with no detection are NaN."""
+    Frames with no detection are NaN. progress(done, total) is called every 10 frames when given."""
     opts = vision.PoseLandmarkerOptions(
         base_options=BaseOptions(model_asset_path=str(model_path)),
         running_mode=vision.RunningMode.VIDEO, num_poses=1)
@@ -29,6 +29,8 @@ def landmarks_from_crops(crops, fps, model_path=config.POSE_MODEL):
     vis = np.zeros((T, 33))
     with vision.PoseLandmarker.create_from_options(opts) as landmarker:
         for t, crop in enumerate(crops):
+            if progress and t % 10 == 9:
+                progress(t, T)
             image = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(crop))
             res = landmarker.detect_for_video(image, int(t * 1000 / fps))
             if not res.pose_world_landmarks:

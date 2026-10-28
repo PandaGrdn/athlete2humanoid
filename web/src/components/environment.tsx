@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { TaskSpec, TaskStage } from "../api";
 import { Icon } from "./ui";
 
@@ -16,9 +16,13 @@ function feetNote(s: TaskStage) {
   return null;
 }
 
-/** The RL environment compiled from the retarget: key moments on the clip's timeline, then the list. */
-export function EnvironmentPanel({ spec, live = false }: { spec: TaskSpec; live?: boolean }) {
+const startOf = (s: TaskStage) => (s.kind === "flight" ? s.start_s : s.at_s);
+
+/** The RL environment compiled from the retarget: key moments on the clip's timeline, then the list.
+ *  With `t` and `onSeek` it follows a video: a playhead, moments light up as it passes them, and a click seeks. */
+export function EnvironmentPanel({ spec, live = false, t, onSeek }: { spec: TaskSpec; live?: boolean; t?: number; onSeek?: (t: number) => void }) {
   const [on, setOn] = useState<number | null>(null);
+  const inner = useRef<HTMLDivElement>(null);
   const dur = spec.duration_s > 0 ? spec.duration_s : Math.max(1, ...spec.stages.map((s) => s.end_s));
   const c = spec.counts;
   const sc = spec.self_check;
@@ -37,6 +41,18 @@ export function EnvironmentPanel({ spec, live = false }: { spec: TaskSpec; live?
     last = x;
   });
   const hover = (i: number | null) => () => setOn(i);
+  // The stage playback is in: the last one started (a flight only while it lasts).
+  let cur = -1;
+  if (t != null) spec.stages.forEach((s, i) => { if (startOf(s) <= t + 1e-3 && (s.kind !== "flight" || t <= s.end_s)) cur = i; });
+  const state = (s: TaskStage) => (t == null ? "" : t >= s.at_s && t - s.at_s < 0.35 ? "hit past" : t >= s.at_s ? "past" : "");
+  const seekTrack = (e: PointerEvent<HTMLDivElement>) => {
+    const r = inner.current?.getBoundingClientRect();
+    if (!onSeek || !r || (e.target as HTMLElement).closest("button")) return;
+    onSeek(Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * dur);
+  };
+  const rowKey = (s: TaskStage) => (e: KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSeek?.(startOf(s)); }
+  };
 
   return (
     <div className="card card-pad env">
@@ -64,7 +80,7 @@ export function EnvironmentPanel({ spec, live = false }: { spec: TaskSpec; live?
 
       <div className="env-timeline" role="img"
         aria-label={`Timeline of ${c.moments} key moments over ${secs(dur)}: ${spec.stages.filter((s) => s.kind === "pose").map((s) => s.name).join(", ")}`}>
-        <div className="env-track"><div className="env-inner">
+        <div className={`env-track ${onSeek ? "seek" : ""}`} onPointerDown={seekTrack}><div className="env-inner" ref={inner}>
           <div className="env-base" />
           {spec.stages.map((s, i) => s.kind === "flight" && (
             <div key={i} className={`env-flight ${on === i ? "on" : ""}`} onMouseEnter={hover(i)} onMouseLeave={hover(null)}
@@ -74,13 +90,18 @@ export function EnvironmentPanel({ spec, live = false }: { spec: TaskSpec; live?
           {spec.stages.map((s, i) => s.kind === "settle" && (
             <i key={i} className="env-tick" style={{ left: `${pct(s.at_s, dur)}%` }} title={`${s.name} · ${secs(s.at_s)}`} />
           ))}
-          {spec.stages.map((s, i) => s.kind === "pose" && (
-            <span key={i} className={`env-mark ${s.optional ? "opt" : "req"} lane-${lane.get(i)} ${on === i ? "on" : ""}`}
-              style={{ left: `${pct(s.at_s, dur)}%` }} onMouseEnter={hover(i)} onMouseLeave={hover(null)}
-              title={`${number.get(i)}. ${s.name} · ${secs(s.at_s)}${s.optional ? " · optional" : ""}`}>
-              {number.get(i)}
-            </span>
-          ))}
+          {spec.stages.map((s, i) => {
+            if (s.kind !== "pose") return null;
+            const props = {
+              className: `env-mark ${s.optional ? "opt" : "req"} lane-${lane.get(i)} ${on === i ? "on" : ""} ${state(s)}`,
+              style: { left: `${pct(s.at_s, dur)}%` }, onMouseEnter: hover(i), onMouseLeave: hover(null),
+              title: `${number.get(i)}. ${s.name} · ${secs(s.at_s)}${s.optional ? " · optional" : ""}`,
+            };
+            return onSeek
+              ? <button key={i} type="button" {...props} onClick={() => onSeek(s.at_s)} aria-label={`Seek to ${props.title}`}>{number.get(i)}</button>
+              : <span key={i} {...props}>{number.get(i)}</span>;
+          })}
+          {t != null && <i className="env-playhead" style={{ left: `${pct(t, dur)}%` }} />}
         </div></div>
         <div className="env-axis mono"><span>0 s</span><span>{secs(dur / 2)}</span><span>{secs(dur)}</span></div>
       </div>
@@ -89,8 +110,9 @@ export function EnvironmentPanel({ spec, live = false }: { spec: TaskSpec; live?
         {spec.stages.map((s, i) => {
           const note = feetNote(s);
           return (
-            <li key={i} className={`env-row k-${s.kind} ${s.optional ? "opt" : ""} ${on === i ? "on" : ""}`}
-              onMouseEnter={hover(i)} onMouseLeave={hover(null)}>
+            <li key={i} className={`env-row k-${s.kind} ${s.optional ? "opt" : ""} ${on === i || cur === i ? "on" : ""} ${onSeek ? "seek" : ""}`}
+              onMouseEnter={hover(i)} onMouseLeave={hover(null)}
+              {...(onSeek && { onClick: () => onSeek(startOf(s)), onKeyDown: rowKey(s), tabIndex: 0, title: `Seek to ${secs(startOf(s))}` })}>
               <span className="env-bullet">
                 {s.kind === "pose" ? <i className={`env-dot ${s.optional ? "opt" : "req"}`}>{number.get(i)}</i>
                   : s.kind === "flight" ? <i className="env-swatch" /> : <i className="env-tick-sm" />}

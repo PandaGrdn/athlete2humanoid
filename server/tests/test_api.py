@@ -75,6 +75,7 @@ def make_client(runs_dir, tmp_path):
         s = Settings()
         s.runs_dir, s.data_dir = runs_dir, tmp_path / "data"
         s.demo_seconds, s.demo_run, s.runners, s.enable_colab, s.hosted = 0.3, "latent", ["demo"], False, False
+        s.live_mode = "0"  # the live runner has its own tests (test_live.py)
         for k, v in kw.items():
             setattr(s, k, v)
         return TestClient(create_app(s))

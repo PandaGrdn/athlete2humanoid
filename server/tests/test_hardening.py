@@ -21,6 +21,7 @@ def settings_for(runs_dir, data_dir, **kw):
     s = Settings()
     s.runs_dir, s.data_dir = runs_dir, data_dir
     s.demo_seconds, s.demo_run, s.runners, s.enable_colab, s.hosted = 0.3, "latent", ["demo"], False, False
+    s.live_mode = "0"
     for k, v in kw.items():
         setattr(s, k, v)
     return s

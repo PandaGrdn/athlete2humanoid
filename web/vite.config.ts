@@ -9,13 +9,14 @@ const apiBase = (process.env.API_BASE ?? process.env.VITE_API_BASE ?? "").replac
 if (apiBase && !/^https?:\/\/[^/\s'";]+$/.test(apiBase)) throw new Error(`API_BASE must be an origin, got ${apiBase}`);
 
 // Cloudflare Pages reads dist/_headers. Scripts and styles only from this origin; the API origin only
-// for fetch/EventSource, videos and posters. See docs/SECURITY.md.
+// for fetch/EventSource, videos and posters; blob: only for media (the local preview of an upload).
+// Canvases need nothing. See docs/SECURITY.md.
 export function securityHeaders(api: string): string {
   const csp = [
     "default-src 'self'",
     "script-src 'self'",
     "style-src 'self'",
-    `img-src 'self' data: blob: ${api}`.trim(),
+    `img-src 'self' ${api}`.trim(),
     `media-src 'self' blob: ${api}`.trim(),
     `connect-src 'self' ${api}`.trim(),
     "font-src 'self'",

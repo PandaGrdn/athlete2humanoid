@@ -280,7 +280,11 @@ def _compile(pos, fps, skill, max_clearance, name, scale):
         dxy, c, s_ = pos[k, PELVIS, :2] - pos[prev_k, PELVIS, :2], np.cos(yaw[prev_k]), np.sin(yaw[prev_k])
         root = [c * dxy[0] + s_ * dxy[1], -s_ * dxy[0] + c * dxy[1], YAW_R * float(yaw[k] - yaw[prev_k])]
         goal = np.concatenate([F[k, :D_POSE], root])
-        feet_down = [bool(pos[k, a, 2] - foot0 < down_ref) for a in (L_ANKLE, R_ANKLE)]
+        # Required down: a foot the reference has planted by the robot's own rule (T.DOWN), which is what the
+        # robot is held to. One the reference merely has low (on its toes, a lunge's back foot, hovering up
+        # to down_ref) is left free: required by the looser rule, the robot could never meet it (kp lunge:
+        # the reference itself scored 13/16 under the robot's thresholds, the task policy stuck there).
+        feet_down = [bool(pos[k, a, 2] - foot0 < T.DOWN) for a in (L_ANKLE, R_ANKLE)]
         level = dev[k]
         stages.append({"kind": "pose", "level": round(min(level, 99.0), 2), "optional": bool(level < need), "start_s": round(prev_t / fps, 3), "end_s": round(k / fps, 3),
                        "name": name_moment(delta, w), "goal": np.round(goal, 4).tolist(),
@@ -288,7 +292,7 @@ def _compile(pos, fps, skill, max_clearance, name, scale):
                        "delta": np.round(np.concatenate([delta[:D_POSE], root]), 4).tolist(),
                        "feet_down": feet_down, "frame": int(k)})
         prev_k, prev_t = k, k
-    end_down = [bool(pos[-1, a, 2] - foot0 < down_ref) for a in (L_ANKLE, R_ANKLE)]
+    end_down = [bool(pos[-1, a, 2] - foot0 < T.DOWN) for a in (L_ANKLE, R_ANKLE)]
     if stages[-1]["kind"] == "pose" and len(pos) - 1 - stages[-1]["frame"] < MIN_GAP_S * fps:
         stages[-1] |= {"still": True, "optional": False, "name": stages[-1]["name"] + " (finish)"}  # the end pose is the finish
     else:

@@ -1,10 +1,11 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { Link, NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { Link, NavLink, Route, Routes, useLocation } from "react-router";
 import { api, type Health } from "./api";
 import { Icon } from "./components/ui";
 import { ExampleDetail, ExamplesIndex } from "./pages/Examples";
 import Home from "./pages/Home";
 import JobPage from "./pages/JobPage";
+import LivePage from "./pages/LivePage";
 import RunPage from "./pages/RunPage";
 
 const HealthCtx = createContext<{ health: Health | null; error: string | null }>({ health: null, error: null });
@@ -46,6 +47,7 @@ export default function App() {
             <span className="brand-text">athlete2humanoid</span>
           </Link>
           <nav className="nav-links">
+            <NavLink to="/live" className="nav-ex">Live</NavLink>
             <NavLink to="/examples" className="nav-ex">Examples</NavLink>
             <Link to="/#run">Run</Link>
             <Link to="/#gallery">Gallery</Link>
@@ -68,6 +70,7 @@ export default function App() {
       <main>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/live/:id?" element={<LivePage />} />
           <Route path="/jobs/:id" element={<JobPage />} />
           <Route path="/runs/:id" element={<RunPage />} />
           <Route path="/examples" element={<ExamplesIndex />} />

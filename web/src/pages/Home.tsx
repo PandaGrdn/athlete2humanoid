@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { api, fmt, policyColor, type RunSummary } from "../api";
+import { Link, useNavigate } from "react-router";
+import { api, checkVideo, fmt, policyColor, type RunSummary } from "../api";
 import { useHealth } from "../App";
 import { Icon, LoopVideo } from "../components/ui";
 import { exUrl } from "../examples";
@@ -116,6 +116,15 @@ export default function Home() {
               <Link to="/examples" style={{ color: "var(--accent)" }}>Examples</Link> works without it.</div>
           </div>
         )}
+        <Link to="/live" className="card live-cta">
+          <span className="live-cta-ico"><Icon name="cube" size={20} /></span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <strong>Watch it build live.</strong>{" "}
+            <span className="muted">Upload any athletic movement and see the pose, the G1 retarget and its RL task
+              environment appear next to your video, stage by stage.</span>
+          </span>
+          <span className="btn sm primary">Open live demo <Icon name="arrow" size={14} /></span>
+        </Link>
         <div className="upload-grid">
           <UploadPanel offline={offline} />
           <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -214,14 +223,14 @@ function UploadPanel({ offline }: { offline: boolean }) {
   const [busy, setBusy] = useState(false);
   const [runner, setRunner] = useState("demo");
   const exts = health?.limits.extensions ?? [".mp4", ".mov", ".m4v", ".webm"];
-  const maxMb = health?.limits.max_upload_mb ?? 200;
+  const maxMb = health?.limits.max_upload_mb ?? 100;
+  const runners = (health?.runners ?? []).filter((r) => r !== "live"); // live builds have their own page
 
   const pick = (f: File | undefined) => {
     setErr(null);
     if (!f) return;
-    const ext = f.name.slice(f.name.lastIndexOf(".")).toLowerCase();
-    if (!exts.includes(ext)) return setErr(`Unsupported file type ${ext}. Use ${exts.join(", ")}.`);
-    if (f.size > maxMb * 1024 * 1024) return setErr(`That file is ${fmt.bytes(f.size)}; the limit is ${maxMb} MB.`);
+    const bad = checkVideo(f, health);
+    if (bad) return setErr(bad);
     if (preview) URL.revokeObjectURL(preview);
     setFile(f);
     setPreview(URL.createObjectURL(f));
@@ -271,9 +280,9 @@ function UploadPanel({ offline }: { offline: boolean }) {
           title={offline ? "The pipeline API is offline" : undefined}>
           <Icon name="play" size={16} />{busy ? "Uploading…" : "Run pipeline"}
         </button>
-        {health && health.runners.length > 1 && (
+        {runners.length > 1 && (
           <select className="select" value={runner} onChange={(e) => setRunner(e.target.value)} aria-label="Runner">
-            {health.runners.map((r) => <option key={r} value={r}>{r === "colab" ? "Colab A100 (real, ~3 h)" : "Demo replay"}</option>)}
+            {runners.map((r) => <option key={r} value={r}>{r === "colab" ? "Colab A100 (real, ~3 h)" : "Demo replay"}</option>)}
           </select>
         )}
       </div>

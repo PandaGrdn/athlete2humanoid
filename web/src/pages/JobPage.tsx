@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router";
 import { api, fmt, policyColor, url, watchJob, type Job, type RunSummary, type TaskSpec } from "../api";
 import { LineChart } from "../components/charts";
 import { EnvironmentPanel } from "../components/environment";
@@ -88,6 +88,7 @@ export default function JobPage() {
         <StatusPill status={job.status} />
         <span className="mono muted" style={{ fontSize: 14 }}>{clock(Math.max(0, elapsed))}</span>
         {live && <button className="btn sm" onClick={() => api.cancel(job.id).then(setJob)}>Cancel</button>}
+        {job.runner === "live" && <Link className="btn sm" to={`/live/${job.id}`}>Live view <Icon name="arrow" size={14} /></Link>}
         {resultId && <Link className="btn primary" to={`/runs/${resultId}`}>View results <Icon name="arrow" size={16} /></Link>}
       </div>
 
@@ -112,12 +113,12 @@ export default function JobPage() {
             const dur = s.started_at ? (s.finished_at ?? (s.status === "running" ? now : s.started_at)) - s.started_at : null;
             return (
               <div className={`stage ${s.status}`} key={s.key}>
-                <div className="marker">{s.status === "done" ? <Icon name="check" size={14} /> : i + 1}</div>
+                <div className="marker">{s.status === "done" ? <Icon name="check" size={14} /> : s.status === "skipped" ? "–" : i + 1}</div>
                 <div>
                   <div className="head">
                     <h4>{s.label}</h4>
                     <span className="mono faint" style={{ fontSize: 12 }}>
-                      {s.status === "running" ? `${Math.round(s.progress * 100)}%` : dur != null && s.status === "done" ? `${dur.toFixed(1)} s` : MODEL[s.key]}
+                      {s.status === "running" ? `${Math.round(s.progress * 100)}%` : s.status === "skipped" ? "skipped" : dur != null && s.status === "done" ? `${dur.toFixed(1)} s` : MODEL[s.key]}
                     </span>
                   </div>
                   <div className="desc">{s.description}</div>

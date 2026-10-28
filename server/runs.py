@@ -382,6 +382,25 @@ def _self_check(spec, ev):
     return None
 
 
+def _reward(spec, keypose):
+    """How the stage machine pays (skill/keypose.py / skill/task.py WEIGHTS, seconds of unit reward)."""
+    w = spec.get("weights") if isinstance(spec.get("weights"), dict) else {}
+    num = {k: _num(w.get(k)) for k in ("progress", "stage", "jump", "done", "hold")}
+    num = {k: round(float(v), 3) if v is not None and abs(v) < 1e4 else 0.0 for k, v in num.items()}
+    notes = ["Progress toward the next key moment pays as it happens, gated on staying upright.",
+             "Each key moment reached pays a bonus; a jump pays extra for its height.",
+             "Finishing pays a bonus scaled by the moments reached."]
+    if num["hold"]:
+        notes.append("Once done, holding the end pose pays per second, and the style terms stop.")
+    elif keypose:
+        notes.append("This spec predates the end-pose hold (trained without it).")
+    notes += ["A fall gives back what the attempt earned since the last steady stance.",
+              "Timing is free: only the order of the moments counts."]
+    if keypose:
+        notes.append("Optional moments pay too, but may be skipped.")
+    return {"weights": num, "notes": notes}
+
+
 def task_spec_view(spec, ev=None):
     """The view of a parsed task_spec.json the frontend renders, or None when it isn't one."""
     if not isinstance(spec, dict) or not isinstance(spec.get("stages"), list):
@@ -410,6 +429,7 @@ def task_spec_view(spec, ev=None):
                    "flights": sum(st["kind"] == "flight" for st in stages)},
         "body_parts": sorted({p["part"] for st in stages for p in st["body_parts"]}),
         "self_check": _self_check(spec, ev),
+        "reward": _reward(spec, keypose),
         "warnings": [w for w in (_text(x, 200) for x in (spec.get("warnings") or [])[:10]
                                  if isinstance(spec.get("warnings"), list)) if w],
     }

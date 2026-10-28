@@ -31,6 +31,7 @@ A2H_COLAB_ITERS     PPO iterations for colab jobs (default: 2000)
 """
 
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -102,6 +103,14 @@ class Settings:
     colab_iters: int = field(default_factory=lambda: _num("A2H_COLAB_ITERS", 2000, int))
     # The approach that has worked best: the task policy on the video's keypose spec (docs/KEYPOSE_SPEC.md),
     # built off a finished run's weights ("" trains from scratch).
+    # The live runner (server/live.py): builds an uploaded video's task environment on this host's CPU.
+    live_mode: str = field(default_factory=lambda: _env("A2H_LIVE", "auto"))  # auto | 1 | 0
+    live_python: str = field(default_factory=lambda: _env("A2H_LIVE_PYTHON", sys.executable))
+    live_max_seconds: float = field(default_factory=lambda: _num("A2H_LIVE_MAX_SECONDS", 20))
+    live_timeout_s: float = field(default_factory=lambda: _num("A2H_LIVE_TIMEOUT_S", 240))
+    live_concurrency: int = field(default_factory=lambda: _num("A2H_LIVE_CONCURRENCY", 1, int))
+    live_memory_mb: int = field(default_factory=lambda: _num("A2H_LIVE_MEMORY_MB", 8192, int))
+    live_ok: bool = field(default=False, repr=False)  # set at startup by server.live.available()
     colab_policies: list = field(default_factory=lambda: _list("A2H_COLAB_POLICIES", "task"))
     colab_init: str = field(default_factory=lambda: _env("A2H_COLAB_INIT", str(REPO / "outputs" / "remote_latent_final")))
     parse_errors: list = field(default_factory=lambda: _errors[:], repr=False)
@@ -112,7 +121,7 @@ class Settings:
     @property
     def enabled_runners(self):
         """demo is always available; colab only with both A2H_RUNNERS and A2H_ENABLE_COLAB, and never hosted."""
-        out = ["demo"]
+        out = ["demo"] + (["live"] if self.live_ok else [])
         if "colab" in self.runners and self.enable_colab and not self.hosted:
             out.append("colab")
         return out
@@ -134,13 +143,17 @@ class Settings:
                             ("A2H_RATE_JOBS", self.rate_jobs_per_hour, 0.01), ("A2H_RATE_REQUESTS", self.rate_requests_per_min, 1),
                             ("A2H_MAX_STREAMS", self.max_streams, 1), ("A2H_PROXY_HOPS", self.proxy_hops, 0),
                             ("A2H_JOB_TTL_H", self.job_ttl_h, 0.001), ("A2H_UPLOAD_TTL_H", self.upload_ttl_h, 0.0),
-                            ("A2H_JOB_TIMEOUT_H", self.job_timeout_h, 0.01), ("A2H_COLAB_ITERS", self.colab_iters, 1)]:
+                            ("A2H_JOB_TIMEOUT_H", self.job_timeout_h, 0.01), ("A2H_COLAB_ITERS", self.colab_iters, 1),
+                            ("A2H_LIVE_MAX_SECONDS", self.live_max_seconds, 1), ("A2H_LIVE_TIMEOUT_S", self.live_timeout_s, 1),
+                            ("A2H_LIVE_CONCURRENCY", self.live_concurrency, 1), ("A2H_LIVE_MEMORY_MB", self.live_memory_mb, 0)]:
             if v < lo:
                 errs.append(f"{name} must be >= {lo:g}, got {v:g}")
         if unknown := sorted(set(self.runners) - RUNNERS):
             errs.append(f"A2H_RUNNERS: unknown runner(s) {unknown}; choose from {sorted(RUNNERS)}")
         if self.remote_backend not in BACKENDS:
             errs.append(f"A2H_REMOTE_BACKEND must be one of {sorted(BACKENDS)}, got {self.remote_backend!r}")
+        if self.live_mode not in ("auto", "0", "1"):
+            errs.append(f"A2H_LIVE must be auto, 0 or 1, got {self.live_mode!r}")
         if self.log_format not in ("json", "text"):
             errs.append(f"A2H_LOG_FORMAT must be json or text, got {self.log_format!r}")
         if self.log_level not in ("DEBUG", "INFO", "WARNING", "ERROR"):

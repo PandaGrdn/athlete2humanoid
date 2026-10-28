@@ -155,7 +155,21 @@ Training starts at frame 0 about once in 264 episodes, so a policy that doesn't 
 
    Now holding the end pose pays, and the style terms stop once done.
 
+   **Checked:** squat-jump taskphase continued for 1,000 iterations with both fixes (`outputs/remote_latent_loose_sj_tp`, warm-started from `kp_sj`):
+   - 12/12 stages with **0 falls** (before: 0/12 with 9 falls; then 12/12 with 2 falls after the frame-0 fix alone).
+   - It stopped rushing: torso error 0.29 / 0.48 m mean / max, down from 0.62 / 2.38 m.
+   - Training falls dropped to 0.33 per iteration (from 1.5), the task policy's level.
+
+   Kept as `weights/kp_squat_jump_taskphase`.
+
 **What works best so far: the task policy.** It gets the keypose reward, sees the retarget as input, and has weak style terms (V-JEPA 2, plus 0.1× tracking). It completes all three actions without falling, including two it had never trained on, from the same squat-jump warm start. Seeing the retarget keeps it in time with the clip, so it neither rushes nor drifts. The blind taskphase policy is the stronger generalisation claim, since it needs only a clock at run time, but it learns more slowly and falls 2–7× more.
+
+**Lunge, a fourth action** (`outputs/remote_latent_loose_lunge`, the loose spec, task policy, 1,500 iterations from the squat-jump weights):
+- It scored 13/16 with **0 falls**, but the reference itself also scored 13/16 under the robot's thresholds. That pointed at the spec, not the policy.
+- **Cause:** a foot was required down if it was within `down_ref` (15 cm here, the reference's hover allowance), but the robot is held to `T.DOWN` (5 cm). A lunge's back foot is up on its toes, so stage 13 could never be met.
+- **Fix:** only feet planted by the robot's rule are required down; a merely low foot is free.
+- Every clip's reference now passes its spec under the robot's thresholds. The cross-action table is unchanged.
+- The same lunge rollout scores **16/16** against the corrected spec. Kept as `weights/kp_lunge_task`.
 
 `experiments/latent_policy.py` now trains `task` by default. The web app's Colab job runs `--policies task` with `--init-weights outputs/remote_latent_final` (`A2H_COLAB_POLICIES`, `A2H_COLAB_INIT`).
 
