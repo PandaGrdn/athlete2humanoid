@@ -109,6 +109,18 @@ The squat-jump run is the regression check against the old spec's results.
 - **The task policies kick, but not where the person did.** Position and timing are free, so they drift up to 1.9 m from the reference path. Tracking keeps to it.
 - Kept as `weights/kp_front_kick_{tracking,task,taskphase}`.
 
+**Jumping jacks.** Its spec has 10 key moments: arms up and down, a crouch, then a jump and its landing.
+
+| Policy | Stages | Jump quality | Falls | Torso error (mean / max) |
+|---|---|---|---|---|
+| retarget | 13/13 | 1.0 | – | – |
+| final run's squat-jump policies | 1/13 | – | 0 | – |
+| **keypose task** | **13/13** | **1.0** | **0** | 0.85 / 1.02 m |
+| keypose taskphase | 1/13 | – | 53 | 0.02 / 0.03 m |
+
+- **The task policy learns jumping jacks from the clip alone.** Kept as `weights/kp_jumping_jacks_task`.
+- **The taskphase result is likely an evaluation fault, not the policy.** It falls within a few steps of every reset (53 falls, torso barely moving), but its training episodes reached 457 of 500 steps. The squat-jump taskphase shows the same gap. The front-kick taskphase does not.
+
 ## For the live demo
 
 A new video becomes an environment within minutes: SAM 3.1, pose and retarget, then this spec and its self-check. The web app shows the key moments as soon as the spec exists; the trained policy follows after 1–2 hours of GPU training.
