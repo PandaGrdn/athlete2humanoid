@@ -86,8 +86,9 @@ uv run --quiet --no-project --with imageio-ffmpeg python scripts/build_space.py 
   ${ONNX_PY:+--onnx-python "$ONNX_PY"}
 
 # build_space.py never copies dotfiles, .env or logs; check anyway before anything leaves this machine
-bad="$(find "$BUNDLE" \( -name '.env*' -o -name '*.pem' -o -name '*.key' -o -name 'id_*' -o -name '*.log' \
-        -o -name 'token*' -o -name '.git' \) -print | head -5)"
+# (data/runs/*/job.log is allowed: build_space.py rewrites it to the classified, redacted lines the demo replays)
+bad="$(find "$BUNDLE" \( -name '.env*' -o -name '*.pem' -o -name '*.key' -o -name 'id_*' \
+        -o \( -name '*.log' ! -path "$BUNDLE/data/runs/*/job.log" \) -o -name 'token*' -o -name '.git' \) -print | head -5)"
 [ -z "$bad" ] || die "refusing to upload, the bundle contains: $bad"
 if grep -rIlE 'hf_[A-Za-z0-9]{30,}|sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|BEGIN [A-Z ]*PRIVATE KEY' "$BUNDLE" >/dev/null 2>&1; then
   die "refusing to upload: a file in $BUNDLE looks like it contains a token (grep -rIlE ... to find it)"
