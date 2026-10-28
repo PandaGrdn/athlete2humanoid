@@ -219,7 +219,7 @@ Run `outputs/remote_latent_sj_cmd_v3`: 2,500 iterations from the 1,500-iteration
 - **Squat depth is still ignored:** about 0.30 m deep whatever is asked (slope 0.10).
 - **Next:**
   - The 5,000-iteration FarmShare run tests whether more training lifts the cap.
-  - Otherwise, add a depth term: today depth only gates stage progress, it isn't scored.
+  - Otherwise, add a depth band like the jump one: the squat stage only asks to reach at least the commanded depth, so going deeper costs nothing.
 
 ## 3. GPU runs (not launched)
 
