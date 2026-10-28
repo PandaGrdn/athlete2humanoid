@@ -122,11 +122,20 @@ def main(a):
     spec_f = out / "task_spec.json"
     if not spec_f.exists():
         sk = tgt["dir"] / "skill_spec.json"
-        spec = skill_task.compile_spec(distill.body_positions(g1, tgt["qpos"]), 30.0,
-                                       json.loads(sk.read_text()) if sk.exists() else None,
-                                       a.max_clearance, name=a.target)
+        skill = json.loads(sk.read_text()) if sk.exists() else None
+        pos = distill.body_positions(g1, tgt["qpos"])
+        if a.spec == "keypose":  # any action: key moments, contacts (skill/keypose.py)
+            from skill import keypose
+            spec = keypose.compile_keypose_spec(pos, 30.0, skill, a.max_clearance, name=a.target)
+        else:  # stand / squat / jump / land (skill/task.py; needed for commanded targets)
+            spec = skill_task.compile_spec(pos, 30.0, skill, a.max_clearance, name=a.target)
+        spec["self_check"] = skill_task.evaluate({**spec, "down": spec["down_ref"], "air": spec["air_ref"]}, pos, 30.0)
         spec_f.write_text(json.dumps(spec, indent=1))
     spec = json.loads(spec_f.read_text())
+    if spec.get("type") == "keypose" and not a.importance:  # style weighted toward the key moments
+        from skill import keypose
+        a.importance = str(out / "importance.json")
+        Path(a.importance).write_text(json.dumps(keypose.importance(spec, len(tgt["qpos"]), 30.0)))
     log(f"task spec: {spec['summary']}" + "".join(f"; warning: {w}" for w in spec["warnings"]))
 
     bundle = out / "reward.pt"
@@ -410,6 +419,9 @@ if __name__ == "__main__":
                          "if it has none of its own)")
     ap.add_argument("--resume-from", help="a run folder whose policy_<name>/model_*.pt checkpoints these policies "
                                           "continue from (same task and motion); --iters is the new total")
+    ap.add_argument("--spec", choices=("keypose", "stages"), default="keypose",
+                    help="task spec: keypose (any action, skill/keypose.py) or stages (stand/squat/jump/land, "
+                         "skill/task.py; the commanded-target task needs it)")
     ap.add_argument("--max-clearance", type=float, default=0.30, help="most jump clearance (m) asked of the G1")
     ap.add_argument("--smoke", action="store_true")
     a = ap.parse_args()

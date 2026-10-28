@@ -396,9 +396,17 @@ def achieved(spec, pos, trace):
     return out
 
 
+def machine(spec, num_envs, device="cpu", dt=0.02, weights=None):
+    """The reward machine for a spec: skill/keypose.py's for "keypose" specs (any action), else StageMachine."""
+    if spec.get("type") == "keypose":
+        from skill.keypose import KeyposeMachine
+        return KeyposeMachine(spec, num_envs, device, dt, weights)
+    return StageMachine(spec, num_envs, device, dt, weights)
+
+
 def evaluate(spec, pos, fps):
     """A rollout's body positions (T, bodies, 3) from the start of the motion -> semantic success."""
-    m = StageMachine(spec, 1, dt=1.0 / fps)
+    m = machine(spec, 1, dt=1.0 / fps)
     pos_t = torch.as_tensor(np.asarray(pos), dtype=torch.float32)
     m.reset(torch.tensor([0]), 0.0, pos_t[:1])
     done_at, jump_q, fell_at, trace = [], [], None, [int(m.stage[0])]
@@ -413,7 +421,7 @@ def evaluate(spec, pos, fps):
         if fallen(pos_t[t:t + 1])[0]:
             fell_at = round(t / fps, 3)
             break
-    n = int(m.completed[0])
+    n = int(m.completed[0]) + int(getattr(m, "skipped", torch.zeros(1, dtype=torch.long))[0])  # stages passed
     met = measure(spec, pos_t[: (len(pos_t) if fell_at is None else int(fell_at * fps) + 1)].numpy(), fps)
     n_ok = len(trace) if fell_at is None else max(0, int(round((fell_at - FALL_ONSET) * fps)))
     met |= achieved(spec, pos_t[:n_ok], trace[:n_ok])
@@ -425,8 +433,9 @@ def evaluate(spec, pos, fps):
              (met[c["metric"]] >= c["value"] if c["op"] == ">=" else met[c["metric"]] <= c["value"])}
             for c in spec.get("criteria", [])]
     return {"stages_total": m.S, "stages_completed": n, "completed_at_s": done_at,
-            "next_stage": None if n >= m.S else spec["stages"][n].get("label", spec["stages"][n]["kind"]),
-            "success": n >= m.S and fell_at is None, "fell_at_s": fell_at, "jump_quality": jump_q,
+            "next_stage": None if n >= m.S else spec["stages"][n].get("label", spec["stages"][n].get("name", spec["stages"][n]["kind"])),
+            "success": bool(m.done[0]) and fell_at is None,
+            "stages_skipped": int(getattr(m, "skipped", torch.zeros(1, dtype=torch.long))[0]), "fell_at_s": fell_at, "jump_quality": jump_q,
             "metrics": met, "criteria": crit}
 
 

@@ -253,7 +253,7 @@ def ground_starts(cmd, spec, dt, keep_margin=(0.15, 0.1)):
     states are lowered by ground_offsets(), from the task spec's standing ankle height, hover level
     (down_ref) and jump stages (kept out, keep_margin s before / after). -> the offsets."""
     keep = [(st["start_s"] - keep_margin[0], st["end_s"] + keep_margin[1])
-            for st in spec["stages"] if st["kind"] == "jump"]
+            for st in spec["stages"] if st["kind"] in ("jump", "flight")]
     ankles = cmd.motion.body_pos_w[:, [skill_task.L_ANKLE, skill_task.R_ANKLE], 2]
     off = ground_offsets(ankles, spec["foot0"], max(spec.get("down_ref", 0.1), 0.05), keep, 1 / dt)
     write = cmd._write_reference_state_to_sim
@@ -390,7 +390,7 @@ class TaskReward:
         self.cmd = env.command_manager.get_term("motion")
         assert tuple(self.cmd.cfg.body_names) == BODIES, "skill/task.py indexes mjlab's G1 tracking bodies"
         spec = json.loads(Path(os.environ[TASK_SPEC_ENV]).read_text())
-        self.m = skill_task.StageMachine(spec, env.num_envs, env.device, env.step_dt)
+        self.m = skill_task.machine(spec, env.num_envs, env.device, env.step_dt)  # keypose or stage spec
         if cfg.params.get("grounded_rsi"):  # before the first reset (managers are built first)
             env.a2h_ground_offset = ground_starts(self.cmd, spec, env.step_dt)
         self.dt = env.step_dt
@@ -417,6 +417,7 @@ class TaskCmdReward(TaskReward):
 
     def __init__(self, cfg, env):
         super().__init__(cfg, env)
+        assert isinstance(self.m, skill_task.StageMachine), "commanded targets need a stand/squat/jump/land spec (--spec stages)"
         self.env = env
         self.sampler = skill_commands.CommandSampler(self.m, seed=getattr(env.cfg, "seed", None),
                                                      **cfg.params.get("command", {}))
