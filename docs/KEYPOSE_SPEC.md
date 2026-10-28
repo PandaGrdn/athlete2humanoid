@@ -95,6 +95,20 @@ The squat-jump run is the regression check against the old spec's results.
 - **The task policy learns the keypose spec:** 6/12 → 12/12 in 1,500 iterations, including the arm swing the old spec never asked for. Kept as `weights/kp_squat_jump_task`.
 - **Taskphase is not converged.** Its training episodes grew from 280 to 468 of 500 steps and were still rising at the end, but it falls in the evaluation rollout. It needs more iterations.
 
+**Front kick**, an action no earlier run trained on. Its spec has 4 key moments, two kicks with the right foot:
+
+| Policy | Stages | Falls | Torso error (mean / max) |
+|---|---|---|---|
+| retarget | 6/6 | – | – |
+| final run's squat-jump policies | 1/6 | 0 | – |
+| **keypose tracking** | **6/6** | **0** | 0.12 / 0.21 m |
+| **keypose task** | **6/6** | **0** | 0.85 / 1.87 m |
+| **keypose taskphase** | **6/6** | **0** | 0.49 / 1.33 m |
+
+- **All three learn the kick from the clip alone,** with no kick-specific reward. The warm start knew only squat jumps (1/6).
+- **The task policies kick, but not where the person did.** Position and timing are free, so they drift up to 1.9 m from the reference path. Tracking keeps to it.
+- Kept as `weights/kp_front_kick_{tracking,task,taskphase}`.
+
 ## For the live demo
 
 A new video becomes an environment within minutes: SAM 3.1, pose and retarget, then this spec and its self-check. The web app shows the key moments as soon as the spec exists; the trained policy follows after 1–2 hours of GPU training.
