@@ -77,11 +77,11 @@ class TestConditions(unittest.TestCase):
         a = R.parse(["--runs", "x"])
         c = R.conditions(a)
         self.assertEqual([(s, lv) for s, lv, _ in c[:13]], V1_CONDITIONS)
-        self.assertEqual([s for s, _, _ in c[13:]], ["push_phase", "push_phase", "start", "start", "noref"])
-        noref = c[-1][2]
+        self.assertEqual([s for s, _, _ in c[13:]], ["push_phase", "push_phase", "start", "start", "noref"] + ["tempo"] * 3)
+        noref = next(p for s, _, p in c if s == "noref")
         self.assertEqual((noref["start"], noref["reference"]), ("standing", "frozen"))
         self.assertEqual({p["push_at"] for _, _, p in c[13:15]}, {"squat", "land"})
-        self.assertEqual(len(R.conditions(R.parse(["--runs", "x", "--phase-push", "--starts", "--no-noref"]))), 13)
+        self.assertEqual(len(R.conditions(R.parse(["--runs", "x", "--phase-push", "--starts", "--no-noref", "--tempo"]))), 13)
 
     def test_frozen_and_resampled_motion(self):
         with tempfile.TemporaryDirectory() as d:
@@ -198,7 +198,7 @@ class TestMjlabStage(unittest.TestCase):
         self.assertEqual(r["meta"]["obs_groups"]["taskphase"], {"actor": "actor_taskphase", "critic": "critic_taskphase"})
         self.assertEqual(r["meta"]["task_spec"]["source"], str((SJ_TASK / "task_spec.json").resolve()))
         self.assertTrue(r["meta"]["task_spec"]["self_check"]["success"])
-        self.assertEqual(len(r["conditions"]), 10)
+        self.assertEqual(len(r["conditions"]), 13)  # with the tempo suite
         for c in r["conditions"]:
             for res in c["policies"].values():
                 for k in ("task_success", "stages_completed", "stages_frac", "jump_apex_m", "squat_depth_m", "fall_rate",
@@ -234,7 +234,8 @@ class TestMjlabStage(unittest.TestCase):
             r = json.loads((Path(d) / "robust.json").read_text())
             spec = json.loads((Path(d) / "task_spec.json").read_text())
         self.assertEqual([(c["suite"], c["level"]) for c in r["conditions"]],
-                         [("clean", "nominal"), ("push", "1 m/s"), ("init", "x2"), ("dynamics", "level 1"), ("speed", "1.2x")])
+                         [("clean", "nominal"), ("push", "1 m/s"), ("init", "x2"), ("dynamics", "level 1"), ("speed", "1.2x")]
+                         + [("tempo", "0.5x"), ("tempo", "1.5x"), ("tempo", "2x")])
         self.assertEqual(r["meta"]["task_spec"]["source"], "compiled from motion.npz")
         self.assertIn("squat", spec["summary"])
         self.assertTrue(r["meta"]["task_spec"]["self_check"]["success"])

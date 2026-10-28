@@ -72,6 +72,17 @@ REQUIRED_TOP = 2  # a loose task: the end goal, the contacts (jumps, landings) a
 # top of the hierarchy are required; the rest (how this person happened to do it) pay but may be skipped
 WEIGHTS = {"progress": 1.0, "stage": 1.0, "jump": 2.0, "done": 4.0,
            "hold": 1.0}  # per s in the finish pose once done: the end goal is a state to keep
+# A jump is the body leaving the floor, not the feet: a flight must raise the pelvis by FLIGHT_RISE_FRAC
+# of the reference's rise and stay airborne FLIGHT_AIR_FRAC of its airtime. With foot clearance and a
+# 0.05-0.12 s airtime alone, every task-family squat-jump policy passed 12/12 by tucking its feet for
+# 0.04-0.14 s with the pelvis never above standing height (the person: 0.53 s up, pelvis +0.36 m;
+# tracking: 0.42 s, +0.27 m), and Muse's critic saw no jumps (docs/KEYPOSE_SPEC.md).
+FLIGHT_AIR_FRAC, FLIGHT_AIR_MAX = 0.6, 0.35  # s; the G1 tracking policy flew 0.42 s
+FLIGHT_RISE_FRAC, FLIGHT_RISE_MAX = 0.5, 0.25  # m of pelvis rise above standing
+# A key pose is held, not touched: HOLD_FRAC of the time the reference itself stays within tolerance of
+# it, up to HOLD_MAX. Passing through for one step let the front-kick task policies flick each kick for
+# 0.13-0.16 s from a crouch where the person held it ~0.5 s.
+HOLD_FRAC, HOLD_MAX = 0.5, 0.4
 
 
 def heading(pos):
@@ -220,6 +231,25 @@ def name_moment(delta, w):
     return ", ".join(words) if words else "hold"
 
 
+def dwell(F, k, goal, tol, rel, delta):
+    """Frames around key frame k for which the reference itself satisfies the pose predicate on the pose
+    features (KeyposeMachine._eval's rule, without the root goal, which is anchored at stage entry)."""
+    g, t, r, d = (np.asarray(a, np.float64)[:D_POSE] for a in (goal, tol, rel, delta))
+    sign, span = np.where(d < 0, -1.0, 1.0), np.abs(d) * (r > 0)
+    e = (g - F[:, :D_POSE]) * sign
+    e = np.where(e >= 0, e, np.clip(-e - OVERSHOOT * span, 0, None))
+    x = e / t
+    worst = np.where(r >= CORE, x, 0.0).max(-1)
+    rms = np.sqrt((r * x ** 2).sum(-1) / max(r.sum(), 1e-6))
+    ok = (worst <= 1) & (rms <= 1)
+    lo = hi = k
+    while lo > 0 and ok[lo - 1]:
+        lo -= 1
+    while hi < len(ok) - 1 and ok[hi + 1]:
+        hi += 1
+    return hi - lo + 1
+
+
 def compile_keypose_spec(pos, fps, skill=None, max_clearance=T.MAX_CLEARANCE, name=None):
     """pos: (T, bodies, 3) retarget body positions (G1-sized) at fps -> keypose task spec (JSON-able).
     Too many stages for the policy's stage input (MAX_STAGES): the RDP tolerance coarsens until it fits."""
@@ -262,10 +292,14 @@ def _compile(pos, fps, skill, max_clearance, name, scale):
     for ev in events:
         if ev[0] == "flight":
             s, e = ev[1], ev[2]
+            air_s, rise = (e - s) / fps, float(z[s:e].max() - h0)
             stages.append({"kind": "flight", "start_s": round(prev_t / fps, 3), "end_s": round(e / fps, 3),
                            "name": "jump", "clearance": round(float(min(lo[s:e].max(), max_clearance)), 3),
                            "ref_clearance": round(float(lo[s:e].max()), 3),
-                           "min_air_s": round(float(np.clip(0.5 * (e - s) / fps, 0.05, 0.12)), 3)})
+                           "min_air_s": round(float(np.clip(FLIGHT_AIR_FRAC * air_s, 0.05, FLIGHT_AIR_MAX)), 3),
+                           "ref_air_s": round(air_s, 3),
+                           "pelvis_rise": round(float(np.clip(FLIGHT_RISE_FRAC * rise, 0.0, FLIGHT_RISE_MAX)), 3),
+                           "ref_pelvis_rise": round(rise, 3)})
             stages.append({"kind": "settle", "start_s": round(e / fps, 3), "end_s": round(e / fps, 3),
                            "name": "land", "hold_s": 0.1, "still": False, "feet_down": [True, True]})
             prev_k, prev_t = e, e
@@ -286,11 +320,14 @@ def _compile(pos, fps, skill, max_clearance, name, scale):
         # the reference itself scored 13/16 under the robot's thresholds, the task policy stuck there).
         feet_down = [bool(pos[k, a, 2] - foot0 < T.DOWN) for a in (L_ANKLE, R_ANKLE)]
         level = dev[k]
+        tol = np.minimum(tol, 9.99)
+        ref_dwell = dwell(F, k, goal, tol, w, delta) / fps
         stages.append({"kind": "pose", "level": round(min(level, 99.0), 2), "optional": bool(level < need), "start_s": round(prev_t / fps, 3), "end_s": round(k / fps, 3),
                        "name": name_moment(delta, w), "goal": np.round(goal, 4).tolist(),
-                       "tol": np.round(np.minimum(tol, 9.99), 4).tolist(), "relevance": np.round(w, 3).tolist(),
+                       "tol": np.round(tol, 4).tolist(), "relevance": np.round(w, 3).tolist(),
                        "delta": np.round(np.concatenate([delta[:D_POSE], root]), 4).tolist(),
-                       "feet_down": feet_down, "frame": int(k)})
+                       "feet_down": feet_down, "frame": int(k),
+                       "hold_s": round(float(min(HOLD_FRAC * ref_dwell, HOLD_MAX)), 3), "ref_dwell_s": round(ref_dwell, 3)})
         prev_k, prev_t = k, k
     end_down = [bool(pos[-1, a, 2] - foot0 < T.DOWN) for a in (L_ANKLE, R_ANKLE)]
     if stages[-1]["kind"] == "pose" and len(pos) - 1 - stages[-1]["frame"] < MIN_GAP_S * fps:
@@ -364,12 +401,14 @@ class KeyposeMachine:
         self.start = torch.tensor([s["start_s"] for s in st], dtype=torch.float32, device=device)
         self.end = torch.tensor([s["end_s"] for s in st], dtype=torch.float32, device=device)
         self.clear = torch.tensor([s.get("clearance", 0.0) for s in st], dtype=torch.float32, device=device)
+        self.rise = torch.tensor([s.get("pelvis_rise", 0.0) for s in st], dtype=torch.float32, device=device)
         # A settle stage right after a flight pays that jump's quality (skill/task.py's land stage).
         self.jump_goal = torch.tensor([st[i - 1].get("clearance", 0.0) if i and st[i - 1]["kind"] == "flight" else 0.0
                                        for i in range(self.S)], dtype=torch.float32, device=device)
         z = lambda dtype=torch.float32: torch.zeros(num_envs, dtype=dtype, device=device)
         self.stage, self.completed = z(torch.long), z(torch.long)
         self.hold, self.phi, self.apex, self.z_prev, self.p, self.banked = z(), z(), z(), z(), z(), z()
+        self.z_apex = z()  # highest pelvis in the current flight
         self.d0 = torch.ones(num_envs, device=device)  # weighted distance to the goal when the stage began
         self.root_scale = torch.ones(num_envs, device=device)  # share of the root goal left (mid-stage starts)
         self.anchor_xy, self.anchor_yaw = torch.zeros(num_envs, 2, device=device), z()
@@ -385,7 +424,7 @@ class KeyposeMachine:
         """Progress in [0, 1] and whether the predicate holds, for envs ids (state buffers indexed by
         ids) in stage, plus the relevance-weighted RMS distance to a pose goal in tolerances."""
         s = self.spec
-        _, lo, _, up = T.features(pos, s["foot0"])
+        zp, lo, _, up = T.features(pos, s["foot0"])
         down = (pos[..., [L_ANKLE, R_ANKLE], 2] - s["foot0"]) < s["down"]
         k = self.kind[stage]
         f = torch.cat([pose_features(pos, s["foot0"]), root_features(pos, self.anchor_xy[ids], self.anchor_yaw[ids])], -1)
@@ -401,8 +440,10 @@ class KeyposeMachine:
         d0 = self.d0[ids]
         p_pose = ((d0 - rms) / (d0 - 1).clamp(min=1e-3)).clamp(0, 1)
         support = (~self.need_down[stage] | down).all(-1)
-        p = torch.where(k == POSE, p_pose, torch.where(k == FLIGHT, (lo / self.clear[stage].clamp(min=1e-3)).clamp(0, 1),
-                        support.float() * ((up - 0.6) / 0.25).clamp(0, 1)))
+        rise = self.rise[stage]
+        p_air = (lo / self.clear[stage].clamp(min=1e-3)).clamp(0, 1)
+        p_air = torch.where(rise > 0, 0.5 * p_air + 0.5 * ((zp - s["h0"]) / rise.clamp(min=1e-3)).clamp(0, 1), p_air)
+        p = torch.where(k == POSE, p_pose, torch.where(k == FLIGHT, p_air, support.float() * ((up - 0.6) / 0.25).clamp(0, 1)))
         calm = ~self.still[stage] | (vz.abs() < 0.5)
         settled = support & (up > T.UPRIGHT) & calm
         sat = torch.where(k == POSE, (worst <= 1) & (rms <= 1) & support & calm, torch.where(k == FLIGHT, lo > s["air"], settled))
@@ -437,7 +478,7 @@ class KeyposeMachine:
         self._enter(ids, pos, ((self.end[stage] - t) / span).clamp(0, 1))
         p, _, _ = self._eval(stage, pos, torch.zeros(len(ids), device=self.dev), ids)
         self.p[ids], self.phi[ids] = p, stage + p
-        for buf in (self.hold, self.apex, self.completed, self.steps, self.banked, self.skipped):
+        for buf in (self.hold, self.apex, self.z_apex, self.completed, self.steps, self.banked, self.skipped):
             buf[ids] = 0
         self.completed[ids] = ready.to(self.completed.dtype)
         self.q_min[ids] = 1.0
@@ -474,8 +515,10 @@ class KeyposeMachine:
         k = self.kind[self.stage]
         after_flight = self.jump_goal[self.stage] > 0
         self.apex = torch.where((k == FLIGHT) | after_flight, torch.maximum(self.apex, lo), torch.zeros_like(lo))
+        self.z_apex = torch.where(k == FLIGHT, torch.maximum(self.z_apex, z), torch.zeros_like(z))
+        risen = (k != FLIGHT) | (self.z_apex - self.spec["h0"] >= self.rise[self.stage] - 1e-6)
         self.hold = torch.where(sat & ~self.done, self.hold + self.dt, torch.zeros_like(self.hold))
-        adv = sat & (self.hold >= self.hold_need[self.stage] - 1e-6) & ~self.done
+        adv = sat & risen & (self.hold >= self.hold_need[self.stage] - 1e-6) & ~self.done
 
         jg = self.jump_goal[self.stage]
         ratio = self.apex / jg.clamp(min=1e-3)

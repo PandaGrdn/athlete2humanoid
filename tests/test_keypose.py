@@ -203,3 +203,45 @@ def test_a_foot_on_its_toes_is_not_required_down():
     first = next(s for s in spec["stages"] if s["kind"] == "pose")
     assert first["feet_down"] == [False, True]  # low in the reference, but not planted by the robot's rule
     assert T.evaluate(spec, pos, FPS)["success"]  # so the reference passes under the robot's own thresholds
+
+
+def test_a_tuck_hop_is_not_a_jump():
+    """Feet off the floor with the pelvis at standing height (the task policies' squat-jump shortcut) fails."""
+    pos = motion("jump")
+    spec = self_spec(K.compile_keypose_spec(pos, FPS))
+    flight = next(s for s in spec["stages"] if s["kind"] == "flight")
+    assert flight["pelvis_rise"] > 0.1 and flight["min_air_s"] >= 0.6 * flight["ref_air_s"] - 1e-3
+    t = np.arange(len(pos)) / FPS
+    tuck = pos.copy()
+    for c in (4.0 / 3, 8.0 / 3):
+        air = np.clip(1 - ((t - c) / 0.15) ** 2, 0, None)
+        tuck[:, :, 2] -= 0.25 * air[:, None]  # undo the body's rise...
+        tuck[:, [3, 6], 2] += 0.25 * air[:, None]  # ...and lift only the feet
+    r = T.evaluate(spec, tuck, FPS)
+    assert not r["success"] and spec["stages"][r["stages_completed"]]["kind"] == "flight", r
+    hop = pos.copy()  # a real but short hop: the body rises, for a third of the airtime
+    for c in (4.0 / 3, 8.0 / 3):
+        full = np.clip(1 - ((t - c) / 0.15) ** 2, 0, None)
+        short = np.clip(1 - ((t - c) / 0.05) ** 2, 0, None)
+        hop[:, :, 2] += 0.25 * (short - full)[:, None]
+    assert not T.evaluate(spec, hop, FPS)["success"]
+
+
+def test_a_key_pose_must_be_held():
+    """A kick flicked through its apex (the task policies' front-kick shortcut) fails; held like the clip, it passes."""
+    pos = motion("kick")
+    spec = self_spec(K.compile_keypose_spec(pos, FPS))
+    kick = next(s for s in spec["stages"] if s["kind"] == "pose")
+    assert 0 < kick["hold_s"] <= K.HOLD_MAX and kick["hold_s"] == pytest.approx(min(0.5 * kick["ref_dwell_s"], K.HOLD_MAX), abs=1e-3)
+    t = np.arange(len(pos)) / FPS
+    flick = np.repeat(REST[None], len(t), 0).copy()
+    flick += np.random.default_rng(0).normal(0, 0.003, flick.shape).astype(np.float32)
+    for c in (4.0 / 3, 8.0 / 3):
+        b = bump(t, c, 0.1)
+        flick[:, 6, 0] += 0.55 * b
+        flick[:, 6, 2] += 0.45 * b
+        flick[:, 5, 0] += 0.3 * b
+        flick[:, 5, 2] += 0.2 * b
+    r = T.evaluate(spec, flick, FPS)
+    assert not r["success"] and r["stages_completed"] <= 1, r
+    assert T.evaluate(spec, pos, FPS)["success"]
