@@ -15,6 +15,8 @@ from unittest import mock
 
 import config
 from muse import client as mc
+from muse import moment_namer as mn
+from muse import rollout_critic as rc
 from muse import reward_agent as ra
 from muse import skill_reader as sr
 from muse.schema import validate, strict_errors
@@ -42,6 +44,8 @@ class SchemaTest(unittest.TestCase):
     def test_schemas_are_strict_mode_compliant(self):
         self.assertEqual(strict_errors(sr.SKILL_SCHEMA), [])
         self.assertEqual(strict_errors(ra.PROPOSAL_SCHEMA), [])
+        self.assertEqual(strict_errors(mn.NAMES_SCHEMA), [])
+        self.assertEqual(strict_errors(rc.CRITIC_SCHEMA), [])
 
     def test_strict_errors_catches_optional_property(self):
         bad = {"type": "object", "properties": {"a": {"type": "string"}}, "required": [], "additionalProperties": False}
@@ -59,6 +63,8 @@ class SchemaTest(unittest.TestCase):
     def test_fixtures_match_their_schemas(self):
         self.assertEqual(validate(fixture_value("skill_spec_squat.json"), sr.SKILL_SCHEMA), [])
         self.assertEqual(validate(fixture_value("reward_proposal_remote_latent.json"), ra.PROPOSAL_SCHEMA), [])
+        self.assertEqual(validate(fixture_value("moment_names_front_kick.json"), mn.NAMES_SCHEMA), [])
+        self.assertEqual(validate(fixture_value("critic_front_kick.json"), rc.CRITIC_SCHEMA), [])
 
 
 class SyncTest(unittest.TestCase):
@@ -247,6 +253,142 @@ class RewardAgentTest(TempDir):
         make = lambda: mc.make_client(dry_run=True, default_fixture="reward_proposal_remote_latent.json")  # noqa: E731
         self.assertEqual(ra.process([runs], make, "hybrid", frames=False), 0)  # nothing new
         self.assertEqual(len((self.tmp / "log.jsonl").read_text().splitlines()), 2)
+
+
+KICK_SPEC = ROOT / "tests" / "data" / "task_spec_front_kick.json"  # keypose.py's names, before Muse
+
+
+def kick_folder(path):
+    """A folder like a live job's: the unnamed front-kick spec and a stand-in processed.mp4."""
+    path.mkdir(parents=True, exist_ok=True)
+    shutil.copy(KICK_SPEC, path / "task_spec.json")
+    (path / "processed.mp4").write_bytes(b"\x00\x00\x00\x18ftypmp42 not a real video")
+    return path
+
+
+class MomentNamerTest(TempDir):
+    def name(self, folder, **kw):
+        client = mc.make_client(dry_run=True, default_fixture="moment_names_front_kick.json")
+        return mn.name_moments(folder / "task_spec.json", client, **kw), client
+
+    def test_names_the_moments_and_keeps_the_measured_ones(self):
+        before = json.loads(KICK_SPEC.read_text())
+        spec, client = self.name(kick_folder(self.tmp / "job"))
+        poses = mn.moments(spec)
+        answer = fixture_value("moment_names_front_kick.json")
+        self.assertEqual([st["description"] for st in poses], [m["description"] for m in answer["moments"]])
+        self.assertEqual([st["measured"] for st in poses], [st["name"] for st in mn.moments(before)])
+        self.assertEqual(spec["stages"][-1]["name"], "finish")  # settle stages keep their names
+        self.assertEqual(spec["action"], answer["action"]["label"])
+        self.assertIn(poses[0]["name"], spec["summary"])
+        self.assertEqual(spec["named_by"]["mode"], "fixture:moment_names_front_kick.json")
+        # the reward never reads names: everything else in the spec is unchanged
+        strip = lambda st: {k: v for k, v in st.items() if k not in ("name", "label", "description", "measured")}  # noqa: E731
+        self.assertEqual([strip(st) for st in spec["stages"]], [strip(st) for st in before["stages"]])
+        prompt = client.requests[0]["messages"][1]["content"][0]["text"]
+        self.assertIn("1. 1.40 s, required. Measured: right foot up, right foot forward.", prompt)
+        self.assertEqual(client.requests[0]["messages"][1]["content"][1]["type"], "video_url")
+        self.assertTrue((self.tmp / "job" / "moment_names.request.json").exists())
+
+    def test_renaming_starts_from_the_measured_names(self):
+        folder = kick_folder(self.tmp / "job")
+        first, _ = self.name(folder)
+        again, client = self.name(folder)
+        self.assertEqual(again["stages"], first["stages"])
+        self.assertNotIn("(finish) (finish)", again["summary"])
+        self.assertIn("Measured: right foot down, right foot left.", client.requests[0]["messages"][1]["content"][0]["text"])
+
+    def test_check(self):
+        good = fixture_value("moment_names_front_kick.json")
+        self.assertEqual(mn.check(good, 4), [])
+        self.assertTrue(any("exactly one entry" in e for e in mn.check(good, 5)))
+        bad = json.loads(json.dumps(good))
+        bad["moments"][0]["name"] = "the right leg swings all the way up high"
+        bad["moments"][1]["description"] = "Then you lower your leg."
+        bad["action"]["label"] = "Side Kicks!"
+        errs = mn.check(bad, 4)
+        self.assertEqual(len(errs), 3, errs)
+
+    def test_needs_a_keypose_spec_and_a_video(self):
+        folder = self.tmp / "job"
+        folder.mkdir()
+        (folder / "task_spec.json").write_text(json.dumps({"type": "phases", "stages": []}))
+        with self.assertRaises(ValueError):
+            self.name(folder)
+        shutil.copy(KICK_SPEC, folder / "task_spec.json")
+        spec = json.loads(KICK_SPEC.read_text())
+        spec["name"] = "no_such_clip"
+        (folder / "task_spec.json").write_text(json.dumps(spec))
+        with self.assertRaises(FileNotFoundError):
+            self.name(folder)
+
+    @unittest.skipUnless(__import__("importlib").util.find_spec("torch"), "skill.keypose needs torch")
+    def test_summarize_matches_keypose(self):
+        from skill.keypose import summarize
+        spec = json.loads(KICK_SPEC.read_text())
+        self.assertEqual(mn.summarize(spec["stages"]), summarize(spec["stages"]))
+        self.assertEqual(mn.summarize(spec["stages"]), spec["summary"])
+
+
+class RolloutCriticTest(TempDir):
+    def runs(self):
+        """Two runs of the front kick, as in outputs/: three policies in one, the hybrid in the other."""
+        a = kick_folder(self.tmp / "remote_latent_kp_kick")  # the folder name seeds the blind order
+        mn.name_moments(a / "task_spec.json", mc.make_client(dry_run=True, default_fixture="moment_names_front_kick.json"))
+        b = self.tmp / "remote_latent_hyb_kick"
+        evals = {"tracking": (0.726, 0), "task": (0.46, 0), "taskphase": (0.363, 0), "taskhybrid": (0.636, 1)}
+        for run, names in ((a, ("tracking", "task", "taskphase")), (b, ("taskhybrid",))):
+            for n in names:
+                (run / f"policy_{n}").mkdir(parents=True)
+                (run / f"policy_{n}" / "policy.mp4").write_bytes(b"robot " + n.encode())
+            (run / "eval.json").write_text(json.dumps({n: {"aligned": evals[n][0], "falls": evals[n][1],
+                                                           "task_stages": "6/6"} for n in names}))
+        return a, b
+
+    def test_blind_critique_by_policy_name(self):
+        a, b = self.runs()
+        client = mc.make_client(dry_run=True, default_fixture="critic_front_kick.json")
+        res = rc.critique([a, b], client)
+        self.assertEqual(sorted(res["policies"]), ["task", "taskhybrid", "taskphase", "tracking"])
+        self.assertEqual(res["ranking"][0], "tracking")
+        self.assertEqual(res["policies"]["tracking"]["does_action"], "yes")
+        content = client.requests[0]["messages"][1]["content"]
+        self.assertEqual([c["type"] for c in content], ["text"] + ["video_url"] * 5)
+        prompt = content[0]["text"]
+        self.assertNotIn("tracking", prompt)  # blind: the robots are numbers
+        self.assertIn("1. 1.40 s: " + mn.moments(json.loads((a / "task_spec.json").read_text()))[0]["name"], prompt)
+        ag = res["agreement"]
+        self.assertEqual(ag["vjepa_rank"], ["tracking", "taskhybrid", "task", "taskphase"])
+        self.assertEqual(ag["falls_agree"], "3/4")  # the stand-in eval says the hybrid fell; Muse saw no fall
+        self.assertEqual(ag["by_policy"]["task"]["moments_reached"]["stage_checker"], "6/6")
+        self.assertEqual(json.loads((a / "critic.json").read_text())["blind_order"], res["blind_order"])
+
+    def test_blind_order_is_shuffled_and_repeatable(self):
+        names = ["task", "taskhybrid", "taskphase", "tracking"]
+        orders = set()
+        for seed in range(6):
+            o = sorted(names)
+            rc.random.Random(seed).shuffle(o)
+            orders.add(tuple(o))
+        self.assertGreater(len(orders), 1)
+        a, b = self.runs()
+        r1 = rc.critique([a, b], mc.make_client(dry_run=True, default_fixture="critic_front_kick.json"))
+        r2 = rc.critique([a, b], mc.make_client(dry_run=True, default_fixture="critic_front_kick.json"))
+        self.assertEqual(r1["blind_order"], r2["blind_order"])
+
+    def test_check(self):
+        good = fixture_value("critic_front_kick.json")
+        self.assertEqual(rc.check(good, 4, 4), [])
+        bad = json.loads(json.dumps(good))
+        bad["ranking"] = [1, 1, 2, 3]
+        bad["robots"][0]["likeness"] = 11
+        bad["robots"][1]["moments"] = bad["robots"][1]["moments"][:2]
+        self.assertEqual(len(rc.check(bad, 4, 4)), 3, rc.check(bad, 4, 4))
+        self.assertTrue(any("one entry per robot" in e for e in rc.check(good, 5, 4)))
+
+    def test_no_policies(self):
+        with self.assertRaises(FileNotFoundError):
+            rc.critique([self.tmp], mc.make_client(dry_run=True, default_fixture="critic_front_kick.json"))
 
 
 if __name__ == "__main__":

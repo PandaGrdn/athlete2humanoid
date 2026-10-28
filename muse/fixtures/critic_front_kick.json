@@ -1,0 +1,198 @@
+{
+ "request": {
+  "model": "muse-spark-1.3",
+  "messages": [
+   {
+    "role": "developer",
+    "content": "You evaluate physics simulations of a Unitree G1 humanoid robot that was trained to perform the motion in a video of a person. You compare each robot's motion with the person's and report what you see. Describe motion only: never address or advise the person, never judge their technique. Answer with JSON only."
+   },
+   {
+    "role": "user",
+    "content": [
+     {
+      "type": "text",
+      "text": "Video 1 is the person. Videos 2-5 are Robot 1 to Robot 4, each a separate trained policy replaying the same motion in simulation, sampled at 10 frames per second.\nIn the robot videos the solid white robot is the policy; the translucent green figure is the reference it was shown (the person's motion retargeted to the robot). Judge the white robot against the person in video 1, not against the green figure. The robots may drift across the floor; where they end up matters less than the motion itself.\n\nThe motion's key moments (times from the start; a robot may reach them a little early or late):\n1. 1.40 s: right kick extended (From standing, the body lifts the right leg sideways into full extension.)\n2. 1.97 s: standing upright (From the extended kick, the body lowers the right leg back down to stand upright.)\n3. 4.20 s: right kick extended (From standing, the body raises the right leg sideways into full extension again.)\n4. 4.73 s: standing upright (From the extended kick, the body lowers the right leg to return to standing.)\n\nFor each robot, by its number:\n- does_action: yes / partly / no, does it perform the person's motion;\n- likeness: 0-10, how much its motion looks like the person's (10 = indistinguishable timing and shape, 0 = unrelated or standing still);\n- fell: whether it falls over at any point;\n- moments: for each key moment by number, whether the robot reaches that pose (yes / partly / no);\n- differences: up to 3 short phrases on how its motion differs from the person's;\n- summary: one sentence.\nThen ranking: the robot numbers, most like the person first; and verdict: one or two sentences comparing them."
+     },
+     {
+      "type": "video_url",
+      "video_url": {
+       "url": "<video/mp4, 125116 bytes base64>",
+       "fps": 10.0
+      }
+     },
+     {
+      "type": "video_url",
+      "video_url": {
+       "url": "<video/mp4, 108313 bytes base64>",
+       "fps": 10.0
+      }
+     },
+     {
+      "type": "video_url",
+      "video_url": {
+       "url": "<video/mp4, 94681 bytes base64>",
+       "fps": 10.0
+      }
+     },
+     {
+      "type": "video_url",
+      "video_url": {
+       "url": "<video/mp4, 144814 bytes base64>",
+       "fps": 10.0
+      }
+     },
+     {
+      "type": "video_url",
+      "video_url": {
+       "url": "<video/mp4, 155836 bytes base64>",
+       "fps": 10.0
+      }
+     }
+    ]
+   }
+  ],
+  "reasoning_effort": "medium",
+  "response_format": {
+   "type": "json_schema",
+   "json_schema": {
+    "name": "rollout_critic",
+    "schema": {
+     "type": "object",
+     "properties": {
+      "robots": {
+       "type": "array",
+       "items": {
+        "type": "object",
+        "properties": {
+         "robot": {
+          "type": "integer"
+         },
+         "does_action": {
+          "type": "string",
+          "enum": [
+           "yes",
+           "partly",
+           "no"
+          ]
+         },
+         "likeness": {
+          "type": "integer"
+         },
+         "fell": {
+          "type": "boolean"
+         },
+         "moments": {
+          "type": "array",
+          "items": {
+           "type": "object",
+           "properties": {
+            "index": {
+             "type": "integer"
+            },
+            "reached": {
+             "type": "string",
+             "enum": [
+              "yes",
+              "partly",
+              "no"
+             ]
+            }
+           },
+           "required": [
+            "index",
+            "reached"
+           ],
+           "additionalProperties": false
+          }
+         },
+         "differences": {
+          "type": "array",
+          "items": {
+           "type": "string"
+          }
+         },
+         "summary": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "robot",
+         "does_action",
+         "likeness",
+         "fell",
+         "moments",
+         "differences",
+         "summary"
+        ],
+        "additionalProperties": false
+       }
+      },
+      "ranking": {
+       "type": "array",
+       "items": {
+        "type": "integer"
+       }
+      },
+      "verdict": {
+       "type": "string"
+      }
+     },
+     "required": [
+      "robots",
+      "ranking",
+      "verdict"
+     ],
+     "additionalProperties": false
+    },
+    "strict": true
+   }
+  }
+ },
+ "responses": [
+  {
+   "id": "chatcmpl-01a18443-c4d0-7639-8492-bbb8308c6d41",
+   "choices": [
+    {
+     "finish_reason": "stop",
+     "index": 0,
+     "logprobs": null,
+     "message": {
+      "content": "{\"ranking\": [1, 2, 3, 4], \"robots\": [{\"differences\": [\"slightly lower kick height\", \"support leg more bent\", \"torso more turned\"], \"does_action\": \"yes\", \"fell\": false, \"likeness\": 8, \"moments\": [{\"index\": 1, \"reached\": \"yes\"}, {\"index\": 2, \"reached\": \"yes\"}, {\"index\": 3, \"reached\": \"yes\"}, {\"index\": 4, \"reached\": \"yes\"}], \"robot\": 1, \"summary\": \"Performs two sideways right-leg extensions with returns to upright standing in time with the person.\"}, {\"differences\": [\"no sideways leg extension\", \"remains nearly stationary\", \"minimal arm movement\"], \"does_action\": \"no\", \"fell\": false, \"likeness\": 3, \"moments\": [{\"index\": 1, \"reached\": \"no\"}, {\"index\": 2, \"reached\": \"yes\"}, {\"index\": 3, \"reached\": \"no\"}, {\"index\": 4, \"reached\": \"yes\"}], \"robot\": 2, \"summary\": \"Remains standing with only small weight shifts and never lifts the leg into a kick.\"}, {\"differences\": [\"stays in bent-knee crouch\", \"arms held forward\", \"no sideways kick\"], \"does_action\": \"no\", \"fell\": false, \"likeness\": 2, \"moments\": [{\"index\": 1, \"reached\": \"no\"}, {\"index\": 2, \"reached\": \"partly\"}, {\"index\": 3, \"reached\": \"no\"}, {\"index\": 4, \"reached\": \"partly\"}], \"robot\": 3, \"summary\": \"Holds a wide crouched stance with arms extended and does not perform the kicks.\"}, {\"differences\": [\"stays in bent-knee crouch\", \"arms held forward\", \"only small leg shuffles\"], \"does_action\": \"no\", \"fell\": false, \"likeness\": 1, \"moments\": [{\"index\": 1, \"reached\": \"no\"}, {\"index\": 2, \"reached\": \"partly\"}, {\"index\": 3, \"reached\": \"no\"}, {\"index\": 4, \"reached\": \"partly\"}], \"robot\": 4, \"summary\": \"Holds a wide crouched stance with arms extended and shows only small leg movements.\"}], \"verdict\": \"Robot 1 clearly reproduces both extended side kicks and the intervening stands, while Robot 2 only stands in place and Robots 3 and 4 remain in a crouch with unrelated arm poses.\"}",
+      "refusal": null,
+      "role": "assistant",
+      "annotations": null,
+      "audio": null,
+      "function_call": null,
+      "tool_calls": null
+     }
+    }
+   ],
+   "created": 1793220396,
+   "model": "muse-spark-1.3",
+   "object": "chat.completion",
+   "metadata": null,
+   "moderation": null,
+   "service_tier": null,
+   "system_fingerprint": null,
+   "usage": {
+    "completion_tokens": 2735,
+    "prompt_tokens": 18269,
+    "total_tokens": 21004,
+    "completion_tokens_details": {
+     "accepted_prediction_tokens": null,
+     "audio_tokens": null,
+     "reasoning_tokens": 2144,
+     "rejected_prediction_tokens": null,
+     "text_tokens": null
+    },
+    "prompt_tokens_details": {
+     "audio_tokens": null,
+     "cache_write_tokens": null,
+     "cached_tokens": 0,
+     "image_tokens": null,
+     "text_tokens": null
+    }
+   }
+  }
+ ]
+}

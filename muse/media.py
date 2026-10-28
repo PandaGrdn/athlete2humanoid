@@ -45,6 +45,39 @@ def prepare_video(src, dst, max_side=480, required=True):
     return dst
 
 
+def frames_at(video, times, labels, cols=4, max_width=1600, tile_height=360):
+    """The frames of `video` at `times` (s), each captioned with its label, in a grid -> PNG bytes.
+    None when OpenCV is missing or no frame can be read."""
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        return None
+    cap = cv2.VideoCapture(str(video))
+    fps, total = cap.get(cv2.CAP_PROP_FPS) or 30.0, int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    tiles = []
+    for t, label in zip(times, labels):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(min(max(round(t * fps), 0), max(total - 1, 0))))
+        ok, frame = cap.read()
+        if not ok:
+            continue
+        frame = cv2.resize(frame, (max(1, round(frame.shape[1] * tile_height / frame.shape[0])), tile_height))
+        cv2.rectangle(frame, (0, 0), (frame.shape[1], 34), (0, 0, 0), -1)
+        cv2.putText(frame, label, (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+        tiles.append(frame)
+    cap.release()
+    if not tiles:
+        return None
+    w = max(t.shape[1] for t in tiles)
+    tiles = [np.pad(t, ((0, 0), (0, w - t.shape[1]), (0, 0))) for t in tiles]
+    tiles += [np.zeros_like(tiles[0])] * (-len(tiles) % cols)
+    sheet = np.concatenate([np.concatenate(tiles[i:i + cols], 1) for i in range(0, len(tiles), cols)], 0)
+    if sheet.shape[1] > max_width:
+        s = max_width / sheet.shape[1]
+        sheet = cv2.resize(sheet, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)
+    return cv2.imencode(".png", sheet)[1].tobytes()
+
+
 def contact_sheet(video, n=6, max_width=1600, max_height=3000):
     """n frames evenly spaced through `video`, stacked top to bottom -> PNG bytes. None when OpenCV
     is missing or the video can't be read."""
