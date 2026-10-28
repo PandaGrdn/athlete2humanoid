@@ -100,7 +100,7 @@ def wait_done(client, jid, timeout=10):
 def test_health_lists_only_demo_by_default(client, make_client):
     h = client.get("/api/health").json()
     assert h["runners"] == ["demo"] and h["demo_run"] == "latent"
-    assert [s["key"] for s in h["stages"]] == ["silhouette", "pose", "retarget", "latent", "train", "eval"]
+    assert [s["key"] for s in h["stages"]] == ["silhouette", "pose", "retarget", "environment", "latent", "train", "eval"]
     # colab needs both the runner list and the explicit enable flag
     assert make_client(runners=["demo", "colab"]).get("/api/health").json()["runners"] == ["demo"]
     # ... and, to be offered, its CLI on PATH (CI machines don't have one)
@@ -153,7 +153,7 @@ def test_demo_job_lifecycle(client):
     done = wait_done(client, job["id"])
     assert done["status"] == "succeeded" and done["result_run"] == "latent" and done["progress"] == 1.0
     assert all(s["status"] == "done" for s in done["stages"])
-    assert {line[1] for line in done["logs"]} == {"silhouette", "pose", "retarget", "latent", "train", "eval"}
+    assert {line[1] for line in done["logs"]} == {"silhouette", "pose", "retarget", "environment", "latent", "train", "eval"}
     text = "\n".join(line[2] for line in done["logs"])
     assert FAKE_TOKEN not in text and "Loading weights" not in text
     assert done["curves"]["latent"][-1] == [9, 4.5]

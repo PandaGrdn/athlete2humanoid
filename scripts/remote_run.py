@@ -214,6 +214,12 @@ def sync_checkpoints(a):
     if a.job != "latent":
         return
     out = latent_out(a)
+    if not (OUT / "task_spec.json").exists():  # the task environment, for the web app before training ends
+        try:
+            colab("download", "-s", SESSION, f"{out}/task_spec.json", str(OUT / "task_spec.json"), timeout=120)
+            log("fetched task_spec.json")
+        except Exception:
+            pass  # not compiled yet
     try:
         colab("download", "-s", SESSION, f"{out}/checkpoints.json", str(OUT / "checkpoints.json"), timeout=120)
         got = []

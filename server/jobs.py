@@ -242,6 +242,29 @@ class JobStore:
     def upload_dir(self, jid):
         return self.settings.data_dir / "uploads" / jid
 
+    @staticmethod
+    def colab_out(job):
+        """Where remote_run.py writes a colab job's results (its tag is derived from the job id)."""
+        return REPO / "outputs" / f"remote_latent_web{job.id[:6]}"
+
+    def spec_folder(self, job):
+        """The folder whose task_spec.json is this job's task environment, once the job has one.
+
+        demo: the replayed run's, from the moment the replay reaches the environment stage.
+        colab: the job's output folder (the spec appears there when remote_run.py brings it back).
+        """
+        if job.result_run:
+            done = runs.find_runs(self.settings.runs_dir).get(job.result_run)
+            if done is not None:
+                return done
+        if job.runner == "demo":
+            env = next((s for s in job.stages if s.key == "environment"), None)
+            if env is None or env.status == "pending":
+                return None
+            return runs.find_runs(self.settings.runs_dir).get(job.source_run)
+        out = self.colab_out(job)
+        return out if out.is_dir() else None
+
     def get(self, jid):
         with self.lock:
             return self.jobs.get(jid)
@@ -277,11 +300,15 @@ class JobStore:
                 s.status, s.started_at = "running", _now()
             if progress is not None:
                 s.progress = max(s.progress, min(1.0, progress))
+            # A line can arrive after its stage is done (the task spec is logged between two latent-reward
+            # steps): it is logged under its own stage, but the job doesn't step back to it.
+            late = s.status == "done" and status is None
             if status:
                 s.status = status
                 if status == "done":
                     s.progress, s.finished_at = 1.0, _now()
-            job.stage = key
+            if not late or job.stage is None:
+                job.stage = key
             self._recompute(job)
 
     def _recompute(self, job):
@@ -341,7 +368,9 @@ class JobStore:
         self.log(job, "silhouette", f"demo runner: replaying the recorded run '{job.source_run}' (hosted demo has no GPU)")
         for key, label, _, share in STAGES:
             budget = total * share
-            mine = [t for s, t in lines if s == key] or [f"{label}: done"]
+            fallback = "no task spec in this run (it predates the task environment)" if key == "environment" \
+                and runs.task_spec(folder) is None else f"{label}: done"
+            mine = [t for s, t in lines if s == key] or [fallback]
             if key == "train" and curves:
                 if not self._replay_training(job, budget, mine, curves):
                     return self.finish(job, "cancelled")
@@ -391,7 +420,7 @@ class JobStore:
         stem = tag + "_" + (re.sub(r"[^a-z0-9_]", "_", Path(job.input["filename"]).stem.lower())[:40].strip("_") or "clip")
         clip = REPO / "clips" / f"{stem}{src.suffix.lower()}"
         shutil.copyfile(src, clip)
-        out = REPO / "outputs" / f"remote_latent_{tag}"
+        out = self.colab_out(job)
         cmd = [sys.executable, str(REPO / "scripts" / "remote_run.py"), "latent", "--target", stem,
                "--tag", tag, "--min-clips", "1", "--iters", str(self.settings.colab_iters),
                "--backend", self.settings.remote_backend]

@@ -40,7 +40,10 @@ Security limits are in `docs/SECURITY.md`; deploy steps in `docs/DEPLOY.md`; the
    then moved to `uploads/<job id>/input.<ext>`. The job is written to the journal and a runner thread starts.
 3. **Progress.** The runner updates stages, log lines (redacted for secrets) and training curves. The client follows
    `GET /api/jobs/{id}/events` (SSE: the whole job on each change), or polls `GET /api/jobs/{id}` if SSE fails or
-   the stream cap is reached.
+   the stream cap is reached. As soon as the retarget is compiled into a task spec (the "Task environment" stage,
+   minutes into an hours-long job), `GET /api/jobs/{id}/task_spec` serves a sanitized view of it (key moments,
+   flights, body parts, the retarget's self-check) so the page shows the RL environment long before the policy;
+   finished runs serve the same view at `GET /api/runs/{id}/task_spec`.
 4. **Result.** A finished job points at a run (`result_run`); the frontend opens that run's page.
 
 ## Job lifecycle

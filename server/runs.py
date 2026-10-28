@@ -10,7 +10,7 @@ import json
 import re
 from pathlib import Path
 
-from .stages import classify
+from .stages import classify, redact
 
 POLICY_INFO = {
     "tracking": ("Tracking", "Joint-target imitation (mjlab baseline)"),
@@ -236,6 +236,7 @@ def summarize(runs_dir, rid, folder, detail=False):
             "falls": sum(p["metrics"]["falls"] or 0 for p in current) if current else None,
         },
         "has_robust": rob is not None,
+        "has_task_spec": safe_path(folder, TASK_SPEC) is not None,
         "clip_count": len([d for d in (folder / "clips").iterdir() if d.is_dir()]) if (folder / "clips").is_dir() else 0,
     }
     if not detail:
@@ -270,3 +271,164 @@ def safe_path(folder, rel):
     if not p.is_file() or p.suffix.lower() not in SERVABLE or any(part.startswith(".") for part in Path(rel).parts):
         return None
     return p
+
+
+# --- task environment (task_spec.json) -----------------------------------------------------------
+# skill/keypose.py's spec (type "keypose": key moments for any action) or skill/task.py's older one
+# (kinds stand/squat/jump/land). Served as a small view: names, kinds, times, flags and body parts, never
+# the raw goals and tolerances, with every string cleaned and every list bounded.
+TASK_SPEC = "task_spec.json"
+MAX_SPEC_BYTES = 2 * 1048576
+MAX_SPEC_STAGES = 200
+_OLD_KINDS = {"stand": "settle", "land": "settle", "squat": "pose", "jump": "flight"}
+_LEG = {"ankle", "ankles", "foot", "feet", "knee", "knees", "hip", "hips", "toe", "toes", "heel", "leg", "legs", "shin", "thigh"}
+_ARM = {"wrist", "wrists", "hand", "hands", "elbow", "elbows", "shoulder", "shoulders", "arm", "arms", "finger"}
+_TORSO = {"pelvis", "torso", "waist", "chest", "spine", "head", "neck", "trunk", "base", "com"}
+
+
+def _text(v, n=160):
+    if not isinstance(v, str):
+        return None
+    return redact(re.sub(r"[\x00-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2066-\u2069]", " ", v)).strip()[:n] or None
+
+
+def _sec(v):
+    v = _num(v)
+    return round(float(v), 3) if v is not None and v == v and abs(v) < 1e6 else None
+
+
+def body_part(feature):
+    """'right ankle x' -> 'right leg', 'left wrist z' -> 'left arm', 'pelvis height' -> 'torso/pelvis',
+    'root turn' -> 'root'; None for anything unrecognised."""
+    if not isinstance(feature, str):
+        return None
+    words = re.findall(r"[a-z]+", feature.lower())
+    if "root" in words:
+        return "root"
+    side = next((w for w in words if w in ("left", "right")), None)
+    for group, name in ((_LEG, "leg"), (_ARM, "arm")):
+        if any(w in group for w in words):
+            return f"{side} {name}" if side else f"{name}s"
+    if any(w in _TORSO for w in words):
+        return "torso/pelvis"
+    return None
+
+
+def _body_parts(relevance, features, top=4, floor=0.3):
+    """The parts a key moment's goal weighs most: max relevance per part, those within `floor` of the top."""
+    if not isinstance(relevance, list) or len(relevance) != len(features):
+        return []
+    best = {}
+    for f, r in zip(features, relevance):
+        part, r = body_part(f), _num(r)
+        if part and r is not None and r > 0:
+            best[part] = max(best.get(part, 0.0), float(r))
+    if not best:
+        return []
+    hi = max(best.values())
+    keep = sorted(((p, w) for p, w in best.items() if w >= floor * hi), key=lambda x: -x[1])[:top]
+    return [{"part": p, "weight": round(w / hi, 2)} for p, w in keep]
+
+
+def _feet(v):
+    return [bool(x) for x in v] if isinstance(v, list) and len(v) == 2 and all(isinstance(x, bool) for x in v) else None
+
+
+def _spec_stage(st, features, keypose, fps):
+    kind = st.get("kind") if isinstance(st.get("kind"), str) else ""
+    if keypose:
+        k = kind if kind in ("pose", "flight", "settle") else "pose"
+        name = _text(st.get("name"), 120) or k
+        parts = _body_parts(st.get("relevance"), features) if k == "pose" else []
+        feet = _feet(st.get("feet_down"))
+    else:  # stand / squat / jump / land
+        k = _OLD_KINDS.get(kind, "pose")
+        name = _text(kind, 40) or k
+        parts = [{"part": "torso/pelvis", "weight": 1.0}] if kind == "squat" else []
+        feet = None if k == "flight" else [True, True]
+    level = _num(st.get("level"))
+    frame = _num(st.get("frame"))
+    frame = int(frame) if frame is not None and 0 <= frame < 1e7 else None
+    start, end = _sec(st.get("start_s")), _sec(st.get("end_s"))
+    # when the retarget reaches it: a pose's key frame, a flight's take-off, a settle's start
+    at = (round(frame / fps, 3) if frame is not None and fps else end) if k == "pose" else start
+    return {
+        "name": name, "kind": k, "start_s": start, "end_s": end, "at_s": at,
+        "optional": st.get("optional") is True,
+        "level": round(float(level), 2) if level is not None and abs(level) < 1e6 else None,
+        "frame": frame,
+        "feet_down": feet, "body_parts": parts,
+        "clearance_m": _sec(st.get("clearance")) if k == "flight" else None,
+    }
+
+
+def _self_check(spec, ev):
+    sc = spec.get("self_check")
+    if isinstance(sc, dict):
+        done, total = _num(sc.get("stages_completed")), _num(sc.get("stages_total"))
+        if done is not None and total is not None:
+            return {"stages_completed": int(done), "stages_total": int(total), "success": sc.get("success") is True,
+                    "stages_skipped": int(_num(sc.get("stages_skipped")) or 0), "fell_at_s": _sec(sc.get("fell_at_s")),
+                    "source": "spec"}
+    # older specs: the evaluation scored the retarget against the spec ("task_stages": "9/9")
+    ref = (ev or {}).get("retarget") if isinstance(ev, dict) else None
+    m = re.fullmatch(r"(\d{1,4})/(\d{1,4})", str((ref or {}).get("task_stages") or ""))
+    if m:
+        return {"stages_completed": int(m.group(1)), "stages_total": int(m.group(2)),
+                "success": (ref or {}).get("task_success") is True, "stages_skipped": 0,
+                "fell_at_s": _sec((ref or {}).get("task_fell_at_s")), "source": "eval"}
+    return None
+
+
+def task_spec_view(spec, ev=None):
+    """The view of a parsed task_spec.json the frontend renders, or None when it isn't one."""
+    if not isinstance(spec, dict) or not isinstance(spec.get("stages"), list):
+        return None
+    keypose = spec.get("type") == "keypose"
+    feats = spec.get("features") if isinstance(spec.get("features"), list) else []
+    feats = [f if isinstance(f, str) else "" for f in feats[:256]]
+    fps = _num(spec.get("fps"))
+    fps = float(fps) if fps is not None and 0 < fps < 1e4 else None
+    stages = [_spec_stage(st, feats, keypose, fps) for st in spec["stages"][:MAX_SPEC_STAGES] if isinstance(st, dict)]
+    stages = [st for st in stages if st["start_s"] is not None and st["end_s"] is not None and st["at_s"] is not None]
+    if not stages:
+        return None
+    duration = _sec(spec.get("duration_s"))
+    if duration is None or duration <= 0:
+        duration = max(st["end_s"] for st in stages)
+    poses = [st for st in stages if st["kind"] == "pose"]
+    return {
+        "format": "keypose" if keypose else "phases",
+        "name": _text(spec.get("name"), 80),
+        "summary": _text(spec.get("summary"), 600),
+        "duration_s": duration,
+        "stages": stages,
+        "counts": {"moments": len(poses), "required": sum(not st["optional"] for st in poses),
+                   "optional": sum(st["optional"] for st in poses),
+                   "flights": sum(st["kind"] == "flight" for st in stages)},
+        "body_parts": sorted({p["part"] for st in stages for p in st["body_parts"]}),
+        "self_check": _self_check(spec, ev),
+        "warnings": [w for w in (_text(x, 200) for x in (spec.get("warnings") or [])[:10]
+                                 if isinstance(spec.get("warnings"), list)) if w],
+    }
+
+
+def task_spec(folder):
+    """The task environment of a run (or a live job's output) folder, or None when it has no readable spec."""
+    if folder is None:
+        return None
+    p = safe_path(Path(folder), TASK_SPEC)  # contained in the folder, no dotfiles, a regular file
+    if p is None:
+        return None
+    ev_p = safe_path(Path(folder), "eval.json")  # the self-check of older specs lives in the evaluation
+    try:
+        st, ev_st = p.stat(), ev_p.stat() if ev_p else None
+    except OSError:
+        return None
+    if st.st_size > MAX_SPEC_BYTES:
+        return None
+    key = ("task_spec", str(p), st.st_mtime_ns, st.st_size, ev_st and ev_st.st_mtime_ns)
+    if key not in _cache:
+        ev = read_json(ev_p) if ev_st and ev_st.st_size <= MAX_SPEC_BYTES else None
+        _cache[key] = task_spec_view(read_json(p), ev)
+    return _cache[key]

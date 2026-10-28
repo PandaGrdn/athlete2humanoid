@@ -152,6 +152,15 @@ def create_app(settings=None):
             raise HTTPException(404, "run not found")
         return runs.summarize(settings.runs_dir, rid, d, detail=True)
 
+    @app.get("/api/runs/{rid}/task_spec")
+    def run_task_spec(rid: str):
+        """The run's task environment: key moments, flights, body parts and the retarget's self-check."""
+        d = all_runs().get(rid)
+        view = runs.task_spec(d) if d else None
+        if view is None:
+            raise HTTPException(404, "no task spec for this run")
+        return view
+
     @app.get("/api/runs/{rid}/files/{rel:path}")
     def run_file(rid: str, rel: str, download: bool = False):
         d = all_runs().get(rid)
@@ -262,6 +271,17 @@ def create_app(settings=None):
                 await asyncio.sleep(0.25)
         return StreamingResponse(stream(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    @app.get("/api/jobs/{jid}/task_spec")
+    def job_task_spec(jid: str):
+        """A job's task environment, as soon as it exists (long before the policy is trained)."""
+        job = store.get(jid)
+        if job is None:
+            raise HTTPException(404, "job not found")
+        view = runs.task_spec(store.spec_folder(job))
+        if view is None:
+            raise HTTPException(404, "the task environment isn't compiled yet")
+        return view
 
     @app.get("/api/jobs/{jid}/input")
     def job_input(jid: str):

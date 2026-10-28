@@ -79,7 +79,42 @@ export type RunSummary = {
   policies_trained: string[];
   headline: { retarget_aligned: number | null; best_policy: string | null; best_aligned: number | null; falls: number | null };
   has_robust: boolean;
+  has_task_spec?: boolean;
   clip_count: number;
+};
+
+/** The RL environment compiled from the retarget (GET /api/runs/{id}/task_spec, /api/jobs/{id}/task_spec). */
+export type TaskStage = {
+  name: string;
+  kind: "pose" | "flight" | "settle";
+  start_s: number;
+  end_s: number;
+  at_s: number;
+  optional: boolean;
+  level: number | null;
+  frame: number | null;
+  feet_down: [boolean, boolean] | null; // [left, right]
+  body_parts: { part: string; weight: number }[];
+  clearance_m: number | null;
+};
+
+export type TaskSpec = {
+  format: "keypose" | "phases";
+  name: string | null;
+  summary: string | null;
+  duration_s: number;
+  stages: TaskStage[];
+  counts: { moments: number; required: number; optional: number; flights: number };
+  body_parts: string[];
+  self_check: {
+    stages_completed: number;
+    stages_total: number;
+    success: boolean;
+    stages_skipped: number;
+    fell_at_s: number | null;
+    source: "spec" | "eval";
+  } | null;
+  warnings: string[];
 };
 
 export type RunDetail = RunSummary & {
@@ -155,7 +190,9 @@ export const api = {
   health: () => request<Health>("/api/health", typeof AbortSignal.timeout === "function" ? { signal: AbortSignal.timeout(10_000) } : {}),
   runs: () => request<RunSummary[]>("/api/runs"),
   run: (id: string) => request<RunDetail>(`/api/runs/${encodeURIComponent(id)}`),
+  runTaskSpec: (id: string) => request<TaskSpec>(`/api/runs/${encodeURIComponent(id)}/task_spec`),
   job: (id: string) => request<Job>(`/api/jobs/${encodeURIComponent(id)}`),
+  jobTaskSpec: (id: string) => request<TaskSpec>(`/api/jobs/${encodeURIComponent(id)}/task_spec`),
   cancel: (id: string) => request<Job>(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
   createJob: (opts: { file?: File; runId?: string; runner?: string }) => {
     const fd = new FormData();

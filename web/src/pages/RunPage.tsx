@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, fmt, policyColor, url, type FileRef, type Policy, type Robust, type RunDetail } from "../api";
+import { api, fmt, policyColor, url, type FileRef, type Policy, type Robust, type RunDetail, type TaskSpec } from "../api";
 import { BarChart, LineChart } from "../components/charts";
+import { EnvironmentPanel } from "../components/environment";
 import { Icon, LoopVideo } from "../components/ui";
 
 const NEUTRAL = "#4a5562";
@@ -12,10 +13,15 @@ export default function RunPage() {
   const [run, setRun] = useState<RunDetail | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [spec, setSpec] = useState<TaskSpec | null>(null);
 
   useEffect(() => {
     setRun(null);
-    api.run(id).then(setRun).catch((e) => setErr(e.message));
+    setSpec(null);
+    api.run(id).then((r) => {
+      setRun(r);
+      if (r.has_task_spec) api.runTaskSpec(id).then(setSpec).catch(() => undefined);
+    }).catch((e) => setErr(e.message));
   }, [id]);
 
   if (err) return <div className="container section"><div className="error-box">Run "{id}": {err}</div></div>;
@@ -72,6 +78,19 @@ export default function RunPage() {
             sub={tightest ? `mean, ${tightest.label.toLowerCase()} policy; ` + current.filter((p) => p !== tightest).map((p) => `${p.base} ${fmt.cm(p.metrics.mean_torso_position_error_m)}`).join(", ") : ""} />
         </div>
       </div>
+
+      {spec && (
+        <section className="section">
+          <div className="section-head">
+            <div>
+              <div className="eyebrow">Task environment</div>
+              <h2 style={{ marginTop: 6 }}>What the robot was asked to do</h2>
+              <p>Compiled from the retarget before any training: the action's key moments, found statistically from the motion, plus flights and landings from foot contacts. This is the reward machine the task policies train against.</p>
+            </div>
+          </div>
+          <EnvironmentPanel spec={spec} />
+        </section>
+      )}
 
       {run.video && (
         <section className="section">

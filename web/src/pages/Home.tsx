@@ -10,6 +10,7 @@ const PIPELINE = [
   { title: "Silhouette", text: "Segment and track the person through every frame.", model: "SAM 3.1" },
   { title: "Pose", text: "3D body landmarks per frame, lifted to world space.", model: "MediaPipe" },
   { title: "Retarget", text: "Inverse kinematics onto a 29-DoF Unitree G1.", model: "mink IK" },
+  { title: "Task environment", text: "Key moments, contacts and the reward machine, from the retarget.", model: "key poses" },
   { title: "Latent reward", text: "Embed video and robot renders; distill a reward net.", model: "V-JEPA 2" },
   { title: "Policy", text: "Reinforcement learning across 4,096 simulated G1s.", model: "PPO · mjlab" },
   { title: "Evaluate", text: "Re-render rollouts; score them against the source clip.", model: "V-JEPA 2 · DTW" },
@@ -84,7 +85,7 @@ export default function Home() {
         <div className="section-head">
           <div>
             <div className="eyebrow">Pipeline</div>
-            <h2 style={{ marginTop: 6 }}>Six stages from pixels to a policy</h2>
+            <h2 style={{ marginTop: 6 }}>Seven stages from pixels to a policy</h2>
           </div>
         </div>
         <div className="pipeline">

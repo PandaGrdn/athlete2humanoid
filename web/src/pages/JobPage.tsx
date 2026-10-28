@@ -1,12 +1,37 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, fmt, policyColor, url, watchJob, type Job, type RunSummary } from "../api";
+import { api, fmt, policyColor, url, watchJob, type Job, type RunSummary, type TaskSpec } from "../api";
 import { LineChart } from "../components/charts";
+import { EnvironmentPanel } from "../components/environment";
 import { Icon, LoopVideo, StatusPill } from "../components/ui";
 
 const MODEL: Record<string, string> = {
-  silhouette: "SAM 3.1", pose: "MediaPipe", retarget: "mink", latent: "V-JEPA 2", train: "mjlab PPO", eval: "V-JEPA 2",
+  silhouette: "SAM 3.1", pose: "MediaPipe", retarget: "mink", environment: "key poses", latent: "V-JEPA 2", train: "mjlab PPO", eval: "V-JEPA 2",
 };
+
+/** The job's task environment, fetched once its stage has started; retried while the job runs (a GPU job's
+ *  spec reaches the server some time after its log line). */
+function useTaskSpec(job: Job | null) {
+  const [spec, setSpec] = useState<TaskSpec | null>(null);
+  const env = job?.stages.find((s) => s.key === "environment")?.status;
+  const live = job?.status === "running" || job?.status === "queued";
+  const id = job?.id;
+  useEffect(() => setSpec(null), [id]);
+  useEffect(() => {
+    if (!id || spec || !env || env === "pending") return;
+    let stopped = false;
+    let timer: number | undefined;
+    const load = () => api.jobTaskSpec(id).then((s) => !stopped && setSpec(s)).catch(() => {
+      if (!stopped && live) timer = window.setTimeout(load, 10_000);
+    });
+    load();
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  }, [id, env, live, spec]);
+  return spec;
+}
 
 function useNow(active: boolean) {
   const [now, setNow] = useState(Date.now() / 1000);
@@ -26,6 +51,7 @@ export default function JobPage() {
   const [err, setErr] = useState<string | null>(null);
   const [source, setSource] = useState<RunSummary | null>(null);
   const consoleRef = useRef<HTMLDivElement>(null);
+  const spec = useTaskSpec(job);
   const live = job?.status === "running" || job?.status === "queued";
   const now = useNow(!!live);
 
@@ -138,6 +164,12 @@ export default function JobPage() {
               )}
             </div>
           </div>
+          {spec && (
+            <div className="fade-in">
+              <EnvironmentPanel spec={spec} live={!!live} />
+              {live && <p className="faint" style={{ fontSize: 12.5, marginTop: 8 }}>This is the environment the policy is training in right now; the trained policy follows when training finishes.</p>}
+            </div>
+          )}
           <div className="console" ref={consoleRef} aria-live="polite">
             {job.logs.map(([t, stage, line], i) => (
               <div className="line" key={i}>

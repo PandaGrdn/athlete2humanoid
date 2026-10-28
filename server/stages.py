@@ -11,8 +11,10 @@ STAGES = [
     ("silhouette", "Silhouette", "SAM 3.1 segments and tracks the person", 0.12),
     ("pose", "Pose", "MediaPipe 3D landmarks per frame", 0.10),
     ("retarget", "Retarget", "mink IK onto the Unitree G1 (29 DoF)", 0.12),
-    ("latent", "Latent reward", "V-JEPA 2 embeds the clip; a reward net is distilled", 0.20),
-    ("train", "Policy training", "PPO in mjlab, 4,096 parallel envs", 0.34),
+    # minutes into a real run, the first thing a tester sees that is their action's own RL environment
+    ("environment", "Task environment", "Key moments, contacts and the reward machine, compiled from the retarget", 0.06),
+    ("latent", "Latent reward", "V-JEPA 2 embeds the clip; a reward net is distilled", 0.17),
+    ("train", "Policy training", "PPO in mjlab, 4,096 parallel envs", 0.31),
     ("eval", "Evaluation", "Rollouts re-rendered and scored by V-JEPA 2", 0.12),
 ]
 STAGE_KEYS = [s[0] for s in STAGES]
@@ -21,6 +23,7 @@ _PATTERNS = [
     ("silhouette", r"^SAM 3\.1|^prompt '.*':"),
     ("pose", r"^pose found"),
     ("retarget", r"^retarget error"),
+    ("environment", r"^task spec\b"),
     ("latent", r"windows, \d+ dense steps|^target \w+: viewpoint|^distillation dataset|motions rendered \+ embedded"
                r"|^training the reward network|^epoch \d+:|^reward bundle ready"),
     ("train", r"^training (tracking|hybrid|latent)|finished with code|Learning iteration"),
