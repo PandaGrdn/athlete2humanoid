@@ -245,3 +245,26 @@ def test_a_key_pose_must_be_held():
     r = T.evaluate(spec, flick, FPS)
     assert not r["success"] and r["stages_completed"] <= 1, r
     assert T.evaluate(spec, pos, FPS)["success"]
+
+
+def test_one_machine_scores_each_env_against_its_own_variant():
+    """A machine over several specs (skill/variations.py's variants) gives each env the same rewards and
+    stage counts as a machine over that env's spec alone."""
+    clips = {k: motion(k) for k in ("kick", "squat", "jump")}
+    specs = [self_spec(K.compile_keypose_spec(p, FPS)) for p in clips.values()]
+    n = 6  # env i: variant i % 3, replaying motion i % 3 (envs 3-5 the kick/squat/jump again)
+    m = K.KeyposeMachine(specs, n, dt=1 / FPS)
+    m.set_variant(torch.arange(n), torch.arange(n) % 3)
+    singles = [K.KeyposeMachine(s, 1, dt=1 / FPS) for s in specs]
+    pos = [torch.as_tensor(clips[k]) for k in clips]
+    T_ = min(len(p) for p in pos)
+    m.reset(torch.arange(n), torch.zeros(n), torch.stack([pos[i % 3][0] for i in range(n)]))
+    for s, p in zip(singles, pos):
+        s.reset(torch.tensor([0]), 0.0, p[:1])
+    for t in range(1, T_):
+        r = m.step(torch.stack([pos[i % 3][t] for i in range(n)]))
+        for i, (s, p) in enumerate(zip(singles, pos)):
+            ri = s.step(p[t:t + 1])
+            assert torch.allclose(r[i], ri[0], atol=1e-4) and torch.allclose(r[i + 3], ri[0], atol=1e-4), (t, i)
+    assert [int(c) for c in m.completed[:3]] == [int(s.completed[0]) for s in singles]
+    assert m.S == max(len(s["stages"]) for s in specs) and list(m.n_stages[:3]) == [len(s["stages"]) for s in specs]

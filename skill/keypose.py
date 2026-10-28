@@ -231,12 +231,13 @@ def name_moment(delta, w):
     return ", ".join(words) if words else "hold"
 
 
-def dwell(F, k, goal, tol, rel, delta):
-    """Frames around key frame k for which the reference itself satisfies the pose predicate on the pose
-    features (KeyposeMachine._eval's rule, without the root goal, which is anchored at stage entry)."""
-    g, t, r, d = (np.asarray(a, np.float64)[:D_POSE] for a in (goal, tol, rel, delta))
+def dwell(Fk, k, goal, tol, rel, delta):
+    """Frames around key frame k for which the reference itself satisfies the pose predicate
+    (KeyposeMachine._eval's rule). Fk: (T, D) features with the root measured from this stage's anchor
+    (the previous key moment), as the machine measures it."""
+    g, t, r, d = (np.asarray(a, np.float64) for a in (goal, tol, rel, delta))
     sign, span = np.where(d < 0, -1.0, 1.0), np.abs(d) * (r > 0)
-    e = (g - F[:, :D_POSE]) * sign
+    e = (g - Fk) * sign
     e = np.where(e >= 0, e, np.clip(-e - OVERSHOOT * span, 0, None))
     x = e / t
     worst = np.where(r >= CORE, x, 0.0).max(-1)
@@ -255,10 +256,25 @@ def compile_keypose_spec(pos, fps, skill=None, max_clearance=T.MAX_CLEARANCE, na
     Too many stages for the policy's stage input (MAX_STAGES): the RDP tolerance coarsens until it fits."""
     for i in range(12):
         try:
-            return _compile(pos, fps, skill, max_clearance, name, scale=1.25 ** i)
+            return fit_holds(_compile(pos, fps, skill, max_clearance, name, scale=1.25 ** i), pos, fps)
         except _TooMany:
             continue
     raise ValueError(f"more than {T.MAX_STAGES} stages even at a coarse tolerance: trim the clip")
+
+
+def fit_holds(spec, pos, fps, tries=8):
+    """The reference must complete its own spec. A hold it can't make (its dwell window started before the
+    previous stage let go, or the clip ends) is halved until it can; below 0.05 s it's dropped."""
+    for _ in range(tries):
+        sc = T.evaluate({**spec, "down": spec["down_ref"], "air": spec["air_ref"]}, pos, fps)
+        n = sc["stages_completed"]
+        if sc["success"] or n >= len(spec["stages"]):
+            break
+        st = spec["stages"][n]
+        if st["kind"] != "pose" or not st.get("hold_s"):
+            break  # not a hold: leave it to the self-check to report
+        st["hold_s"] = round(st["hold_s"] / 2, 3) if st["hold_s"] >= 0.1 else 0.0
+    return spec
 
 
 class _TooMany(ValueError):
@@ -321,7 +337,9 @@ def _compile(pos, fps, skill, max_clearance, name, scale):
         feet_down = [bool(pos[k, a, 2] - foot0 < T.DOWN) for a in (L_ANKLE, R_ANKLE)]
         level = dev[k]
         tol = np.minimum(tol, 9.99)
-        ref_dwell = dwell(F, k, goal, tol, w, delta) / fps
+        anchor = torch.as_tensor(pos[prev_k, PELVIS, :2]), torch.tensor(float(yaw[prev_k]))
+        Fk = np.concatenate([F[:, :D_POSE], root_features(pos, *anchor).numpy()], -1)
+        ref_dwell = dwell(Fk, k, goal, tol, w, np.concatenate([delta[:D_POSE], root])) / fps
         stages.append({"kind": "pose", "level": round(min(level, 99.0), 2), "optional": bool(level < need), "start_s": round(prev_t / fps, 3), "end_s": round(k / fps, 3),
                        "name": name_moment(delta, w), "goal": np.round(goal, 4).tolist(),
                        "tol": np.round(tol, 4).tolist(), "relevance": np.round(w, 3).tolist(),
@@ -378,104 +396,137 @@ def summarize(stages):
 
 
 class KeyposeMachine:
-    """Batched reward machine over a keypose spec, with StageMachine's interface (skill/task.py)."""
+    """Batched reward machine over a keypose spec, with StageMachine's interface (skill/task.py).
+
+    spec may also be a list of specs, one per variant of a clip (skill/variations.py): every per-stage
+    table then has a leading variant axis, padded to the longest, and each env is scored against its
+    own variant's spec (set_variant). One spec is the same machine with one variant; the 1-D tables
+    (kind, jump_goal, ...) other code reads are variant 0's."""
 
     def __init__(self, spec, num_envs, device="cpu", dt=0.02, weights=None):
-        self.spec, self.n, self.dev, self.dt = spec, num_envs, device, dt
-        self.w = {**WEIGHTS, **spec.get("weights", {}), **(weights or {})}
-        st = spec["stages"]
-        self.S = len(st)
-        self.kind = torch.tensor([KINDS.index(s["kind"]) for s in st], device=device)
+        specs = list(spec) if isinstance(spec, (list, tuple)) else [spec]
+        self.specs, self.spec = specs, specs[0]
+        self.n, self.dev, self.dt = num_envs, device, dt
+        self.w = {**WEIGHTS, **self.spec.get("weights", {}), **(weights or {})}
+        self.V = len(specs)
+        sizes = [len(s["stages"]) for s in specs]
+        self.S = max(sizes)
+        f32 = dict(dtype=torch.float32, device=device)
+
+        def table(fn, pad):  # (V, S, ...) from fn(spec, stage index, stage), padded past each spec's end
+            return torch.tensor([[fn(s, i, st) for i, st in enumerate(s["stages"])] + [pad] * (self.S - len(s["stages"]))
+                                 for s in specs], device=device)
         zeros = [0.0] * D
-        self.goal = torch.tensor([s.get("goal", zeros) for s in st], dtype=torch.float32, device=device)
-        self.tol = torch.tensor([s.get("tol", [1.0] * D) for s in st], dtype=torch.float32, device=device)
-        self.rel = torch.tensor([s.get("relevance", zeros) for s in st], dtype=torch.float32, device=device)
-        delta = torch.tensor([s.get("delta", zeros) for s in st], dtype=torch.float32, device=device)
-        self.sign = torch.where(delta < 0, -1.0, 1.0)
-        self.span = delta.abs() * (self.rel > 0)
-        self.need_down = torch.tensor([s.get("feet_down", [s["kind"] == "settle"] * 2) for s in st], device=device)
-        self.still = torch.tensor([s.get("still", s["kind"] == "settle") for s in st], device=device)
-        self.optional = torch.tensor([bool(s.get("optional")) and i + 1 < self.S for i, s in enumerate(st)], device=device)
-        self.hold_need = torch.tensor([s.get("min_air_s", s.get("hold_s", HOLD.get(KINDS.index(s["kind"]), 0.1)))
-                                       for s in st], dtype=torch.float32, device=device)
-        self.start = torch.tensor([s["start_s"] for s in st], dtype=torch.float32, device=device)
-        self.end = torch.tensor([s["end_s"] for s in st], dtype=torch.float32, device=device)
-        self.clear = torch.tensor([s.get("clearance", 0.0) for s in st], dtype=torch.float32, device=device)
-        self.rise = torch.tensor([s.get("pelvis_rise", 0.0) for s in st], dtype=torch.float32, device=device)
+        self._kind = table(lambda s, i, st: KINDS.index(st["kind"]), SETTLE)
+        self._goal = table(lambda s, i, st: st.get("goal", zeros), zeros).float()
+        self._tol = table(lambda s, i, st: st.get("tol", [1.0] * D), [1.0] * D).float()
+        self._rel = table(lambda s, i, st: st.get("relevance", zeros), zeros).float()
+        delta = table(lambda s, i, st: st.get("delta", zeros), zeros).float()
+        self._sign = torch.where(delta < 0, -1.0, 1.0)
+        self._span = delta.abs() * (self._rel > 0)
+        self._need_down = table(lambda s, i, st: st.get("feet_down", [st["kind"] == "settle"] * 2), [True, True])
+        self._still = table(lambda s, i, st: st.get("still", st["kind"] == "settle"), True)
+        self._optional = table(lambda s, i, st: bool(st.get("optional")) and i + 1 < len(s["stages"]), False)
+        self._hold_need = table(lambda s, i, st: st.get("min_air_s", st.get("hold_s", HOLD.get(KINDS.index(st["kind"]), 0.1))), 0.1).float()
+        self._start = table(lambda s, i, st: st["start_s"], float("inf")).float()
+        self._end = table(lambda s, i, st: st["end_s"], float("inf")).float()
+        self._clear = table(lambda s, i, st: st.get("clearance", 0.0), 0.0).float()
+        self._rise = table(lambda s, i, st: st.get("pelvis_rise", 0.0), 0.0).float()
         # A settle stage right after a flight pays that jump's quality (skill/task.py's land stage).
-        self.jump_goal = torch.tensor([st[i - 1].get("clearance", 0.0) if i and st[i - 1]["kind"] == "flight" else 0.0
-                                       for i in range(self.S)], dtype=torch.float32, device=device)
+        self._jump_goal = table(lambda s, i, st: s["stages"][i - 1].get("clearance", 0.0)
+                                if i and s["stages"][i - 1]["kind"] == "flight" else 0.0, 0.0).float()
+        self._foot0, self._h0 = (torch.tensor([s[k] for s in specs], **f32) for k in ("foot0", "h0"))
+        self._down, self._air = (torch.tensor([s["down"] for s in specs], **f32), torch.tensor([s["air"] for s in specs], **f32))
+        self._size = torch.tensor(sizes, dtype=torch.long, device=device)
+        for k in ("kind", "goal", "tol", "rel", "sign", "span", "need_down", "still", "optional", "hold_need",
+                  "start", "end", "clear", "rise", "jump_goal"):
+            setattr(self, k, getattr(self, "_" + k)[0])  # variant 0: what single-spec readers index
         z = lambda dtype=torch.float32: torch.zeros(num_envs, dtype=dtype, device=device)
+        self.var = z(torch.long)  # each env's variant
         self.stage, self.completed = z(torch.long), z(torch.long)
         self.hold, self.phi, self.apex, self.z_prev, self.p, self.banked = z(), z(), z(), z(), z(), z()
         self.z_apex = z()  # highest pelvis in the current flight
         self.d0 = torch.ones(num_envs, device=device)  # weighted distance to the goal when the stage began
         self.root_scale = torch.ones(num_envs, device=device)  # share of the root goal left (mid-stage starts)
         self.anchor_xy, self.anchor_yaw = torch.zeros(num_envs, 2, device=device), z()
+        # where the current stage's predicate first held: the next stage's root goal is measured from here,
+        # not from where its hold ended (the body keeps moving during a hold, as the reference's does)
+        self.held_xy, self.held_yaw = torch.zeros(num_envs, 2, device=device), z()
         self.done = z(torch.bool)
         self.stats = {"advances": z(torch.long), "jump_q": z()}
-        self.n_stages = torch.full((num_envs,), self.S, dtype=torch.long, device=device)
+        self.n_stages = self._size[self.var]
         self.q_min, self.steps = torch.ones(num_envs, device=device), z(torch.long)
         self.skipped = z(torch.long)
         self.extra_depth = z()  # StageMachine's commanded extra squat depth (mjlab_tasks fall rule): none here
         self.style_until_done = True  # mjlab_tasks.TimeWeighted: no style terms once the task is done
 
+    def set_variant(self, ids, v):
+        """Score envs ids against variant v (a tensor or int); call reset() for them after."""
+        self.var[ids] = torch.as_tensor(v, device=self.dev).long()
+        self.n_stages = self._size[self.var]
+
     def _eval(self, stage, pos, vz, ids=slice(None)):
         """Progress in [0, 1] and whether the predicate holds, for envs ids (state buffers indexed by
         ids) in stage, plus the relevance-weighted RMS distance to a pose goal in tolerances."""
-        s = self.spec
-        zp, lo, _, up = T.features(pos, s["foot0"])
-        down = (pos[..., [L_ANKLE, R_ANKLE], 2] - s["foot0"]) < s["down"]
-        k = self.kind[stage]
-        f = torch.cat([pose_features(pos, s["foot0"]), root_features(pos, self.anchor_xy[ids], self.anchor_yaw[ids])], -1)
-        g = self.goal[stage].clone()
+        v = self.var[ids]
+        foot0 = self._foot0[v][:, None]  # per env, against its two feet
+        zp, lo, _, up = T.features(pos, foot0)
+        down = (pos[..., [L_ANKLE, R_ANKLE], 2] - foot0) < self._down[v][:, None]
+        k = self._kind[v, stage]
+        f = torch.cat([pose_features(pos, foot0), root_features(pos, self.anchor_xy[ids], self.anchor_yaw[ids])], -1)
+        g = self._goal[v, stage].clone()
         g[:, D_POSE:] = g[:, D_POSE:] * self.root_scale[ids][:, None]
         # error along the key moment's motion: short of the goal counts, beyond it only past OVERSHOOT
-        e = (g - f) * self.sign[stage]
-        e = torch.where(e >= 0, e, (-e - OVERSHOOT * self.span[stage]).clamp(min=0))
-        x = e / self.tol[stage]
-        r = self.rel[stage]
+        e = (g - f) * self._sign[v, stage]
+        e = torch.where(e >= 0, e, (-e - OVERSHOOT * self._span[v, stage]).clamp(min=0))
+        x = e / self._tol[v, stage]
+        r = self._rel[v, stage]
         worst = torch.where(r >= CORE, x, torch.zeros_like(x)).max(-1).values
         rms = ((r * x ** 2).sum(-1) / r.sum(-1).clamp(min=1e-6)).sqrt()
         d0 = self.d0[ids]
         p_pose = ((d0 - rms) / (d0 - 1).clamp(min=1e-3)).clamp(0, 1)
-        support = (~self.need_down[stage] | down).all(-1)
-        rise = self.rise[stage]
-        p_air = (lo / self.clear[stage].clamp(min=1e-3)).clamp(0, 1)
-        p_air = torch.where(rise > 0, 0.5 * p_air + 0.5 * ((zp - s["h0"]) / rise.clamp(min=1e-3)).clamp(0, 1), p_air)
+        support = (~self._need_down[v, stage] | down).all(-1)
+        rise = self._rise[v, stage]
+        p_air = (lo / self._clear[v, stage].clamp(min=1e-3)).clamp(0, 1)
+        p_air = torch.where(rise > 0, 0.5 * p_air + 0.5 * ((zp - self._h0[v]) / rise.clamp(min=1e-3)).clamp(0, 1), p_air)
         p = torch.where(k == POSE, p_pose, torch.where(k == FLIGHT, p_air, support.float() * ((up - 0.6) / 0.25).clamp(0, 1)))
-        calm = ~self.still[stage] | (vz.abs() < 0.5)
+        calm = ~self._still[v, stage] | (vz.abs() < 0.5)
         settled = support & (up > T.UPRIGHT) & calm
-        sat = torch.where(k == POSE, (worst <= 1) & (rms <= 1) & support & calm, torch.where(k == FLIGHT, lo > s["air"], settled))
+        sat = torch.where(k == POSE, (worst <= 1) & (rms <= 1) & support & calm,
+                          torch.where(k == FLIGHT, lo > self._air[v], settled))
         return p, sat, rms
 
-    def _enter(self, ids, pos, frac=None):
-        """Stage entry for envs ids (pos: theirs): anchor the root goal here, measure the starting distance."""
-        self.anchor_xy[ids], self.anchor_yaw[ids] = pos[:, PELVIS, :2], heading(pos)
+    def _enter(self, ids, pos, frac=None, anchor=None):
+        """Stage entry for envs ids (pos: theirs): anchor the root goal here (or at anchor = (xy, yaw)),
+        measure the starting distance."""
+        self.anchor_xy[ids], self.anchor_yaw[ids] = anchor if anchor is not None else (pos[:, PELVIS, :2], heading(pos))
         self.root_scale[ids] = 1.0 if frac is None else frac
         self.d0[ids] = 2.0  # placeholder so _eval's progress is defined; replaced just below
         _, _, rms = self._eval(self.stage[ids], pos, torch.zeros(len(pos), device=self.dev), ids)
         self.d0[ids] = rms.clamp(min=1.0 + 1e-3)
 
-    def stage_at(self, t):
-        return (torch.searchsorted(self.start, t.float().contiguous(), right=True) - 1).clamp(0, self.S - 1)
+    def stage_at(self, t, v=None):
+        """The stage each variant v (default 0) is in at time t (s)."""
+        v = torch.zeros_like(torch.as_tensor(t), dtype=torch.long) if v is None else v
+        return ((self._start[v] <= t.float()[..., None]).sum(-1) - 1).clamp(min=0)
 
     def reset(self, env_ids, t, pos):
-        """Episodes of env_ids (re)start at reference time t (s) with bodies at pos (len(env_ids), B, 3).
-        Mid-stage, the root goal is scaled to the share of the stage still ahead."""
+        """Episodes of env_ids (re)start at reference time t (s, in their variant's clip) with bodies at
+        pos (len(env_ids), B, 3). Mid-stage, the root goal is scaled to the share of the stage still ahead."""
         pos = torch.as_tensor(pos, dtype=torch.float32, device=self.dev)
         ids = torch.as_tensor(env_ids, device=self.dev)
         t = torch.as_tensor(t, dtype=torch.float32, device=self.dev).expand(len(ids))
-        stage = self.stage_at(t)
+        v = self.var[ids]
+        stage = torch.minimum(self.stage_at(t, v), self._size[v] - 1)
         # "ready" lasts no time: an episode that starts at the clip's first frame is past it, like one
         # that starts a frame later. Otherwise only exact frame-0 starts see it (~1 in 264 RSI starts in
         # training), and a policy without the retarget as input never learns it (kp_jacks taskphase:
         # every play rollout from frame 0 fell within 5 steps; from frame 1 on, none did).
-        ready = (stage == 0) & (self.end[0] <= self.start[0]) if self.S > 1 else torch.zeros_like(stage, dtype=torch.bool)
+        ready = (stage == 0) & (self._end[v, 0] <= self._start[v, 0]) & (self._size[v] > 1)
         stage = torch.where(ready, 1, stage)
         self.stage[ids] = stage
-        span = (self.end[stage] - self.start[stage]).clamp(min=1e-3)
-        self._enter(ids, pos, ((self.end[stage] - t) / span).clamp(0, 1))
+        span = (self._end[v, stage] - self._start[v, stage]).clamp(min=1e-3)
+        self._enter(ids, pos, ((self._end[v, stage] - t) / span).clamp(0, 1))
         p, _, _ = self._eval(stage, pos, torch.zeros(len(ids), device=self.dev), ids)
         self.p[ids], self.phi[ids] = p, stage + p
         for buf in (self.hold, self.apex, self.z_apex, self.completed, self.steps, self.banked, self.skipped):
@@ -494,7 +545,7 @@ class KeyposeMachine:
         hold_end = self.done & sat  # done: the stage stays the last one, whose predicate is the end pose
         # An optional key moment (a detail of how the clip did it) may be skipped: if the next stage
         # already holds, move on to it, without the optional one's bonus.
-        opt = (self.optional[self.stage] & ~sat & ~self.done).nonzero().squeeze(1)
+        opt = (self._optional[self.var, self.stage] & ~sat & ~self.done).nonzero().squeeze(1)
         if len(opt):
             saved = (self.stage[opt].clone(), self.anchor_xy[opt].clone(), self.anchor_yaw[opt].clone(),
                      self.root_scale[opt].clone(), self.d0[opt].clone())
@@ -502,8 +553,8 @@ class KeyposeMachine:
             self._enter(opt, pos[opt])
             p2, sat2, _ = self._eval(self.stage[opt], pos[opt], vz[opt], opt)
             back = ~sat2
-            for buf, v in zip((self.stage, self.anchor_xy, self.anchor_yaw, self.root_scale, self.d0), saved):
-                buf[opt[back]] = v[back]
+            for buf, val in zip((self.stage, self.anchor_xy, self.anchor_yaw, self.root_scale, self.d0), saved):
+                buf[opt[back]] = val[back]
             skip = opt[sat2]
             if len(skip):
                 p, sat = p.clone(), sat.clone()
@@ -511,16 +562,20 @@ class KeyposeMachine:
                 self.hold[skip] = 0.0
                 self.skipped[skip] += 1
                 self.phi[skip] = self.phi[skip] + 1.0  # the skipped stage is behind it: no progress reward for it
-        _, lo, _, _ = T.features(pos, self.spec["foot0"])
-        k = self.kind[self.stage]
-        after_flight = self.jump_goal[self.stage] > 0
+        v = self.var
+        _, lo, _, _ = T.features(pos, self._foot0[v][:, None])
+        k = self._kind[v, self.stage]
+        after_flight = self._jump_goal[v, self.stage] > 0
         self.apex = torch.where((k == FLIGHT) | after_flight, torch.maximum(self.apex, lo), torch.zeros_like(lo))
         self.z_apex = torch.where(k == FLIGHT, torch.maximum(self.z_apex, z), torch.zeros_like(z))
-        risen = (k != FLIGHT) | (self.z_apex - self.spec["h0"] >= self.rise[self.stage] - 1e-6)
+        risen = (k != FLIGHT) | (self.z_apex - self._h0[v] >= self._rise[v, self.stage] - 1e-6)
+        first = sat & (self.hold <= 0)
+        self.held_xy = torch.where(first[:, None], pos[:, PELVIS, :2], self.held_xy)
+        self.held_yaw = torch.where(first, heading(pos), self.held_yaw)
         self.hold = torch.where(sat & ~self.done, self.hold + self.dt, torch.zeros_like(self.hold))
-        adv = sat & risen & (self.hold >= self.hold_need[self.stage] - 1e-6) & ~self.done
+        adv = sat & risen & (self.hold >= self._hold_need[v, self.stage] - 1e-6) & ~self.done
 
-        jg = self.jump_goal[self.stage]
+        jg = self._jump_goal[v, self.stage]
         ratio = self.apex / jg.clamp(min=1e-3)
         q = torch.where(jg > 0, ratio.clamp(0, 1) - ((ratio - 1.25) / 0.75).clamp(0, 1), torch.zeros_like(ratio))
         bonus = adv * (self.w["stage"] + self.w["jump"] * q)
@@ -532,7 +587,7 @@ class KeyposeMachine:
         self.stage = torch.minimum(new_stage, self.n_stages - 1)
         moved = (adv & ~just_done).nonzero().squeeze(1)
         if len(moved):
-            self._enter(moved, pos[moved])
+            self._enter(moved, pos[moved], anchor=(self.held_xy[moved], self.held_yaw[moved]))
             p = p.clone()
             p[moved] = 0.0
         self.p = torch.where(adv, torch.zeros_like(p), p)
@@ -541,7 +596,7 @@ class KeyposeMachine:
 
         phi = torch.where(self.done, self.n_stages.float(), self.stage + self.p)
         d, self.phi = phi - self.phi, phi
-        _, _, _, up = T.features(pos, self.spec["foot0"])
+        _, _, _, up = T.features(pos, self._foot0[v][:, None])
         gate = ((up - 0.6) / 0.3).clamp(0, 1)
         prog = torch.where(d > 0, d * gate, d) * self.w["progress"]
         self.stats["advances"] += adv.long()

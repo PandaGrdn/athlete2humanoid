@@ -40,7 +40,8 @@ OUT = SESSION = None  # set in main()
 
 
 def latent_out(a):
-    return f"{REMOTE}/outputs/latent_{'smoke' if a.smoke else a.tag or a.target}"
+    kind = "variants" if a.job == "variants" else "latent"
+    return f"{REMOTE}/outputs/{kind}_{'smoke' if a.smoke else a.tag or a.target}"
 
 
 def job_spec(a):
@@ -57,6 +58,12 @@ def job_spec(a):
     if a.job == "relevance":  # experiments/goal_relevance.py: V-JEPA importance + the counterfactual policies
         out, inp = f"{REMOTE}/outputs/relevance" + (f"_{a.tag}" if a.tag else ""), f"{REMOTE}/inputs"
         return ("--with-main", f"python3 experiments/goal_relevance.py --inputs {inp} --target {a.target} --out {out} "
+                f"--iters {a.iters} {a.args}", {"results.tar.gz": f"{out}/results.tar.gz"})
+    if a.job == "variants":  # experiments/variant_policy.py: train on variants of the clip, hold others out
+        if not a.reuse:
+            raise SystemExit("variants needs --reuse <a latent run's results folder> (its clips, and weights to start from)")
+        out, inp = latent_out(a), f"{REMOTE}/inputs"
+        return ("--with-main", f"python3 experiments/variant_policy.py {inp}/clips/{a.target} --out {out} "
                 f"--iters {a.iters} {a.args}", {"results.tar.gz": f"{out}/results.tar.gz"})
     out = latent_out(a)
     cmd = f"python3 experiments/latent_policy.py {{clips}} --target {a.target} --out {out} --iters {a.iters} {a.args}"
@@ -226,7 +233,7 @@ def sync_checkpoints(a):
     """Newest checkpoint of every policy still training -> OUT/checkpoints/policy_*/ (a few MB each),
     so a lost VM costs at most the last sync interval of training, not the run. Plain downloads of
     the paths experiments/latent_policy.py lists in checkpoints.json: the kernel is busy (keeper)."""
-    if a.job != "latent":
+    if a.job not in ("latent", "variants"):
         return
     out = latent_out(a)
     if not (OUT / "task_spec.json").exists():  # the task environment, for the web app before training ends
@@ -283,7 +290,7 @@ def run_farmshare(a, fs, found, setup, cmd, fetch, inputs):
         fs.upload(found, inputs)
         fs.submit(cmd.format(clips=" ".join(f"'{REMOTE}/clips/{p.name}'" for p in found)))
         try:
-            state = fs.wait(latent_out(a) if a.job == "latent" else None)
+            state = fs.wait(latent_out(a) if a.job in ("latent", "variants") else None)
         except KeyboardInterrupt:
             fs.cancel()
             raise
@@ -356,7 +363,7 @@ def main(a):
 
 def parser():
     ap = argparse.ArgumentParser()
-    ap.add_argument("job", choices=["probe", "latent", "robust", "relevance"])
+    ap.add_argument("job", choices=["probe", "latent", "robust", "relevance", "variants"])
     ap.add_argument("--min-clips", type=int, default=6)
     ap.add_argument("--max-wait-h", type=float, default=8)
     ap.add_argument("--target", default="squat")

@@ -24,6 +24,11 @@ Runs inside mjlab's virtualenv; takes the same flags as mjlab's `train`:
   with the feet on the floor (ground_starts), pays for soft landings (LandingImpact) and
   penalises the latent reward's uncertainty (LatentReward, lambda 4): docs/PIPELINE_IMPROVEMENTS.md.
 
+- A2H-Tracking-Flat-Unitree-G1: mjlab's tracking task, here so that it too can train on variants.
+A2H_VARIANTS=variants.json (experiments/variant_policy.py) makes any of them train on variants of the
+clip (skill/variations.py: mirrored, re-timed, scaled) laid end to end in one motion file: each env
+stays inside its variant (VariantMotionCommand) and the task reward scores it against that variant's
+own keypose spec. mjlab's adaptive sampling over the whole file then favours the variants it fails.
 A2H_REWARD_CONFIG=next_reward_config.json (muse/reward_agent.py's format; train_motion.py
 --reward-config sets it) overrides the latent weight, SIGMA, tracking scale and termination
 thresholds below. The latent-only tasks keep tracking_scale 0.
@@ -36,6 +41,7 @@ only with "stability": {"hybrid": true} in the config.
 import json
 import os
 import sys
+from dataclasses import dataclass, fields
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -56,6 +62,7 @@ from mjlab.managers.reward_manager import RewardTermCfg  # noqa: E402
 from mjlab.managers.termination_manager import TerminationTermCfg  # noqa: E402
 from mjlab.tasks.registry import register_mjlab_task  # noqa: E402
 from mjlab.tasks.tracking.config.g1.env_cfgs import unitree_g1_flat_tracking_env_cfg  # noqa: E402
+from mjlab.tasks.tracking.mdp.commands import MotionCommand, MotionCommandCfg  # noqa: E402
 from mjlab.tasks.tracking.config.g1.rl_cfg import unitree_g1_tracking_ppo_runner_cfg  # noqa: E402
 from mjlab.tasks.tracking.rl import MotionTrackingOnPolicyRunner  # noqa: E402
 
@@ -378,7 +385,62 @@ def latent_env_cfg(tracking_scale, play=False, phase_only=False):
     return cfg
 
 
-TASK_SPEC_ENV, IMPORTANCE_ENV = "A2H_TASK_SPEC", "A2H_IMPORTANCE"
+TASK_SPEC_ENV, IMPORTANCE_ENV, VARIANTS_ENV = "A2H_TASK_SPEC", "A2H_IMPORTANCE", "A2H_VARIANTS"
+
+
+def load_variants():
+    """A2H_VARIANTS: {"segments": [{name, start, length (50 Hz steps), spec (path, relative to the file)}]},
+    each segment's spec read in as "spec_data"; None when unset."""
+    path = os.environ.get(VARIANTS_ENV)
+    if not path:
+        return None
+    v = json.loads(Path(path).read_text())
+    for seg in v["segments"]:
+        seg["spec_data"] = json.loads((Path(path).parent / seg["spec"]).read_text())
+    return v
+
+
+class VariantMotionCommand(MotionCommand):
+    """The motion file is several variants end to end: an env that reaches the end of its variant is
+    resampled (as mjlab does at the end of the file) instead of running on into the next one."""
+
+    def __init__(self, cfg, env):
+        super().__init__(cfg, env)
+        segs = load_variants()["segments"]
+        start = torch.tensor([g["start"] for g in segs], dtype=torch.long, device=self.device)
+        length = torch.tensor([g["length"] for g in segs], dtype=torch.long, device=self.device)
+        assert int(start[-1] + length[-1]) == self.motion.time_step_total, "variants.json doesn't match the motion file"
+        self.seg_start = start
+        self.seg_of = torch.repeat_interleave(torch.arange(len(segs), device=self.device), length)
+        self.seg_last = torch.zeros(self.motion.time_step_total, dtype=torch.bool, device=self.device)
+        self.seg_last[start + length - 1] = True
+
+    def _update_command(self, env_ids=None):
+        ending = self.seg_last[self.time_steps].clone()
+        if env_ids is not None:
+            only = torch.zeros_like(ending)
+            only[env_ids] = True
+            ending &= only
+        super()._update_command(env_ids)
+        ids = ending.nonzero().squeeze(1)
+        if len(ids):
+            self._resample_command(ids)
+            self._env.sim.forward()
+            self.update_relative_body_poses()
+
+
+@dataclass(kw_only=True)
+class VariantMotionCommandCfg(MotionCommandCfg):
+    def build(self, env):
+        return VariantMotionCommand(self, env)
+
+
+def use_variants(cfg):
+    """With A2H_VARIANTS set, the motion command keeps each env inside its own variant."""
+    if os.environ.get(VARIANTS_ENV):
+        old = cfg.commands["motion"]
+        cfg.commands["motion"] = VariantMotionCommandCfg(**{f.name: getattr(old, f.name) for f in fields(old)})
+    return cfg
 
 
 class TaskReward:
@@ -390,7 +452,13 @@ class TaskReward:
         self.cmd = env.command_manager.get_term("motion")
         assert tuple(self.cmd.cfg.body_names) == BODIES, "skill/task.py indexes mjlab's G1 tracking bodies"
         spec = json.loads(Path(os.environ[TASK_SPEC_ENV]).read_text())
-        self.m = skill_task.machine(spec, env.num_envs, env.device, env.step_dt)  # keypose or stage spec
+        variants = load_variants()
+        if variants:  # one keypose machine over every variant's spec; each env scored against its own
+            from skill.keypose import KeyposeMachine
+            self.m = KeyposeMachine([g["spec_data"] for g in variants["segments"]], env.num_envs, env.device, env.step_dt)
+        else:
+            self.m = skill_task.machine(spec, env.num_envs, env.device, env.step_dt)  # keypose or stage spec
+        self.variants = variants is not None
         if cfg.params.get("grounded_rsi"):  # before the first reset (managers are built first)
             env.a2h_ground_offset = ground_starts(self.cmd, spec, env.step_dt)
         self.dt = env.step_dt
@@ -404,7 +472,12 @@ class TaskReward:
         ts, pos = self.cmd.time_steps, self.cmd.robot_body_pos_w
         jumped = (ts != self.last_ts + 1).nonzero().squeeze(1)  # reset, or motion wrapped around
         if len(jumped):
-            self.m.reset(jumped, ts[jumped] * self.dt, pos[jumped])
+            t = ts[jumped]
+            if self.variants:  # the variant it is in now, and the time in that variant's clip
+                v = self.cmd.seg_of[t]
+                self.m.set_variant(jumped, v)
+                t = t - self.cmd.seg_start[v]
+            self.m.reset(jumped, t * self.dt, pos[jumped])
         self.last_ts = ts.clone()
         # Terminations are computed before rewards: a fall this step refunds the attempt.
         return self.m.step(pos, fell=env.termination_manager.terminated)
@@ -556,8 +629,8 @@ def task_env_cfg(tracking_scale, play=False, phase_only=False, commanded=False, 
 
 for task, scale, phase in (("A2H-Hybrid-Flat-Unitree-G1", 0.2, False), ("A2H-Latent-Flat-Unitree-G1", 0.0, False),
                           ("A2H-LatentPhase-Flat-Unitree-G1", 0.0, True)):
-    register_mjlab_task(task_id=task, env_cfg=latent_env_cfg(scale, phase_only=phase),
-                        play_env_cfg=latent_env_cfg(scale, play=True, phase_only=phase),
+    register_mjlab_task(task_id=task, env_cfg=use_variants(latent_env_cfg(scale, phase_only=phase)),
+                        play_env_cfg=use_variants(latent_env_cfg(scale, play=True, phase_only=phase)),
                         rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
 # Task-first: Task keeps the retarget as the policy's input and a 0.1x tracking style term;
 # TaskPhase sees only its own body, the clock and the task stage, and is never scored on the retarget.
@@ -568,9 +641,12 @@ for task, scale, phase, cmd, weighted in (("A2H-Task-Flat-Unitree-G1", 0.1, Fals
                                           ("A2H-TaskPhase-Flat-Unitree-G1", 0.0, True, False, True),
                                           ("A2H-TaskCmd-Flat-Unitree-G1", 0.0, True, True, True),
                                           ("A2H-TaskHybrid-Flat-Unitree-G1", 0.5, False, False, False)):
-    register_mjlab_task(task_id=task, env_cfg=task_env_cfg(scale, phase_only=phase, commanded=cmd, weighted_tracking=weighted),
-                        play_env_cfg=task_env_cfg(scale, play=True, phase_only=phase, commanded=cmd, weighted_tracking=weighted),
+    register_mjlab_task(task_id=task, env_cfg=use_variants(task_env_cfg(scale, phase_only=phase, commanded=cmd, weighted_tracking=weighted)),
+                        play_env_cfg=use_variants(task_env_cfg(scale, play=True, phase_only=phase, commanded=cmd, weighted_tracking=weighted)),
                         rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
+register_mjlab_task(task_id="A2H-Tracking-Flat-Unitree-G1", env_cfg=use_variants(unitree_g1_flat_tracking_env_cfg()),
+                    play_env_cfg=use_variants(unitree_g1_flat_tracking_env_cfg(play=True)),
+                    rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
 
 
 if __name__ == "__main__":

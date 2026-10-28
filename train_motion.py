@@ -32,12 +32,25 @@ def run(cmd, **kw):
     subprocess.run(list(map(str, cmd)), check=True, **kw)
 
 
+def csv_to_npz(py, csv, fps, dst, env):
+    """mjlab's converter: CSV (fps) -> motion.npz at 50 fps by forward kinematics. It always writes
+    /tmp/motion.npz and then "uploads" it to W&B, which WANDB_MODE=disabled makes a no-op."""
+    with open("/tmp/a2h_csv_to_npz.lock", "w") as lock, tempfile.TemporaryDirectory() as tmp:
+        fcntl.flock(lock, fcntl.LOCK_EX)  # trainings may run in parallel; the converter's output path is fixed
+        run([py, "-m", "mjlab.scripts.csv_to_npz", "--input-file", Path(csv).resolve(),
+             "--output-name", Path(dst).stem, "--input-fps", fps, "--output-fps", 50], env=env, cwd=tmp)
+        shutil.copy("/tmp/motion.npz", dst)
+    return Path(dst)
+
+
 def train_motion(csv, fps, out, iters=1500, num_envs=4096, mjlab_python=None, task=TASK, bundle=None,
-                 reward_config=None, task_spec=None, importance=None, init=None):
+                 reward_config=None, task_spec=None, importance=None, init=None, variants=None, rollout_importance=None):
+    """variants: experiments/variant_policy.py's variants.json, next to its motion_variants.npz: train on
+    those (A2H_VARIANTS), then roll out on csv's clip (the original) with rollout_importance."""
     py = Path(mjlab_python or os.environ.get("A2H_MJLAB_PYTHON", "/content/mjlab_env/bin/python"))
     out = Path(out).resolve()
     out.mkdir(parents=True, exist_ok=True)
-    env = dict(os.environ, MUJOCO_GL="egl", WANDB_MODE="disabled")
+    env = dict(os.environ, MUJOCO_GL=os.environ.get("MUJOCO_GL", "egl"), WANDB_MODE="disabled")
     if bundle:
         env["A2H_LATENT_BUNDLE"] = str(Path(bundle).resolve())
     if task_spec:  # the task-first tasks' stage reward (skill/task.py)
@@ -67,17 +80,17 @@ def train_motion(csv, fps, out, iters=1500, num_envs=4096, mjlab_python=None, ta
     # (policy_weights.py) starts from A2H_INIT_CHECKPOINT when set.
     trainer = [py.parent / "train"] if task == TASK and not start else [py, ROOT / "mjlab_tasks.py"]
 
-    # 1. CSV -> motion.npz (forward kinematics at 50 fps). The converter always writes
-    #    /tmp/motion.npz and then "uploads" it to W&B, which WANDB_MODE=disabled makes a no-op.
-    npz = out / "motion.npz"
-    with open("/tmp/a2h_csv_to_npz.lock", "w") as lock, tempfile.TemporaryDirectory() as tmp:
-        fcntl.flock(lock, fcntl.LOCK_EX)  # trainings may run in parallel; the converter's output path is fixed
-        run([py, "-m", "mjlab.scripts.csv_to_npz", "--input-file", Path(csv).resolve(),
-             "--output-name", out.name, "--input-fps", fps, "--output-fps", 50], env=env, cwd=tmp)
-        shutil.copy("/tmp/motion.npz", npz)
+    # 1. CSV -> motion.npz (forward kinematics at 50 fps): the clip it is evaluated on.
+    npz = csv_to_npz(py, csv, fps, out / "motion.npz", env)
+    train_npz, roll_env = npz, env
+    if variants:  # trained on the variants end to end; rolled out on the clip itself
+        train_npz = Path(variants).resolve().parent.parent / "motion_variants.npz"
+        env = dict(env, A2H_VARIANTS=str(Path(variants).resolve()))
+        if rollout_importance:
+            roll_env = dict(roll_env, A2H_IMPORTANCE=str(Path(rollout_importance).resolve()))
 
     # 2. PPO motion tracking.
-    run([*trainer, task, "--env.commands.motion.motion-file", npz,
+    run([*trainer, task, "--env.commands.motion.motion-file", train_npz,
          "--env.scene.num-envs", num_envs, "--agent.max-iterations", iters,
          "--agent.save-interval", 250, "--agent.logger", "tensorboard", "--log-root", log_root],
         env=env, cwd=out)
@@ -87,10 +100,11 @@ def train_motion(csv, fps, out, iters=1500, num_envs=4096, mjlab_python=None, ta
     ck = Path(ckpt).resolve()
     meta = {"task": task, "checkpoint": str(ck.relative_to(out) if ck.is_relative_to(out) else ck), "iterations": int(Path(ckpt).stem.split("_")[1]) + 1,
             "started_from": start or None, "motion_csv": str(csv), "fps": fps, "num_envs": num_envs,
+            **({"variants": str(Path(variants).resolve())} if variants else {}),
             **{k: str(Path(v).resolve()) for k, v in (("bundle", bundle), ("task_spec", task_spec),
                                                      ("importance", importance), ("reward_config", reward_config)) if v}}
     (out / "weights.json").write_text(json.dumps(meta, indent=1))
-    run([py, ROOT / "mjlab_rollout.py", "--checkpoint", ckpt, "--motion", npz, "--out", out, "--task", task], env=env)
+    run([py, ROOT / "mjlab_rollout.py", "--checkpoint", ckpt, "--motion", npz, "--out", out, "--task", task], env=roll_env)
     return out
 
 
@@ -107,6 +121,9 @@ if __name__ == "__main__":
     ap.add_argument("--task-spec", help="skill/task.py task_spec.json for the A2H-Task tasks")
     ap.add_argument("--importance", help="importance.json weighting the A2H-Task tasks' style terms")
     ap.add_argument("--init", help="start from this checkpoint (model_*.pt) instead of from scratch")
+    ap.add_argument("--variants", help="experiments/variant_policy.py's variants.json: train on the variants")
+    ap.add_argument("--rollout-importance", help="importance.json for the rollout on the clip itself (with --variants)")
     a = ap.parse_args()
     train_motion(a.csv, a.fps, a.out, a.iters, a.num_envs, task=a.task, bundle=a.bundle, reward_config=a.reward_config,
-                 task_spec=a.task_spec, importance=a.importance, init=a.init)
+                 task_spec=a.task_spec, importance=a.importance, init=a.init, variants=a.variants,
+                 rollout_importance=a.rollout_importance)

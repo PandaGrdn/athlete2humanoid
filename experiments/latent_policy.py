@@ -42,8 +42,10 @@ from latent.distill import unit  # noqa: E402
 TASKS = {"tracking": "Mjlab-Tracking-Flat-Unitree-G1", "hybrid": "A2H-Hybrid-Flat-Unitree-G1",
          "latent": "A2H-Latent-Flat-Unitree-G1", "phase": "A2H-LatentPhase-Flat-Unitree-G1",
          "task": "A2H-Task-Flat-Unitree-G1", "taskphase": "A2H-TaskPhase-Flat-Unitree-G1",
-         "taskcmd": "A2H-TaskCmd-Flat-Unitree-G1", "taskhybrid": "A2H-TaskHybrid-Flat-Unitree-G1"}
-TASK_FIRST = ("task", "taskphase", "taskcmd", "taskhybrid")  # trained on the semantic task spec (skill/task.py)
+         "taskcmd": "A2H-TaskCmd-Flat-Unitree-G1", "taskhybrid": "A2H-TaskHybrid-Flat-Unitree-G1",
+         # trained on variants of the clip (experiments/variant_policy.py); the same tasks on one clip
+         "tracking_var": "A2H-Tracking-Flat-Unitree-G1", "taskhybrid_var": "A2H-TaskHybrid-Flat-Unitree-G1"}
+TASK_FIRST = ("task", "taskphase", "taskcmd", "taskhybrid", "taskhybrid_var")  # trained on the semantic task spec (skill/task.py)
 
 
 def log(msg):
@@ -269,7 +271,8 @@ def eval_bank(bank, bucket, vj, g1, out, smoke):
 
 
 # A task-first policy can build off these when no weights of its own name are given.
-INIT_FALLBACK = {"task": ("hybrid", "tracking"), "taskhybrid": ("task", "tracking"), "taskphase": ("phase",), "taskcmd": ("taskphase", "phase")}
+INIT_FALLBACK = {"task": ("hybrid", "tracking"), "taskhybrid": ("task", "tracking"), "taskphase": ("phase",), "taskcmd": ("taskphase", "phase"),
+                 "tracking_var": ("tracking",), "taskhybrid_var": ("tracking",)}  # var: off the shortcut-free tracking
 
 
 def _newest(d):
