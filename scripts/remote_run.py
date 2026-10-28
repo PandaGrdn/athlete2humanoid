@@ -332,7 +332,12 @@ def main(a):
     if fs:
         return run_farmshare(a, fs, found, setup, cmd, fetch, inputs)
     for attempt in (1, 2):
-        keeper = launch(found, setup, cmd, inputs)
+        try:
+            keeper = launch(found, setup, cmd, inputs)
+        except BaseException:  # a VM that never got its job would sit idle, billed, until Colab reclaims it
+            colab("stop", "-s", SESSION, check=False)
+            log("launch failed; VM stopped")
+            raise
         state, unknown, polls = "running", 0, 0
         while state in ("running", "unknown"):
             time.sleep(120)
