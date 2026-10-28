@@ -29,6 +29,13 @@ itself there with --mjlab), the V-JEPA scoring in the main env (--no-vjepa skips
    - noref:      no reference at all: standing still at t = 0 and the reference frozen there.
                  TaskPhase never reads it, so only it can still do the action; the policies that
                  read the reference are shown a robot standing still.
+   - tempo:      the reference 0.5x / 1.5x / 2x as fast: far off the trained tempo (speed's 0.8 / 1.2x
+                 are mild). The task must still be done before the (shorter or longer) clip ends.
+   - transfer:   a different, similar clip the policies never trained on (--transfer [name=]motion.npz,
+                 e.g. a squat for squat-jump policies; --mirror: the clip's mirror image, the kick with
+                 the other leg, for any clip): its reference, and a keypose spec compiled from it,
+                 replace the clip's. Distance is to that clip; no V-JEPA score (the video is the
+                 training clip's).
    All policies run in the stock tracking task's environment: the A2H tasks differ from it in
    rewards, terminations and the actor's (and task critics') observations. Those get their own
    observation groups here; actions are checked equal at start-up. The environment's only reward
@@ -141,7 +148,7 @@ def needs_spec(task):
 def conditions(a):
     """[(suite, level label, params)]. v1's 13 first, in v1's order (same per-condition seeds)."""
     c = {"push_mps": 0.0, "init_scale": 0.0, "phase_max": 0.0, "friction": None, "mass_scale": None, "speed": 1.0,
-         "push_at": None, "start": "reference", "reference": "clip"}
+         "push_at": None, "start": "reference", "reference": "clip", "transfer": None}
     out = [("clean", "nominal", c)]
     out += [("push", f"{v:g} m/s", c | {"push_mps": v}) for v in a.push]
     out += [("init", f"x{s:g}", c | {"init_scale": s, "phase_max": 0.5}) for s in a.init]
@@ -153,6 +160,10 @@ def conditions(a):
     out += [("start", s, c | {"start": s}) for s in a.starts]
     if a.noref:
         out += [("noref", "frozen", c | {"start": "standing", "reference": "frozen"})]
+    out += [("tempo", f"{s:g}x", c | {"speed": s}) for s in a.tempo]
+    named = [t.split("=", 1) if "=" in t else (Path(t).stem, t) for t in a.transfer]
+    out += [("transfer", "mirrored", c | {"transfer": "mirror"})] if a.mirror else []
+    out += [("transfer", name, c | {"transfer": str(t)}) for name, t in named]
     return out
 
 
@@ -178,6 +189,29 @@ def resample_motion(src, dst, speed):
            "body_pos_w": lerp(d["body_pos_w"]), "body_quat_w": quat / np.linalg.norm(quat, axis=-1, keepdims=True),
            "body_lin_vel_w": lerp(d["body_lin_vel_w"]) * speed, "body_ang_vel_w": lerp(d["body_ang_vel_w"]) * speed}
     np.savez(dst, **{k: v.astype(np.float32) for k, v in out.items()})
+    return dst
+
+
+def mirror_motion(src, dst):
+    """motion.npz reflected through the sagittal plane (y -> -y): left and right swap, roll and yaw joints
+    change sign (the G1's left and right joint axes are the same vectors). Exact: forward kinematics of
+    the mirrored joints gives the mirrored bodies (checked to ~1e-5 m on the front kick)."""
+    import mujoco
+    from mjlab.asset_zoo.robots.unitree_g1.g1_constants import get_spec
+    m = get_spec().compile()
+    joints = [m.joint(i).name for i in range(m.njnt) if m.jnt_type[i] != mujoco.mjtJoint.mjJNT_FREE]
+    bodies = [m.body(i).name for i in range(1, m.nbody)]
+
+    def swap(n):
+        return n.replace("left", "@").replace("right", "left").replace("@", "right")
+    jp, bp = [joints.index(swap(n)) for n in joints], [bodies.index(swap(n)) for n in bodies]
+    sign = np.array([-1.0 if ("roll" in n or "yaw" in n) else 1.0 for n in joints], np.float32)
+    d = np.load(src)
+    flip, pseudo, quat = (np.array(v, np.float32) for v in ([1, -1, 1], [-1, 1, -1], [1, -1, 1, -1]))
+    out = {"fps": d["fps"], "joint_pos": (d["joint_pos"] * sign)[:, jp], "joint_vel": (d["joint_vel"] * sign)[:, jp],
+           "body_pos_w": d["body_pos_w"][:, bp] * flip, "body_quat_w": d["body_quat_w"][:, bp] * quat,
+           "body_lin_vel_w": d["body_lin_vel_w"][:, bp] * flip, "body_ang_vel_w": d["body_ang_vel_w"][:, bp] * pseudo}
+    np.savez(dst, **{k: np.asarray(v, np.float32) if k != "fps" else v for k, v in out.items()})
     return dst
 
 
@@ -287,6 +321,13 @@ def mjlab_stage(a, out):
         spec, source = skill_task.compile_spec(ref_pos, float(STEP_HZ), name=a.target), "compiled from motion.npz"
         spec_path = str(out / "task_spec.json")
         Path(spec_path).write_text(json.dumps(spec, indent=1))
+    from skill import keypose as K
+
+    def kinds_of(sp):
+        """The stage kinds the machine reports: keypose (pose / flight / settle) or stand / squat / jump / land."""
+        if sp.get("type") == "keypose":
+            return K.FLIGHT, K.SETTLE, K.POSE
+        return skill_task.JUMP, skill_task.LAND, skill_task.SQUAT
     clip_s = len(ref_pos) / STEP_HZ
     assert abs(spec["duration_s"] - clip_s) < 0.25, f"task spec ({spec['duration_s']} s) is not of this clip ({clip_s:.2f} s)"
     self_check = skill_task.evaluate({**spec, "down": spec["down_ref"], "air": spec["air_ref"]}, ref_pos, STEP_HZ)
@@ -330,6 +371,7 @@ def mjlab_stage(a, out):
     log(f"env with {cfg.scene.num_envs} envs + {len(names)} policies ready ({time.time() - t0:.0f} s)")
 
     cmd, robot, m = env.command_manager.get_term("motion"), env.scene["robot"], env.a2h_task
+    reward_term, clip_machine = env.reward_manager.get_term_cfg("task").func, env.a2h_task  # TaskReward instance
     assert np.allclose(cmd.motion.body_pos_w.cpu().numpy(), ref_pos, atol=1e-5), "motion body order"
     friction = env.event_manager.get_term_cfg("foot_friction")
     mass = env.event_manager.get_term_cfg("eval_mass")
@@ -355,8 +397,8 @@ def mjlab_stage(a, out):
             "fall_rule": {"torso_z_m": a.fall_z, "tilt_rad": a.fall_tilt, "ref_torso_z_min_m": ref_z.min().item(),
                           "ref_tilt_max_rad": ref_tilt.max().item()},
             "task_spec": {"source": source, "summary": spec["summary"], "stages": kinds, "h0": spec["h0"],
-                          "jump_clearance_m": [s["clearance"] for s in spec["stages"] if s["kind"] == "jump"],
-                          "ref_squat_depth_m": [s["depth"] for s in squats],
+                          "jump_clearance_m": [s["clearance"] for s in spec["stages"] if s["kind"] in ("jump", "flight")],
+                          "ref_squat_depth_m": [s["depth"] for s in squats if "depth" in s],
                           "self_check": {k: self_check[k] for k in ("stages_completed", "stages_total", "success")}},
             "start_poses": {"crouched_frame": crouch},
             "dtw_joint_rad_still": still.item()}
@@ -399,8 +441,22 @@ def mjlab_stage(a, out):
             mf = motion_file if p["speed"] == 1 else resample_motion(motion_file, out / f"motion_x{p['speed']:g}.npz", p["speed"])
             if p["reference"] == "frozen":
                 mf = frozen_motion(motion_file, out / "motion_frozen.npz")
+            if p["transfer"]:
+                mf = mirror_motion(motion_file, out / "motion_mirrored.npz") if p["transfer"] == "mirror" else Path(p["transfer"])
             cmd.motion = MotionLoader(str(mf), cmd.body_indexes, device=env.device)
             truth = cmd.motion if p["reference"] == "clip" else MotionLoader(str(motion_file), cmd.body_indexes, device=env.device)
+            # The task: the clip's spec, or for a new clip one compiled from it (the policies never saw either)
+            if p["transfer"]:
+                cs = K.compile_keypose_spec(motion_body_pos(mf), float(STEP_HZ), name=level)
+                reward_term.m = env.a2h_task = skill_task.machine(cs, env.num_envs, env.device, env.step_dt)
+                log(f"transfer to {level}: {cs['summary']}")
+            else:
+                cs, reward_term.m = spec, clip_machine
+                env.a2h_task = clip_machine
+            m = env.a2h_task
+            JUMP_K, LAND_K, SQUAT_K = kinds_of(cs)
+            cq = cmd.motion.joint_pos.clone() if p["transfer"] else clip_q  # what "distance to the clip" is to
+            T0c = len(cq)
             start["mode"] = p["start"]
             T = cmd.motion.time_step_total
             s = p["init_scale"]
@@ -427,7 +483,7 @@ def mjlab_stage(a, out):
             upright, torso_err, joint_err, apex, jq_sum = zeros(), zeros(), zeros(), zeros(), zeros()
             done_n, jumps, jq_n, pushes, start_stage = (zeros(torch.long) for _ in range(5))
             pushed_stage = torch.full((N,), -1, dtype=torch.long, device=device)
-            z_min = torch.full((N,), spec["h0"], device=device)
+            z_min = torch.full((N,), cs["h0"], device=device)
             next_push = torch.empty(N, device=device).uniform_(*PUSH_EVERY_S) * STEP_HZ
             qpos = torch.zeros(len(keep), steps, 7 + robot.data.joint_pos.shape[1], device=device)
             body = torch.zeros(len(keep), steps, *cmd.robot_body_pos_w.shape[1:], device=device)
@@ -456,23 +512,23 @@ def mjlab_stage(a, out):
 
                 # The task, by the stage machine the env's reward ran this step (TaskReward).
                 pos = cmd.robot_body_pos_w
-                pz, lo, hi, _ = skill_task.features(pos, spec["foot0"])
+                pz, lo, hi, _ = skill_task.features(pos, cs["foot0"])
                 kind = m.kind[m.stage]
                 if t == 0:  # the machine (re)starts on the first step, at the clip's stage then
                     start_stage = m.stage - m.completed
                 else:
                     adv = live & (m.completed > prev_done)
-                    jumps += adv & (m.kind[prev_stage] == skill_task.JUMP)
+                    jumps += adv & (m.kind[prev_stage] == JUMP_K)
                     landed = adv & (m.jump_goal[prev_stage] > 0)
                     jq_sum += landed * m.stats["jump_q"]
                     jq_n += landed
                 done_n = torch.where(live, m.completed, done_n)
                 finished = torch.where(live, m.done, finished)
-                apex = torch.where(live & (lo > spec["air"]), torch.maximum(apex, lo), apex)
-                z_min = torch.where(live & (hi < spec["down"]) & (kind != skill_task.LAND), torch.minimum(z_min, pz), z_min)
+                apex = torch.where(live & (lo > cs["air"]), torch.maximum(apex, lo), apex)
+                z_min = torch.where(live & (hi < cs["down"]) & (kind != LAND_K), torch.minimum(z_min, pz), z_min)
                 if p["push_at"]:
-                    want = (kind == skill_task.SQUAT) & (m.p >= 0.5) if p["push_at"] == "squat" else \
-                        (kind == skill_task.LAND) & (hi < spec["down"])
+                    landing = (kind == LAND_K) & (hi < cs["down"]) & ((m.jump_goal[m.stage] > 0) if JUMP_K != skill_task.JUMP else True)
+                    want = (kind == SQUAT_K) & (m.p >= 0.5) if p["push_at"] == "squat" else landing
                     fire = want & live & ~m.done & (m.stage != pushed_stage)
                     pushed_stage = torch.where(fire, m.stage, pushed_stage)
 
@@ -483,9 +539,9 @@ def mjlab_stage(a, out):
 
             # Distance to the clip (1x, from the start phase) of every rollout, by joint-space DTW.
             speed = p["speed"]
-            nref = torch.minimum(T0 - start_t, (length * speed).round().long() + 1)
-            idx = (start_t[:, None] + torch.arange(T0, device=device)).clamp(max=T0 - 1)
-            dtw = dtw_joint(joints, length.clamp(min=1), clip_q[idx], nref)
+            nref = torch.minimum(T0c - start_t, (length * speed).round().long() + 1)
+            idx = (start_t[:, None] + torch.arange(T0c, device=device)).clamp(max=T0c - 1)
+            dtw = dtw_joint(joints, length.clamp(min=1), cq[idx], nref)
             success = finished & ~fallen
 
             res = {}
@@ -507,7 +563,7 @@ def mjlab_stage(a, out):
                              "stages_frac": mean(done_n / (m.S - start_stage).clamp(min=1)),
                              "jumps": mean(jumps), "jump_apex_m": mean(apex),
                              "jump_quality": jq_sum[sl].sum().item() / jq_n[sl].sum().item() if jq_n[sl].sum() else None,
-                             "squat_depth_m": mean(spec["h0"] - z_min),
+                             "squat_depth_m": mean(cs["h0"] - z_min),
                              "pushes": mean(pushes),
                              "dtw_joint_rad": mean(dtw, up_ok)}
             for k, e in enumerate(keep.tolist()):
@@ -518,7 +574,7 @@ def mjlab_stage(a, out):
                 rollouts[key + "/body"] = body[k, :int(length[e])].cpu().numpy()
             if p["phase_max"] == 0:  # episodes start at t = 0: skill/task.py's evaluate() applies as is
                 for name in names:
-                    ev = [skill_task.evaluate(spec, rollouts[f"{ci}/{name}/{r}/body"], STEP_HZ)["success"]
+                    ev = [skill_task.evaluate(cs, rollouts[f"{ci}/{name}/{r}/body"], STEP_HZ)["success"]
                           for r in range(a.score)]
                     res[name]["task_success_evaluate"] = float(np.mean(ev))
             results.append({"suite": suite, "level": level, "params": p, "policies": res})
@@ -582,6 +638,8 @@ def vjepa_stage(a, runs, out, ev, pols):
             for n in pols if (runs / f"policy_{n}" / "policy_qpos.npy").exists()]
     for ci, c in enumerate(ev["conditions"]):
         speed = c["params"]["speed"]
+        if c["params"].get("transfer"):  # another clip: the training clip's video is the wrong reference
+            continue
         for k in rollouts.files:
             if k.startswith(f"{ci}/") and k.count("/") == 2:  # ci/policy/rep: qpos (also .../start, .../body)
                 q = rollouts[k] if speed == 1 else resample(rollouts[k], int(round((len(rollouts[k]) - 1) * speed)) + 1)
@@ -645,7 +703,8 @@ def print_table(result):
 # Headline columns of robust_summary.md: (header, suites averaged).
 SUMMARY_COLUMNS = (("Clean", ("clean",)), ("Pushes", ("push",)), ("Stage-timed pushes", ("push_phase",)),
                    ("Start noise", ("init",)), ("Start pose", ("start",)), ("Speed", ("speed",)),
-                   ("Friction/mass", ("dynamics",)), ("No reference", ("noref",)))
+                   ("Tempo 0.5-2x", ("tempo",)), ("Friction/mass", ("dynamics",)), ("No reference", ("noref",)),
+                   ("New similar clip", ("transfer",)))
 
 
 def write_summary(result, path):
@@ -750,6 +809,9 @@ def parse(argv=None):
     ap.add_argument("--init", type=float, nargs="*", default=[1, 2, 4], help="init noise, x training's")
     ap.add_argument("--dynamics", type=int, default=3, help="how many friction/mass levels")
     ap.add_argument("--speed", type=float, nargs="*", default=[0.8, 1.2])
+    ap.add_argument("--tempo", type=float, nargs="*", default=[0.5, 1.5, 2.0], help="far tempos (the tempo suite)")
+    ap.add_argument("--transfer", nargs="*", default=[], help="[name=]motion.npz of similar clips never trained on")
+    ap.add_argument("--mirror", action="store_true", help="also the clip's mirror image (left <-> right)")
     ap.add_argument("--phase-push", type=float, nargs="*", default=[0.75],
                     help="stage-timed push strengths (m/s): one per squat (halfway down) / per touchdown")
     ap.add_argument("--starts", nargs="*", default=["crouched", "standing"], choices=["crouched", "standing"],

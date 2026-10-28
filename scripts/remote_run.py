@@ -134,6 +134,8 @@ def pack_reuse(src, policies=False, checkpoints=None):
         for name in ("reward.pt", "distill_report.json"):  # used only with --args "--reward ..."
             if (src / name).exists():
                 tar.add(src / name, name)
+        if (src / "transfer").is_dir():  # robust job: clips the policies never trained on (--transfer)
+            tar.add(src / "transfer", "transfer")
         if policies:  # the robust job: the trained policies themselves, and their eval
             for q in [*src.glob("policy_*/model_*.pt"), *src.glob("policy_*/motion.npz")]:
                 tar.add(q, f"{q.parent.name}/{q.name}")
