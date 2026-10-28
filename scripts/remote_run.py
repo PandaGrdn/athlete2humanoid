@@ -229,21 +229,26 @@ def pull_log():
         log(f"could not download job.log: {e}")
 
 
-def sync_checkpoints(a):
+def colab_get(remote, local, timeout=600):
+    colab("download", "-s", SESSION, remote, str(local), timeout=timeout)
+
+
+def sync_checkpoints(a, get=None):
     """Newest checkpoint of every policy still training -> OUT/checkpoints/policy_*/ (a few MB each),
     so a lost VM costs at most the last sync interval of training, not the run. Plain downloads of
     the paths experiments/latent_policy.py lists in checkpoints.json: the kernel is busy (keeper)."""
     if a.job not in ("latent", "variants"):
         return
     out = latent_out(a)
+    get = get or colab_get
     if not (OUT / "task_spec.json").exists():  # the task environment, for the web app before training ends
         try:
-            colab("download", "-s", SESSION, f"{out}/task_spec.json", str(OUT / "task_spec.json"), timeout=120)
+            get(f"{out}/task_spec.json", OUT / "task_spec.json", timeout=120)
             log("fetched task_spec.json")
         except Exception:
             pass  # not compiled yet
     try:
-        colab("download", "-s", SESSION, f"{out}/checkpoints.json", str(OUT / "checkpoints.json"), timeout=120)
+        get(f"{out}/checkpoints.json", OUT / "checkpoints.json", timeout=120)
         got = []
         for name, rel in json.loads((OUT / "checkpoints.json").read_text()).items():
             dst = OUT / "checkpoints" / name / Path(rel).name
@@ -251,7 +256,7 @@ def sync_checkpoints(a):
                 continue
             dst.parent.mkdir(parents=True, exist_ok=True)
             part = dst.with_suffix(".part")
-            colab("download", "-s", SESSION, f"{out}/{rel}", str(part), timeout=600)
+            get(f"{out}/{rel}", part, timeout=600)
             for old in dst.parent.glob("model_*.pt"):
                 old.unlink()
             part.rename(dst)
@@ -280,6 +285,32 @@ def unpack(path):
     with tarfile.open(path) as tar:
         tar.extractall(OUT, filter="data")
     log(f"unpacked {path.name}")
+
+
+def run_modal(a, mr, found, setup, cmd, fetch, inputs):
+    """The Colab loop on Modal: one spawn; the container (and billing) ends with the job. scripts/modal_backend.py."""
+    from modal_backend import wait
+    if setup == "--with-sam":
+        raise SystemExit("the Modal image has no SAM 3.1 (new videos): run this job on Colab, or --reuse processed clips")
+    mr.deploy()
+    mr.upload(found, inputs, REPO / ".env")
+    mr.submit(cmd.format(clips=" ".join(f"'{REMOTE}/clips/{p.name}'" for p in found)))
+    try:
+        state = wait(mr, lambda: sync_checkpoints(a, mr.download))
+    except KeyboardInterrupt:
+        mr.cancel()
+        raise
+    log(f"job state: {state}")
+    for local, remote in {"job.log": f"{REMOTE}/jobs/{SESSION}/log", **fetch}.items():
+        try:
+            mr.download(remote, OUT / local)
+        except Exception as e:  # noqa: BLE001
+            log(f"could not download {local}: {str(e)[-200:]}")
+            continue
+        if local.endswith(".tar.gz"):
+            unpack(OUT / local)
+    mr.cleanup()
+    log(f"done. Results in {OUT}")
 
 
 def run_farmshare(a, fs, found, setup, cmd, fetch, inputs):
@@ -312,7 +343,12 @@ def main(a):
     SESSION = a.job + ("_smoke" if a.smoke else "") + (f"_{a.tag}" if a.tag else "")
     OUT = REPO / "outputs" / f"remote_{SESSION}"
     OUT.mkdir(parents=True, exist_ok=True)
-    fs = None
+    fs = mr = None
+    if a.backend == "modal":
+        from modal_backend import ModalRun  # scripts/ is on sys.path when this file runs
+        ModalRun.check_login()
+        mr = ModalRun(SESSION, OUT, log, a.modal_gpu)
+        REMOTE = mr.run_dir
     if a.backend == "farmshare":
         from farmshare import FarmShare  # scripts/ is on sys.path when this file runs
         fs = FarmShare.from_args(a, OUT, SESSION, log)
@@ -331,6 +367,8 @@ def main(a):
         log("HF token OK")
     if fs:
         return run_farmshare(a, fs, found, setup, cmd, fetch, inputs)
+    if mr:
+        return run_modal(a, mr, found, setup, cmd, fetch, inputs)
     for attempt in (1, 2):
         try:
             keeper = launch(found, setup, cmd, inputs)
@@ -382,7 +420,9 @@ def parser():
                                            "(a new video: its weights only; with --reuse use --with-weights)")
     ap.add_argument("--args", default="", help="extra flags for the job's script (latent_policy.py, robustness_eval.py)")
     fs = ap.add_argument_group("FarmShare (--backend farmshare; docs/FARMSHARE.md)")
-    ap.add_argument("--backend", choices=["colab", "farmshare"], default="colab")
+    ap.add_argument("--backend", choices=["colab", "farmshare", "modal"], default="colab")
+    ap.add_argument("--modal-gpu", default=os.environ.get("A2H_MODAL_GPU"),
+                    help="Modal GPU type (default L40S; e.g. A100-40GB): docs/MODAL.md")
     fs.add_argument("--fs-host", default=os.environ.get("A2H_FS_HOST", "farmshare"), help="ssh host alias")
     fs.add_argument("--fs-root", default=os.environ.get("A2H_FS_ROOT", "a2h"),
                     help="remote folder for the repo, venvs and runs (relative to home, or e.g. /scratch/users/$USER/a2h)")
