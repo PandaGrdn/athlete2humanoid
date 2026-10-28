@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generated_at": "2026-10-27T22:01:42+00:00",
+ "generated_at": "2026-10-28T18:31:53+00:00",
  "examples": [
   {
    "id": "squat-jump-final",
@@ -12,13 +12,13 @@
    "video": "squat-jump-final/source.mp4"
   },
   {
-   "id": "robustness-final",
-   "kicker": "Stress test",
-   "title": "Squat jump, pushed and without its reference",
-   "tagline": "64 rollouts per condition. Under random shoves the task policy still finishes the squat jump 94% of the time (tracking 65%); with the reference frozen, tracking stands still (0%) while both task policies complete it (100%, 100%).",
+   "id": "front-kick",
+   "kicker": "Any action",
+   "title": "Front kick, learned from its video alone",
+   "tagline": "No kick-specific reward: the clip's four key moments became the task, and all three completed it (6/6) with no falls; the warm start managed 1/6.",
    "status": "ready",
-   "poster": "squat-jump-final/policy_tracking.jpg",
-   "video": null
+   "poster": "front-kick/source.jpg",
+   "video": "front-kick/source.mp4"
   },
   {
    "id": "squat-v1",
@@ -54,6 +54,15 @@
    "tagline": "64 simulated rollouts per condition: the squat policies barely notice friction and mass changes, and tracking is the sturdiest under shoves and noisy starts. Latent falls most, which is why the task reward only pays while the robot stays upright.",
    "status": "ready",
    "poster": "squat-v1/policy_tracking.jpg",
+   "video": null
+  },
+  {
+   "id": "robustness-final",
+   "kicker": "Stress test",
+   "title": "Squat jump, pushed and without its reference",
+   "tagline": "64 rollouts per condition. Under random shoves the task policy still finishes the squat jump 94% of the time (tracking 65%); with the reference frozen, tracking stands still (0%) while both task policies complete it (100%, 100%).",
+   "status": "ready",
+   "poster": "squat-jump-final/policy_tracking.jpg",
    "video": null
   }
  ]

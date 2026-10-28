@@ -1,6 +1,7 @@
 # Security review: web backend, Space image, frontend, CI
 
-Scope: `server/` (FastAPI), the Hugging Face Space image built by `scripts/build_space.py`, the Cloudflare Pages
+Scope: `server/` (FastAPI, including the `live` runner's deploy-side controls added 2026-10-28), the Hugging Face
+Space image built by `scripts/build_space.py`, the Cloudflare Pages
 frontend (`web/`), the GPU runners (`colab`, and the FarmShare backend in `scripts/remote_run.py`) and the
 GitHub Actions workflows. Reviewed on 2026-10-27 at commit `f8e21fe`. Each finding lists what was wrong, what
 changed, and the test that covers it (`server/tests/test_hardening.py` unless noted).
@@ -59,11 +60,9 @@ sees `internal error in the demo runner (ref 1a2b3c4d)`. Unhandled request error
 
 **M3. Frontend dependencies with known vulnerabilities.** `npm audit`: react-router-dom 6.28.0 (high: open
 redirect / XSS, GHSA-2w69-qvjg-hvjx, GHSA-2j2x-hqr9-3h42) and vite 5.4.10 → esbuild (moderate: dev server readable
-by any site, GHSA-67mh-4wv8-2f99). *Fix:* react-router-dom 6.30.6, vite 6.4.5, @vitejs/plugin-react 4.7.0 (pinned
-exactly). Remaining: 2 moderate react-router advisories (GHSA-wrjc-x8rr-h8h6: open redirect via backslash in
-`<Link>`/`useNavigate` with attacker-controlled targets; GHSA-337j-9hxr-rhxg: SSR hydration). Not reachable here:
-all link targets are built from constants and server-issued ids, and there is no SSR. The fix is react-router 7
-(breaking); left as a follow-up.
+by any site, GHSA-67mh-4wv8-2f99). *Fix:* vite 6.4.5, @vitejs/plugin-react 4.7.0, and (2026-10-28) react-router 7.18.4
+in library mode, replacing react-router-dom, which also clears the two moderate 6.x advisories (GHSA-wrjc-x8rr-h8h6,
+GHSA-337j-9hxr-rhxg). All pinned exactly. `npm audit`: 0 vulnerabilities.
 
 **M4. No security headers or CSP.** *Fix (API):* every `/api/*` response carries `X-Content-Type-Options: nosniff`,
 `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, HSTS, a `Permissions-Policy`, and
@@ -124,21 +123,46 @@ over stdin (never argv or logs), into a `umask 077` directory. Test: `tests/test
   single client pseudonym for everyone, the hop count is wrong; per-IP limits then act as global limits (fail safe,
   not open).
 
+## Live runner: deploy-side controls (2026-10-28)
+
+The `live` runner (`server/live.py`) turns an anonymous upload into a task environment on the Space's own CPU.
+That makes untrusted video the input to ffmpeg, MediaPipe and the pipeline's native code, so the build runs
+under the controls below.
+
+| Control | How |
+|---|---|
+| A separate process | `python -m server.live_worker <video> <out>` runs in its own session (`start_new_session`), with stdin closed. A cancel or timeout kills the whole process group. It reports progress as JSON lines on stdout. A traceback goes to the server log under a reference id; the client sees only `internal error building the environment (ref …)`, or a short message for a clip it can't use. |
+| No secrets in its environment | The worker gets a fresh environment, not a copy of the server's. It holds `PATH`, `PYTHONPATH`, thread caps (2), `MUJOCO_GL=disable`, and `A2H_ASSETS_DIR` when set. `HOME`, `TMPDIR`, the caches (`XDG_CACHE_HOME`, `MPLCONFIGDIR`) and `config.py`'s output folders all point at the job's own scratch folder, `A2H_DATA_DIR/uploads/<job>/live/scratch`. A Space secret, if one were ever added, would not reach it. |
+| Resource limits | One build at a time (`A2H_LIVE_CONCURRENCY`, default 1); later jobs queue, under the existing per-client and global job caps. Only the first `A2H_LIVE_MAX_SECONDS` (20 s) of a clip is used; ffmpeg re-encodes it to at most 640 px, 30 fps, no audio or metadata. Wall clock: `A2H_LIVE_TIMEOUT_S` (240 s). `RLIMIT_CPU` is twice that. Address space: `RLIMIT_AS` = `A2H_LIVE_MEMORY_MB` (8192 MB, Linux only). No core dumps (`RLIMIT_CORE` 0). The worker runs at `nice 10`, so the API stays responsive. |
+| Filesystem | The image is unchanged: uid 1000, root-owned `/app`, read-only root filesystem in CI. The pipeline's modules and assets (MediaPipe model, G1 meshes) are read-only in `/app`; the worker writes only to its scratch folder under `/tmp`. Measured in the image: a 5.6 s front-kick clip built its environment in 28 s (linux/amd64, emulated) with `RLIMIT_AS` at 8192 MB, and the container peaked at ~1 GB including the server. |
+| Hosted mode | Unchanged: `A2H_HOSTED` still locks out `colab`. `live` turns on by itself only when its imports succeed (`A2H_LIVE=auto`); `A2H_LIVE=0` turns it off with a Space variable and no rebuild. CI asserts that `colab` is absent and `live` present in the image's `/api/health`. |
+| Dependencies | A second hash-locked file, `server/requirements-live.lock`, is installed with `--require-hashes --no-deps` as root, like the server lock. It is resolved for the Space's platform (linux x86_64, Python 3.12). Packages shared with the server lock are constrained to that lock's versions. torch comes from the PyTorch CPU index: the hashes pin the exact `+cpu` wheels, so the extra index can't substitute another file. mediapipe's `opencv-contrib-python` is replaced by `opencv-python-headless` (`server/requirements-live-excludes.txt`). The only system packages added are `libegl1` and `libgles2`, from Debian's signed archive: the GL dispatch libraries that MediaPipe's C library links against even on its CPU path, with no drivers. |
+
+Not covered, and accepted for a hackathon demo: the decoders in ffmpeg (the binary bundled with imageio-ffmpeg) and
+MediaPipe run on attacker-supplied bytes. A decoder exploit would get the worker's uid 1000 with no secrets, a
+read-only `/app`, the limits above and the Space's network. The Space has no secrets today; keep it that way.
+
 ## Dependency audit (2026-10-27)
 
 | What | Tool | Result |
 |---|---|---|
 | `server/requirements.lock` (what the Space runs) | `pip-audit 2.10.1 --require-hashes` | No known vulnerabilities |
+| `server/requirements-live.lock` (the live runner, 2026-10-28) | `pip-audit 2.10.1 --require-hashes` | No known vulnerabilities. pip-audit skips `torch==2.15.0+cpu` (a local version, not on PyPI), so CI audits `torch==2.15.0` separately: none. |
 | `web/package-lock.json` before | `npm audit` | 5 (4 high, 1 moderate) |
-| `web/package-lock.json` after | `npm audit` | 2 moderate (react-router 6.x, not reachable; see M3) |
+| `web/package-lock.json` after | `npm audit` | 0 (react-router 7.18.4; see M3) |
 | `requirements.txt` (pipeline, unpinned, not deployed) | `pip-audit` | runs in CI, non-blocking |
 
-CI runs both audits on every PR (`audit` job, non-blocking) and Dependabot opens weekly PRs for Actions, npm and
-`server/requirements.txt`. After changing `server/requirements.txt`, re-lock with `make lock`.
+CI runs these audits on every PR (`audit` job, non-blocking) and Dependabot opens weekly PRs for Actions, npm and
+`server/requirements*.txt`. After changing `server/requirements.txt` or `server/requirements-live.txt`, re-lock
+with `make lock` (both locks).
 
 ## Secrets
 
-- The server needs no secrets. The Space image contains code, a dependency lock and run data only:
+- `scripts/deploy.sh` uses the `hf` and `wrangler` logins already stored on the machine; it never reads, prints or
+  passes a token. Before uploading, it refuses a bundle that holds a `.env`, a key, a log or a token-shaped string.
+  `.github/workflows/keepalive.yml` has `permissions: {}` and needs no secrets.
+- The server needs no secrets. The Space image contains code, dependency locks, run data and the live runner's
+  model files only:
   `build_space.py` copies `server/` without dotfiles, journals or tests, writes a `.dockerignore`, and never
   copies `.env`, raw clips or logs.
 - The frontend bundle gets exactly one build-time value, `API_BASE`. CI fails the `web` job if the built bundle
@@ -156,4 +180,7 @@ CI runs both audits on every PR (`audit` job, non-blocking) and Dependabot opens
   if it really needs more.
 - New file type served from runs: add its extension to `runs.SERVABLE`; never serve `.log` or `.py`.
 - New third-party origin in the frontend (fonts, analytics): add it to the CSP in `web/vite.config.ts`.
-- New runner: make it unavailable when `settings.hosted`, like colab.
+- New runner: make it unavailable when `settings.hosted`, like colab, unless it runs on this host's CPU under the
+  live runner's controls (subprocess, fresh environment, limits).
+- New module imported by `server/live_worker.py`: add it to `LIVE_MODULES` in `scripts/build_space.py`, and its
+  dependencies to `server/requirements-live.txt` (then `make lock`).

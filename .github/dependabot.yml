@@ -1,5 +1,5 @@
 # Weekly PRs for pinned versions: Actions SHAs, the frontend lockfile and server/requirements.txt.
-# Not covered (manual, see docs/SECURITY.md): server/requirements.lock (`make lock`) and the base image
+# Not covered (manual, see docs/SECURITY.md): server/requirements.lock and requirements-live.lock (`make lock`) and the base image
 # digest in scripts/build_space.py.
 version: 2
 updates:

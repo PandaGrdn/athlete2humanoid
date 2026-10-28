@@ -5,8 +5,9 @@
 #   optional variables:          A2H_CORS (frontend origin(s), default https://athlete2humanoid.pages.dev),
 #                                A2H_DEMO_RUN, CF_PAGES_PROJECT (default athlete2humanoid)
 #
-# The Space deploy uploads code only (server/, Dockerfile, README): the run data in its data/ folder comes
-# from the first manual `make space` + `hf upload` (docs/DEPLOY.md), since outputs/ isn't in git.
+# The Space deploy uploads code only (server/, the live pipeline's modules, Dockerfile, README): the run data in
+# its data/ folder and the live runner's assets/ come from the first `scripts/deploy.sh` (docs/DEPLOY.md), since
+# outputs/ and assets/ aren't in git.
 name: deploy
 
 on:
@@ -57,7 +58,7 @@ jobs:
           CORS: ${{ vars.A2H_CORS || 'https://athlete2humanoid.pages.dev' }}
           DEMO_RUN: ${{ vars.A2H_DEMO_RUN }}
         run: python3 scripts/build_space.py --code-only --out build/space --cors "$CORS" ${DEMO_RUN:+--demo-run "$DEMO_RUN"}
-      - name: Upload to the Space (keeps its data/)
+      - name: Upload to the Space (keeps its data/ and assets/)
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_SPACE: ${{ vars.HF_SPACE }}

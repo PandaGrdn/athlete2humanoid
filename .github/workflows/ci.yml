@@ -106,6 +106,13 @@ jobs:
         with: { node-version: "22" }
       - name: pip-audit (server lock, what the Space runs)
         run: uvx pip-audit@2.10.1 -r server/requirements.lock --require-hashes --disable-pip
+      - name: pip-audit (live-runner lock, also in the Space image)
+        run: uvx pip-audit@2.10.1 -r server/requirements-live.lock --require-hashes --disable-pip
+      # pip-audit skips torch's local "+cpu" version (not on PyPI); audit the same release by its public version
+      - name: pip-audit (torch, by its public version)
+        run: |
+          grep -oE '^torch==[0-9.]+' server/requirements-live.lock > /tmp/torch.txt
+          uvx pip-audit@2.10.1 -r /tmp/torch.txt --no-deps --disable-pip
       - name: pip-audit (pipeline requirements, resolved)
         run: uvx pip-audit@2.10.1 -r requirements.txt || true
       - name: npm audit
@@ -115,12 +122,22 @@ jobs:
   space-image:
     name: Space image (build + hardened smoke test)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with: { persist-credentials: false }
-      - name: Bundle with the test fixture run
-        run: python3 scripts/build_space.py tests/data/remote_latent --out build/space --cors https://athlete2humanoid.pages.dev
+      # the live runner's assets: the G1 model and the MediaPipe pose model (gitignored, ~50 MB)
+      - name: Cache the live-runner assets
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            assets/mujoco_menagerie
+            assets/pose_landmarker_heavy.task
+          key: live-assets-v1
+      - run: bash scripts/fetch_assets.sh
+        env: { A2H_VERIFY_ASSETS: "1" }  # the pose model must be the pinned one
+      - name: Bundle with the test fixture run (and the live pipeline)
+        run: python3 scripts/build_space.py tests/data/remote_latent --out build/space --cors https://athlete2humanoid.pages.dev --live on
       - run: docker build -t a2h-space:ci build/space
       - name: Run read-only, no capabilities, and probe it
         run: |
@@ -129,12 +146,23 @@ jobs:
             -p 127.0.0.1:7860:7860 a2h-space:ci
           for i in $(seq 1 30); do curl -sf localhost:7860/healthz && break; sleep 1; done
           curl -sf localhost:7860/readyz
-          # hosted: colab stays off even with both flags set; the job list is hidden; no root
-          curl -sf localhost:7860/api/health | python3 -c 'import sys,json; assert json.load(sys.stdin)["runners"] == ["demo"]'
+          # hosted: colab stays off even with both flags set; the live runner is on (the image has its
+          # pipeline); the job list is hidden; no root
+          curl -sf localhost:7860/api/health | python3 -c 'import sys,json; r = json.load(sys.stdin)["runners"]; assert "colab" not in r and "live" in r, r'
           test "$(curl -s -o /dev/null -w '%{http_code}' localhost:7860/api/jobs)" = 404
           test "$(docker exec a2h id -u)" = 1000
           curl -sI localhost:7860/api/runs | grep -qi "content-security-policy: default-src 'none'"
           code=$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:7860/api/jobs -F run_id=latent)
           test "$code" = 201
+      - name: Live pipeline loads read-only (MediaPipe model + its GL libs, the G1 model, mink)
+        run: |
+          docker exec a2h python -c "
+          import config, pose, track, retarget, render, skill.task, skill.keypose
+          from mediapipe.tasks.python import BaseOptions, vision
+          o = vision.PoseLandmarkerOptions(base_options=BaseOptions(model_asset_path=str(config.POSE_MODEL)),
+                                           running_mode=vision.RunningMode.VIDEO)
+          vision.PoseLandmarker.create_from_options(o).close()
+          print('G1 retargeter ready, nq =', retarget.G1Retargeter().model.nq)
+          "
       - if: failure()
         run: docker logs a2h || true

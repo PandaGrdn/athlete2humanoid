@@ -14,6 +14,8 @@ Examples:
   robustness         pushes, noisy starts, friction/mass, speed (outputs/remote_robust/robust.json)
   squat-jump-final   the task-reward squat_jump policy; a placeholder until outputs/remote_latent_final
                      exists, then filled by re-running this script
+  front-kick         the keypose task (docs/KEYPOSE_SPEC.md) on a front kick, an action no earlier run
+                     trained on (outputs/remote_latent_kp_kick)
 
 Videos are re-encoded to H.264 yuv420p (plays everywhere, unlike the 4:4:4 clip renders), at most
 720 px tall, 30 fps, a keyframe every 0.5 s so synchronized scrubbing is snappy. Encodes are cached by
@@ -726,6 +728,108 @@ def ex_final(runs, media):
             "notes": []}
 
 
+# Keypose specs (skill/keypose.py) name their stages; their rewards differ from the old stage spec's.
+KEYPOSE_REWARD = {
+    "task": "Rewarded for reaching the clip's key moments in order (keypose spec), plus weak V-JEPA 2 and tracking "
+            "style terms. Sees the retarget. Ends only on a fall.",
+    "taskphase": "The same keypose reward, but the policy never sees the retarget: only its own body, a clock and "
+                 "the current stage.",
+}
+
+
+def keypose_stages(spec):
+    """{kind, label, start_s, end_s} per keypose stage, zero-length ones (the 'ready' start) dropped."""
+    out = []
+    for st in spec["stages"]:
+        if st["end_s"] - st["start_s"] <= 0:
+            continue
+        name = st.get("label") or st.get("name") or st["kind"]
+        out.append({"kind": st["kind"], "label": name[:1].upper() + name[1:], "start_s": r(st["start_s"]),
+                    "end_s": r(st["end_s"])})
+    return out
+
+
+def ex_keypose_kick(runs, media):
+    """A front kick from its video alone: the keypose spec, three policies from a squat-jump warm start."""
+    run = runs / "remote_latent_kp_kick"
+    base = {"id": "front-kick", "kicker": "Any action", "title": "Front kick, learned from its video alone"}
+    spec_f = run / "task_spec.json"
+    if not ((run / "eval.json").exists() and spec_f.exists()):
+        return {**base, "status": "pending",
+                "tagline": "A front kick, an action no earlier run trained on. Results appear here when its run is in outputs/.",
+                "story": {"shown": "The front-kick phone video.", "learned": "Not trained yet.",
+                          "how": "Key moments completed in order and falls, judged on the robot's own body."},
+                "duration_s": None, "stages": None, "primary": None, "grid": [], "extra": [], "metrics": [],
+                "sources": [], "notes": []}
+    ev, spec = read_json(run / "eval.json"), read_json(spec_f)
+    status = read_json(run / "status.json") if (run / "status.json").exists() else {}
+    cmd = " ".join(status.get("cmd", []))
+    target = (re.search(r"--target (\S+)", cmd) or [None, spec.get("name", "front_kick")])[1]
+    iters = (re.search(r"--iters (\d+)", cmd) or [None, None])[1]
+    clip = run / "clips" / target
+    keys = [k for k in ["tracking", "task", "taskphase"] if isinstance(ev.get(k), dict)]
+    succ = [k for k in keys if ev[k].get("task_success")]
+    moments = [st for st in spec["stages"] if st["kind"] == "pose"]
+    first = next((st["start_s"] for st in moments), None)
+    apex = next((st for st in moments), None)
+    poster_at = (apex["frame"] / spec["fps"]) if apex and apex.get("frame") is not None else first
+    rows = policy_rows(ev, keys)
+    for row in rows:
+        row["reward"] = KEYPOSE_REWARD.get(row["key"], row["reward"])
+    names = [POLICY_INFO.get(k, (k,))[0] for k in keys]
+    falls = [ev[k]["falls"] for k in keys if ev[k].get("falls") is not None]
+    warm = ev.get("prev_task") or ev.get("prev_tracking")
+    lead = "task" if "task" in succ else (succ[0] if succ else keys[0])
+    e = ev[lead]
+    metrics = [{"label": "Key moments", "display": str(len(moments)),
+                "note": "found in the retarget by keypose.py, none written by hand"}]
+    if "task_stages" in e:
+        metrics.append({"label": "Stages completed", "display": e["task_stages"],
+                        "note": f"{POLICY_INFO.get(lead, (lead,))[0]} policy, in order",
+                        "tone": "good" if e.get("task_success") else None})
+    if falls:
+        metrics.append({"label": "Falls", "display": str(sum(falls)), "note": f"summed over the {_and(names)} rollouts",
+                        "tone": "good" if sum(falls) == 0 else "bad"})
+    if warm and "task_stages" in warm:
+        metrics.append({"label": "Before training", "display": warm["task_stages"],
+                        "note": "the squat-jump warm start on this spec"})
+    if succ:
+        verdict = (f"{'all three' if len(succ) == 3 else _and([POLICY_INFO.get(k, (k,))[0] for k in succ])} "
+                   f"completed it ({e.get('task_stages')})")
+    else:
+        verdict = f"the best policy completed {e.get('task_stages', '?')}"
+    return {**base, "status": "ready",
+            "tagline": (f"No kick-specific reward: the clip's {_n(len(moments), 'key moment')} became the task, and "
+                        + verdict + (f" with {_n(sum(falls), 'fall')}" if falls else "")
+                        + (f"; the warm start managed {warm['task_stages']}" if warm and "task_stages" in warm else "")
+                        + "."),
+            "story": {
+                "shown": (f"The {target.replace('_', '-')} phone video, retargeted to G1 proportions. keypose.py picked its "
+                          f"{_n(len(moments), 'key moment')}: "
+                          + "; ".join(f"({i}) {m.get('name', 'pose')}" for i, m in enumerate(moments, 1)) + "."),
+                "learned": (f"{_and(names)} policies, each warm-started from the squat-jump weights"
+                            + (f" and trained {int(iters):,} iterations" if iters else "")
+                            + ". The reward is the same spec any clip compiles to; nothing in it is about kicking."),
+                "how": ("A stage checker reads only the robot's own body: the kicking foot reaching each key pose in "
+                        "order, feet on the floor where the clip has them, no fall"
+                        + _distance_note(ev, succ) + "."),
+            },
+            "duration_s": clip_duration(clip) if (clip / "meta.json").exists() else spec.get("duration_s"),
+            "stages": keypose_stages(spec),
+            "primary": (media.video(base["id"], "source", clip / "side_by_side.mp4", label="Phone video → G1 reference",
+                                    panels=_sbs_panels(clip / "side_by_side.mp4"), poster_at=poster_at)
+                        if (clip / "side_by_side.mp4").exists() else None),
+            "grid": policy_videos(media, base["id"], run, keys, poster_at=poster_at),
+            "grid_caption": "Solid robot: the trained policy, physically simulated. Green ghost: the reference it was shown.",
+            "extra": [],
+            "metrics": metrics,
+            "policies": rows,
+            "columns": columns_for(rows),
+            "sources": [_rel(runs, run / "eval.json"), _rel(runs, spec_f)]
+                       + ([_rel(runs, run / "status.json")] if status else []),
+            "notes": []}
+
+
 # --- small formatting helpers ---------------------------------------------------------------------
 
 def _n(k, word):
@@ -750,7 +854,7 @@ def _sbs_panels(path):
 
 # --- build / check -------------------------------------------------------------------------------
 
-BUILDERS = ["squat-v1", "retarget", "goal-relevance", "robustness", "squat-jump-final", "robustness-final"]
+BUILDERS = ["squat-v1", "retarget", "goal-relevance", "robustness", "squat-jump-final", "robustness-final", "front-kick"]
 
 
 def build(runs, out, force=False):
@@ -764,15 +868,16 @@ def build(runs, out, force=False):
               "goal-relevance": lambda: ex_goal_relevance(runs, media),
               "robustness": lambda: ex_robustness(runs, built["squat-v1"]["grid"]),
               "squat-jump-final": lambda: ex_final(runs, media),
-              "robustness-final": lambda: ex_robustness_final(runs, built.get("squat-jump-final"))}[name]()
+              "robustness-final": lambda: ex_robustness_final(runs, built.get("squat-jump-final")),
+              "front-kick": lambda: ex_keypose_kick(runs, media)}[name]()
         built[name] = ex
         ex.setdefault("status", "ready")
         (out / ex["id"]).mkdir(parents=True, exist_ok=True)
         (out / ex["id"] / "example.json").write_text(json.dumps(ex, indent=1, ensure_ascii=False) + "\n")
         exs.append(ex)
         print(f"  ok ({time.time() - t:.1f} s)")
-    # The finished task policy leads once it exists; a pending slot goes last.
-    first = {"squat-jump-final": 0, "robustness-final": 1}
+    # The finished task policy leads once it exists, then the keypose kick; a pending slot goes last.
+    first = {"squat-jump-final": 0, "front-kick": 1, "robustness-final": 2}
     exs.sort(key=lambda e: (e["status"] != "ready", first.get(e["id"], 2)))
     index = {"version": 1, "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
              "examples": [{k: e.get(k) for k in ("id", "kicker", "title", "tagline", "status")}

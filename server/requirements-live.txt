@@ -1,0 +1,14 @@
+# The live runner's pipeline (server/live_worker.py: pose.py, track.py, retarget.py, skill/), CPU only.
+# Locked for the Space (linux x86_64, Python 3.12) into requirements-live.lock by `make lock`:
+# torch comes from the PyTorch CPU index (--torch-backend cpu), not the CUDA wheel on PyPI, and
+# mediapipe's opencv-contrib-python is swapped for the headless build (requirements-live-excludes.txt).
+numpy
+scipy
+torch
+mediapipe
+opencv-python-headless
+mujoco>=3.3
+mink
+daqp
+mediapy
+imageio-ffmpeg

@@ -1,0 +1,29 @@
+# Keeps the free Hugging Face Space awake: it sleeps after 48 h without traffic. Every 12 h it GETs the
+# Space's /readyz (a sleeping Space wakes on the request). Skipped when the API_BASE variable isn't set;
+# needs no secrets. GitHub turns scheduled workflows off after 60 days without repo activity.
+name: keepalive
+
+on:
+  schedule:
+    - cron: "17 */12 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    if: vars.API_BASE != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: GET /readyz (retries while a sleeping Space wakes up)
+        env:
+          API_BASE: ${{ vars.API_BASE }}
+        run: |
+          for i in $(seq 1 16); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$API_BASE/readyz" || true)
+            echo "attempt $i: $code"
+            [ "$code" = 200 ] && exit 0
+            sleep 30
+          done
+          echo "::warning::$API_BASE/readyz not 200 after 8 min"

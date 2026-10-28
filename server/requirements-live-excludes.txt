@@ -1,0 +1,4 @@
+# Left out of requirements-live.lock. mediapipe asks for these; we install opencv-python-headless
+# instead (the same cv2 module, without the GUI/GL libraries a slim image lacks).
+opencv-contrib-python
+opencv-python

@@ -14,12 +14,21 @@ These need your accounts or logins. Everything else is automated or already done
    - Do the first SSH login with Duo yourself.
    - Steps are in `docs/FARMSHARE.md`: add the SSH config block (with your SUNetID), run `ssh farmshare` once (password + Duo; the connection stays open for 12 h), and run the one-line GPU partition check in its step 4. The first job sets up the environments on FarmShare by itself.
    - After that, any job runs there with `--backend farmshare` (4 L40S GPUs per node).
-4. **Deploy the web app.** Commands are in `docs/DEPLOY.md`.
-   - Install Node 18+ (`brew install node`).
-   - Log in to Hugging Face with a write token: `hf auth login`.
-   - Log in to Cloudflare: `npx wrangler login`.
-   - Run the deploy commands.
-   - For CI/CD deploys on push, add the repo secrets `HF_TOKEN`, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, and the variables `HF_SPACE` and `API_BASE`, on GitHub (table in `docs/DEPLOY.md`). CI itself already runs and is green.
+4. **Deploy the web app.** Run `scripts/deploy.sh`; details are in `docs/DEPLOY.md`. Only you can do these steps:
+   - **Accounts.** A Hugging Face account and a free Cloudflare account.
+   - **Tools.** Node 18+ (`brew install node`) and uv (`curl -LsSf https://astral.sh/uv/install.sh | sh`).
+   - **Logins.** Run `hf auth login` with a **write** token from huggingface.co/settings/tokens. If `hf` isn't
+     installed, use `uvx --from huggingface_hub hf auth login`. Then run `npx wrangler login`.
+   - **Deploy.** Run `scripts/deploy.sh`. It builds and uploads the Space (the latest keypose runs plus the live
+     runner), waits for it to come up, deploys the frontend and prints both URLs. Re-run it whenever new runs
+     land in `outputs/`.
+   - **Auto-deploy and keep-awake (optional).** On GitHub, open Settings → Secrets and variables → Actions:
+     - Add the secrets `HF_TOKEN`, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+     - Add the variables `HF_SPACE` (`<you>/athlete2humanoid-api`) and `API_BASE` (the Space URL the script
+       printed).
+     - With those set, pushes to `main` redeploy the code, and the keepalive workflow pings the Space every 12 h
+       so it doesn't sleep during judging. `API_BASE` alone is enough for the keep-awake.
+     - The table of values is in `docs/DEPLOY.md`. CI itself needs nothing.
 5. **Open weights**, for the Best Open Weights prize.
    - `python scripts/weights.py push weights/<name> <you>/athlete2humanoid-g1`, after `hf auth login`.
    - This publishes the weights, so it's your call.
