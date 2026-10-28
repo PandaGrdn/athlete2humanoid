@@ -202,7 +202,24 @@ Run `outputs/remote_latent_sj_cmd_v2`: TaskCmd and Task, 1,500 iterations each, 
 - **The retrained Task policy regressed** to 5/9 stages: one good jump (q = 1.0), then no second rep. Keep `final_squat_jump_task`.
 - **Next runs** use `clips/squat_jump/cmd_reward.json`: landing −2 above 4 BW, and the curriculum counts q ≥ 0.5 and advances above 45% success.
   - Colab `sj_cmd_v3`: 2,500 iterations from this checkpoint.
-  - FarmShare `fs_cmd5000`: 5,000 iterations, the same config, Slurm job 1901076.
+  - FarmShare `fs_cmd5000`: 5,000 iterations, the same config, Slurm job 1901082.
+
+## Third TaskCmd result (2026-10-27, relaxed curriculum, 2,500 iterations)
+
+Run `outputs/remote_latent_sj_cmd_v3`: 2,500 iterations from the 1,500-iteration checkpoint, with `cmd_reward.json`. The policy is kept as `weights/sj_cmd_taskcmd_2500`. The eval is the same 12 commands × 3 envs, and still counts a hit at q ≥ 0.7.
+
+- **The curriculum reached its full command range** (level 1.0) within the first 250 iterations. Training success rose from 0.44 to 0.49.
+- **It now follows the jump command:** clearance slope 0.32, up from 0.11, and it hits the commanded height on 73% of new commands (from 42%), with no falls.
+
+| Commanded clearance | 0.12 m | 0.20 m | 0.30 m |
+|---|---|---|---|
+| Achieved (mean over depths) | 0.15 m | 0.18 m | 0.20 m |
+
+- **It tops out at about 0.21 m,** so it misses every 0.30 m command, the clip's own included. Clip quality is 0.44 and 0.59, but all 9 stages, no falls.
+- **Squat depth is still ignored:** about 0.30 m deep whatever is asked (slope 0.10).
+- **Next:**
+  - The 5,000-iteration FarmShare run tests whether more training lifts the cap.
+  - Otherwise, add a depth term: today depth only gates stage progress, it isn't scored.
 
 ## 3. GPU runs (not launched)
 
