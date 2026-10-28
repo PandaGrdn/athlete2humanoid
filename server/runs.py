@@ -17,6 +17,7 @@ POLICY_INFO = {
     "hybrid": ("Hybrid", "Joint targets + V-JEPA 2 latent reward"),
     "latent": ("Latent", "V-JEPA 2 latent reward; retarget used only as observation and resets"),
     "task": ("Task", "The video's key moments as the reward (keypose spec); retarget as input, weak style terms"),
+    "taskhybrid": ("Task + tracking", "The keypose task plus tracking at half strength on the whole clip"),
     "taskphase": ("Task (blind)", "The keypose task with only a clock and the stage as input, no retarget"),
 }
 METRIC_KEYS = ["aligned", "dtw", "chamfer", "dtw_rank_vs_bank", "reward_net_aligned", "real_aligned_in_reward_space",
@@ -126,7 +127,7 @@ def _policies(folder, rid, ev):
             "curve": train_curve(pdir) if pdir.is_dir() else [],
             "iterations": _total_iters(folder, pdir) if pdir.is_dir() else None,
         })
-    order = {"task": 0, "tracking": 1, "hybrid": 2, "latent": 3, "taskphase": 4}
+    order = {"task": 0, "taskhybrid": 1, "tracking": 2, "hybrid": 3, "latent": 4, "taskphase": 5}
     out.sort(key=lambda p: (p["previous"], order.get(p["base"], 9)))
     return out
 

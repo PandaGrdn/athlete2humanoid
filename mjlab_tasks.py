@@ -510,7 +510,7 @@ LANDING_BW = 3.0  # landing penalty above this many body weights (the clip's own
 LANDING_CMD = -5.0  # TaskCmd: per s per body weight above LANDING_BW (a 3-step 5 BW landing: -0.6; a jump pays 4)
 
 
-def task_env_cfg(tracking_scale, play=False, phase_only=False, commanded=False):
+def task_env_cfg(tracking_scale, play=False, phase_only=False, commanded=False, weighted_tracking=True):
     """Task-first hybrid: the semantic stage reward leads; the V-JEPA latent and (when
     tracking_scale > 0) the tracking terms are weak style terms, weighted in time by goal importance
     when A2H_IMPORTANCE is set. "Without falling" is part of the task, so both get stability_terms();
@@ -530,7 +530,8 @@ def task_env_cfg(tracking_scale, play=False, phase_only=False, commanded=False):
     else:
         del cfg.rewards["latent"]
     if os.environ.get(IMPORTANCE_ENV):
-        for k in ("latent", *TRACKING_TERMS):
+        # TaskHybrid (weighted_tracking=False) keeps tracking on the whole clip: it is the imitation half
+        for k in ("latent", *(TRACKING_TERMS if weighted_tracking else ())):
             if k in cfg.rewards:
                 t = cfg.rewards[k]
                 cfg.rewards[k] = RewardTermCfg(func=TimeWeighted, weight=t.weight,
@@ -561,11 +562,14 @@ for task, scale, phase in (("A2H-Hybrid-Flat-Unitree-G1", 0.2, False), ("A2H-Lat
 # Task-first: Task keeps the retarget as the policy's input and a 0.1x tracking style term;
 # TaskPhase sees only its own body, the clock and the task stage, and is never scored on the retarget.
 # TaskCmd is TaskPhase asked for other squat depths and jump heights every episode.
-for task, scale, phase, cmd in (("A2H-Task-Flat-Unitree-G1", 0.1, False, False),
-                                ("A2H-TaskPhase-Flat-Unitree-G1", 0.0, True, False),
-                                ("A2H-TaskCmd-Flat-Unitree-G1", 0.0, True, True)):
-    register_mjlab_task(task_id=task, env_cfg=task_env_cfg(scale, phase_only=phase, commanded=cmd),
-                        play_env_cfg=task_env_cfg(scale, play=True, phase_only=phase, commanded=cmd),
+# TaskHybrid is Task with tracking at half mjlab's weights on the whole clip (not only near key moments):
+# the task's structure plus imitation, between Task (0.1x, goal-weighted) and pure tracking.
+for task, scale, phase, cmd, weighted in (("A2H-Task-Flat-Unitree-G1", 0.1, False, False, True),
+                                          ("A2H-TaskPhase-Flat-Unitree-G1", 0.0, True, False, True),
+                                          ("A2H-TaskCmd-Flat-Unitree-G1", 0.0, True, True, True),
+                                          ("A2H-TaskHybrid-Flat-Unitree-G1", 0.5, False, False, False)):
+    register_mjlab_task(task_id=task, env_cfg=task_env_cfg(scale, phase_only=phase, commanded=cmd, weighted_tracking=weighted),
+                        play_env_cfg=task_env_cfg(scale, play=True, phase_only=phase, commanded=cmd, weighted_tracking=weighted),
                         rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
 
 
