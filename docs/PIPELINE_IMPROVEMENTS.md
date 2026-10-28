@@ -200,7 +200,7 @@ Run `outputs/remote_latent_sj_cmd_v2`: TaskCmd and Task, 1,500 iterations each, 
 - **Still not following commands.** The slopes went up a little, but the policy squats about 29 cm deep whatever it's asked, and under-jumps on the clip's own 0.30 m target (quality 0.48 and 0.60).
 - **Why: the curriculum never left level 0.** Success needs every jump at q ≥ 0.7, and it held at 0.36–0.39 against the 0.6 needed to advance, so the commands never widened. The TaskCmd landing penalty (−5 per body weight above 3 BW) likely makes high jumps not worth it.
 - **The retrained Task policy regressed** to 5/9 stages: one good jump (q = 1.0), then no second rep. Keep `final_squat_jump_task`.
-- **Next runs** use `clips/cmd_reward.json`: landing −2 above 4 BW, and the curriculum counts q ≥ 0.5 and advances above 45% success.
+- **Next runs** use `clips/squat_jump/cmd_reward.json`: landing −2 above 4 BW, and the curriculum counts q ≥ 0.5 and advances above 45% success.
   - Colab `sj_cmd_v3`: 2,500 iterations from this checkpoint.
   - FarmShare `fs_cmd5000`: 5,000 iterations, the same config, Slurm job 1901076.
 

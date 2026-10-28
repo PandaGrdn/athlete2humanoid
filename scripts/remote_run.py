@@ -62,7 +62,7 @@ def job_spec(a):
     cmd = f"python3 experiments/latent_policy.py {{clips}} --target {a.target} --out {out} --iters {a.iters} {a.args}"
     if a.reuse:
         inp = f"{REMOTE}/inputs"
-        cmd = cmd.replace("{clips}", f"{inp}/clips/*") + f" --extra-motions {inp}/policy_*/policy_qpos.npy"
+        cmd = cmd.replace("{clips}", f"{inp}/clips/*/")  # directories only + f" --extra-motions {inp}/policy_*/policy_qpos.npy"
         return "--with-main", cmd, {"results.tar.gz": f"{out}/results.tar.gz"}
     if a.smoke:
         return "--with-main", cmd + " --smoke", {"results.tar.gz": f"{out}/results.tar.gz"}
