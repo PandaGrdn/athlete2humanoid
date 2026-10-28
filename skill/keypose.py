@@ -419,6 +419,12 @@ class KeyposeMachine:
         ids = torch.as_tensor(env_ids, device=self.dev)
         t = torch.as_tensor(t, dtype=torch.float32, device=self.dev).expand(len(ids))
         stage = self.stage_at(t)
+        # "ready" lasts no time: an episode that starts at the clip's first frame is past it, like one
+        # that starts a frame later. Otherwise only exact frame-0 starts see it (~1 in 264 RSI starts in
+        # training), and a policy without the retarget as input never learns it (kp_jacks taskphase:
+        # every play rollout from frame 0 fell within 5 steps; from frame 1 on, none did).
+        ready = (stage == 0) & (self.end[0] <= self.start[0]) if self.S > 1 else torch.zeros_like(stage, dtype=torch.bool)
+        stage = torch.where(ready, 1, stage)
         self.stage[ids] = stage
         span = (self.end[stage] - self.start[stage]).clamp(min=1e-3)
         self._enter(ids, pos, ((self.end[stage] - t) / span).clamp(0, 1))
@@ -426,6 +432,7 @@ class KeyposeMachine:
         self.p[ids], self.phi[ids] = p, stage + p
         for buf in (self.hold, self.apex, self.completed, self.steps, self.banked, self.skipped):
             buf[ids] = 0
+        self.completed[ids] = ready.to(self.completed.dtype)
         self.q_min[ids] = 1.0
         self.done[ids] = False
         self.z_prev[ids] = pos[:, PELVIS, 2]

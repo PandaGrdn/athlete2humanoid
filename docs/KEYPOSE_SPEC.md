@@ -90,10 +90,10 @@ The squat-jump run is the regression check against the old spec's results.
 | retarget | 12/12 | 1.0, 1.0 | – | – |
 | final run's task (old spec) | 6/12 | 0.68 | 0 | – |
 | **keypose task** | **12/12** | **1.0, 1.0** | **0** | 0.18 / 0.42 m |
-| keypose taskphase | 0/12 | – | 9 | 0.17 / 0.72 m |
+| keypose taskphase | 0/12 → 12/12* | 0.83, 0.83* | 9 → 2* | 0.62 / 2.38 m* |
 
 - **The task policy learns the keypose spec:** 6/12 → 12/12 in 1,500 iterations, including the arm swing the old spec never asked for. Kept as `weights/kp_squat_jump_task`.
-- **Taskphase is not converged.** Its training episodes grew from 280 to 468 of 500 steps and were still rising at the end, but it falls in the evaluation rollout. It needs more iterations.
+- **Taskphase** (* re-scored after the fix below, same checkpoint) now completes the spec, but falls twice on the way. Its later stages are partly credited to the reset after a fall, so it is not a clean pass. Its training episodes were still getting longer at 1,500 iterations, so it needs more.
 
 **Front kick**, an action no earlier run trained on. Its spec has 4 key moments, two kicks with the right foot:
 
@@ -116,10 +116,16 @@ The squat-jump run is the regression check against the old spec's results.
 | retarget | 13/13 | 1.0 | – | – |
 | final run's squat-jump policies | 1/13 | – | 0 | – |
 | **keypose task** | **13/13** | **1.0** | **0** | 0.85 / 1.02 m |
-| keypose taskphase | 1/13 | – | 53 | 0.02 / 0.03 m |
+| **keypose taskphase** | 1/13 → **13/13*** | 0.90* | 53 → **0*** | 0.93 / 1.08 m* |
 
 - **The task policy learns jumping jacks from the clip alone.** Kept as `weights/kp_jumping_jacks_task`.
-- **The taskphase result is likely an evaluation fault, not the policy.** It falls within a few steps of every reset (53 falls, torso barely moving), but its training episodes reached 457 of 500 steps. The squat-jump taskphase shows the same gap. The front-kick taskphase does not.
+- **Taskphase** (* re-scored after the fix below, same checkpoint) learns jumping jacks too. Kept as `weights/kp_jumping_jacks_taskphase`; its `policy.mp4` is still the pre-fix rollout.
+
+**The frame-0 fault (fixed).** Every keypose spec opens with a "ready" stage that lasts no time (0.0–0.0 s). The stage machine resets at the reference time after one step:
+- An episode that starts at frame 1 or later is past the first key moment's start (0.033 s), so it begins at stage 1.
+- One that starts at exactly frame 0 begins in "ready", which asks the robot to be still (the jumping-jacks clip's first frame moves at 1.1 m/s).
+
+Training starts at frame 0 about once in 264 episodes, so a policy that doesn't see the retarget (taskphase) never learned "ready". In play, which always starts at frame 0, it fell within 5 steps of every reset; from any other start frame, it never fell. `KeyposeMachine.reset` now starts past a zero-length first stage and counts it as completed, so frame 0 behaves like frame 1. Re-scored on CPU (mjlab's play rollout, scored with `skill.task.evaluate` at 50 Hz); the Colab numbers in the other rows come from the GPU simulator and differ slightly.
 
 ## For the live demo
 

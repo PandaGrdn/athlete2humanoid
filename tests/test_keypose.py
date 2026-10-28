@@ -148,6 +148,7 @@ def test_machine_interface_and_fall_refund():
     m.reset(torch.arange(3), torch.tensor([0.0, 1.0, 2.0]), pos[[0, 30, 60]])
     assert m.obs().shape == (3, T.MAX_STAGES + 2)
     assert m.stage[2] >= m.stage[1] >= m.stage[0]  # mid-motion starts begin at the reference's stage
+    assert spec["stages"][0]["name"] == "ready" and m.stage[0] == 1 and m.completed[0] == 1  # ready takes no time
     m = T.machine(spec, 2, dt=1 / FPS)
     m.reset(torch.arange(2), 0.0, pos[:1].expand(2, -1, -1))
     total = torch.zeros(2)
