@@ -187,6 +187,23 @@ The run used the last Colab units:
   - Train longer: 1,500 iterations, as planned in section 3.
   - Or make the command matter more early: a stronger quality-band weight, or lower the curriculum threshold with `{"command": {"up": 0.4}}` in the reward config.
 
+## Second TaskCmd result (2026-10-27, 1,500 iterations)
+
+Run `outputs/remote_latent_sj_cmd_v2`: TaskCmd and Task, 1,500 iterations each, warm-started from the final run, with the landing fix and goal importance. TaskCmd is kept as `weights/sj_cmd_taskcmd_1500`. Command eval: same 12 commands, 3 envs each (`outputs/remote_latent_sj_cmd_v2/command_eval.json`).
+
+| Policy | Success, novel commands | Hits the commanded height | Depth slope | Clearance slope | Depth error | Clearance error |
+|---|---|---|---|---|---|---|
+| TaskCmd, 1,500 iterations | 97% | 42% | 0.14 | 0.11 | 8.8 cm | 5.8 cm |
+| TaskCmd, 500 iterations | 100% | 36% | 0.11 | 0.04 | 8.6 cm | 6.3 cm |
+| TaskPhase (ignores commands) | 100% | 55% | 0.07 | 0.14 | 8.5 cm | 6.5 cm |
+
+- **Still not following commands.** The slopes went up a little, but the policy squats about 29 cm deep whatever it's asked, and under-jumps on the clip's own 0.30 m target (quality 0.48 and 0.60).
+- **Why: the curriculum never left level 0.** Success needs every jump at q ≥ 0.7, and it held at 0.36–0.39 against the 0.6 needed to advance, so the commands never widened. The TaskCmd landing penalty (−5 per body weight above 3 BW) likely makes high jumps not worth it.
+- **The retrained Task policy regressed** to 5/9 stages: one good jump (q = 1.0), then no second rep. Keep `final_squat_jump_task`.
+- **Next runs** use `clips/cmd_reward.json`: landing −2 above 4 BW, and the curriculum counts q ≥ 0.5 and advances above 45% success.
+  - Colab `sj_cmd_v3`: 2,500 iterations from this checkpoint.
+  - FarmShare `fs_cmd5000`: 5,000 iterations, the same config, Slurm job 1901076.
+
 ## 3. GPU runs (not launched)
 
 Before any run, **merge this branch and push main**: the Colab VM pulls GitHub main.
