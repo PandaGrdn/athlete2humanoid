@@ -494,6 +494,7 @@ button.env-mark:focus-visible { outline: 2px solid var(--accent); outline-offset
 .live-task.past .live-task-n { color: var(--text-3); }
 .live-task-name { font-weight: 550; font-size: 14px; overflow-wrap: anywhere; }
 .live-task-time { font-size: 12px; white-space: nowrap; }
+.live-task-desc { margin: 0; padding-left: 32px; font-size: 13px; }
 .live-task-tags { display: flex; flex-wrap: wrap; gap: 4px 6px; padding-left: 32px; }
 .env-tag.req { color: var(--accent); border-color: rgba(47, 191, 143, 0.4); border-style: solid; }
 .env-tag.k-flight { color: #8fb8ee; border-color: rgba(57, 135, 229, 0.55); border-style: solid; }
@@ -519,6 +520,6 @@ button.env-mark:focus-visible { outline: 2px solid var(--accent); outline-offset
   .live-robot { height: 280px; }
 }
 @media (max-width: 640px) {
-  .live-task-tags, .live-parts { padding-left: 0; }
+  .live-task-tags, .live-parts, .live-task-desc { padding-left: 0; }
   .live-part { grid-template-columns: minmax(70px, 110px) 1fr 32px; }
 }

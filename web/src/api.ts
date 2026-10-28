@@ -96,12 +96,19 @@ export type TaskStage = {
   feet_down: [boolean, boolean] | null; // [left, right]
   body_parts: { part: string; weight: number }[];
   clearance_m: number | null;
+  // Muse's one sentence on the moment, and keypose.py's measured name it replaced (named specs only)
+  description?: string | null;
+  measured?: string | null;
+  hold_s?: number | null; // how long a key pose must be held
+  pelvis_rise_m?: number | null; // how far a jump must lift the pelvis above standing
 };
 
 export type TaskSpec = {
   format: "keypose" | "phases";
   name: string | null;
   summary: string | null;
+  action?: string | null; // Muse's one-sentence description of the whole action
+  named_by?: string | null; // the model that named the moments
   duration_s: number;
   stages: TaskStage[];
   counts: { moments: number; required: number; optional: number; flights: number };

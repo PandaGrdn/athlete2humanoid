@@ -178,3 +178,23 @@ def test_live_data_is_bounded(tmp_path):
     assert live.live_data(tmp_path) is None
     shutil.rmtree(tmp_path)
     assert live.live_data(Path(os.devnull)) is None
+
+
+def test_muse_names_the_moments_when_on(live_client, monkeypatch, tmp_path):
+    """A2H_MUSE_NAMES=1: the API process (not the worker) has Muse name the moments; a failure keeps the
+    measured names and doesn't fail the job."""
+    from muse import client as mc
+    real = mc.MuseClient
+    monkeypatch.setattr(mc, "MuseClient", lambda: real(fixture=mc.FIXTURES / "moment_names_front_kick.json"))
+    (tmp_path / "spec.json").write_text((REPO / "tests" / "data" / "task_spec_front_kick.json").read_text())
+    c = live_client(live_muse_names=True)
+    j = wait_done(c, upload(c).json()["id"])
+    assert j["status"] == "succeeded" and any("Muse named the key moments" in line[2] for line in j["logs"]), j["logs"]
+    spec = c.get(f"/api/jobs/{j['id']}/task_spec").json()
+    poses = [s for s in spec["stages"] if s["kind"] == "pose"]
+    assert poses[0]["measured"] == "right foot up, right foot forward" and poses[0]["description"]
+    assert spec["named_by"] == "muse-spark-1.3" and spec["action"]
+    (tmp_path / "spec.json").write_text(json.dumps(keypose_spec()))  # a different number of moments: Muse's answer won't fit
+    j = wait_done(c, upload(c).json()["id"])
+    assert j["status"] == "succeeded" and any("couldn't name the moments" in line[2] for line in j["logs"])
+    assert c.get(f"/api/jobs/{j['id']}/task_spec").json().get("named_by") is None

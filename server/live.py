@@ -153,10 +153,25 @@ class LiveRunner:
             log.error("live worker failed", extra={"fields": {"job": job.id, "ref": ref, "code": proc.returncode,
                                                                "stderr": "\n".join(err_tail)[-4000:]}})
             return store.finish(job, "failed", error=f"internal error building the environment (ref {ref})")
+        if s.live_muse_names:
+            self._name(job, out)
         store.log(job, "policy", "training a policy on this environment needs a GPU (PPO in mjlab, 1-2 h); "
                                  "this host builds environments only")
         store.set_stage(job, "policy", status="skipped")
         store.finish(job, "succeeded")
+
+    def _name(self, job, out):
+        """Muse names the key moments (muse/moment_namer.py). Here, not in the worker: the worker never
+        holds the key. Best effort: on any failure the measured names stay."""
+        try:
+            from muse.client import MuseClient
+            from muse.moment_namer import name_moments
+            spec = name_moments(out / "task_spec.json", MuseClient(), video=out / "processed.mp4")
+            self.store.log(job, "environment", f"Muse named the key moments: {spec['summary']}"[:600])
+        except Exception as e:  # noqa: BLE001
+            ref = os.urandom(4).hex()
+            log.warning("muse naming failed", extra={"fields": {"job": job.id, "ref": ref, "error": repr(e)[:500]}})
+            self.store.log(job, "environment", f"Muse couldn't name the moments (ref {ref}); keeping the measured names")
 
     @staticmethod
     def _kill(proc):

@@ -498,6 +498,34 @@ python -m muse.reward_agent outputs/ --watch 300 --log outputs/agent_log.jsonl
 
 ---
 
+## 6. Live with the key (Oct 28)
+
+The key works (`MUSE_API_KEY` in `.env`). `GET /v1/models` lists `muse-spark-1.1/1.2/1.3` (and `-contributor`), `muse-wonder-1.0`, `muse-image-1.0`, `muse-voice-transcribe-1.0` and `sam-3.1`. `/v1/files` and `/v1/batches` exist; **`/v1/fine_tuning/jobs` is 404**, so the API offers no fine-tuning of the hosted models.
+
+| File | What it does | Cost per clip |
+|---|---|---|
+| `muse/moment_namer.py` | Names the key moments keypose.py found. Muse gets the clip, a captioned frame per moment and the measured change ("right foot up, right foot forward"), and returns a name and a sentence per moment plus the action. The measured name stays as `measured`. The reward never reads names. | ~10 s, ~4k tokens, under 1 cent |
+| `muse/rollout_critic.py` | Watches the person and every policy's rollout, the policies shuffled as Robot 1..n (blind). Per robot: does the action (yes/partly/no), likeness 0-10, fell, key moments reached, differences; then a ranking. `critic.json` adds how it agrees with `eval.json` (falls, stage checker, V-JEPA rank). Default 10 fps: at 5 fps a 0.15 s kick falls between frames. | ~17 s, ~2 cents |
+
+**What the critic found:**
+
+| Clip | Muse ranks | V-JEPA ranks | Falls agree | Same order as V-JEPA (policy pairs) |
+|---|---|---|---|---|
+| Front kick | tracking 8/10 > taskhybrid 3 > taskphase 2 > task 1 | tracking > taskhybrid > task > taskphase | 4/4 | 5/6 |
+| Squat jump | tracking 7/10 > task 4 > taskphase 3 > taskhybrid 1 | tracking > taskhybrid > taskphase > task | 4/4 | 3/6 |
+
+It said the task-family policies never really jump or kick, while the stage checker passed them all. Measurements confirmed it: tuck-hops with the pelvis never above standing, and kicks flicked in 0.15 s. That led to the spec fix in `docs/KEYPOSE_SPEC.md`. **The critic is the check on the reward, not part of it.**
+
+**Live uploads:** with `A2H_MUSE_NAMES=1` and the key in the API's environment, `server/live.py` names each upload's moments after the sandboxed worker exits. The worker never holds the key; on any failure the measured names stay. The Docker image doesn't ship `muse/` or `openai` yet, so this works only when the API runs outside Docker for now.
+
+**Fine-tuning.** Since the hosted models can't be tuned, the route is Muse Glimmer (open weights, Apache-2.0):
+- **Task:** the critic's judgement (does the action, likeness, moments reached) from a contact sheet, since Glimmer takes images, not video.
+- **Labels:** Muse Spark's critic answers, cross-checked against measurement: falls, flights, holds. The robustness eval writes ~64 rollouts per policy per condition (`rollouts.npz`). Rendering a sample of them gives thousands of labelled examples at ~2 cents each.
+- **Training:** QLoRA with Axolotl or TRL on one A100 80 GB (Meta verified ~27 GB peak on an H100; the A100 is unverified).
+- **Measure:** agreement with Muse Spark and with the measurements on held-out clips, zero-shot vs tuned.
+
+The payoff is a critic cheap enough to run on every checkpoint during training.
+
 ## Sources
 
 Meta Model API docs (fetched 2026-10-26; `ai.developer.meta.com/docs/*` redirects to `dev.meta.ai/docs/*`):

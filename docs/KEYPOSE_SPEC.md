@@ -173,6 +173,30 @@ Training starts at frame 0 about once in 264 episodes, so a policy that doesn't 
 
 `experiments/latent_policy.py` now trains `task` by default. The web app's Colab job runs `--policies task` with `--init-weights outputs/remote_latent_final` (`A2H_COLAB_POLICIES`, `A2H_COLAB_INIT`).
 
+## The checker was too lenient: tuck-hops and flicked kicks (2026-10-28)
+
+Muse's blind rollout critic (`muse/rollout_critic.py`) said that on squat jump and front kick only the tracking policy really does the action, although every task-family policy had passed the stage checker (12/12, 6/6). Measured on the rollouts, it was right:
+
+| | Person | Tracking | Task, taskphase, taskhybrid |
+|---|---|---|---|
+| Squat jump: time in the air | 0.53 s per jump | 0.42 s | 0.04–0.14 s |
+| Squat jump: highest pelvis | 1.14 m (standing 0.78) | 1.05 m | 0.78 m: never above standing |
+| Front kick: kicks above 0.35 m | 2, each ~0.5 s wide | 2, ~0.5 s | task 2 at 0.13–0.16 s; taskphase and taskhybrid 1 |
+
+The policies found two shortcuts the spec allowed:
+- **Tuck-hops.** A flight asked for foot clearance and 0.05–0.12 s in the air. Tucking the feet up with the pelvis at standing height met it.
+- **Flicks.** A key pose could be passed through in one control step, so a 0.15 s flick from a crouch counted as the kick.
+
+**The fix (`skill/keypose.py`):**
+- A flight needs the pelvis to rise `FLIGHT_RISE_FRAC` = 0.5 of the reference's rise (at most 0.25 m) and the feet off the floor for `FLIGHT_AIR_FRAC` = 0.6 of its airtime (at most 0.35 s). Its progress pays half for foot clearance, half for pelvis rise.
+- A key pose is held for `HOLD_FRAC` = 0.5 of the time the reference itself stays within tolerance of it (`ref_dwell_s`), at most 0.4 s.
+
+**Rescored under the new rules:**
+- squat jump: the reference 12/12, tracking 12/12, every task-family policy 1/12;
+- front kick: the reference 6/6, tracking 6/6, every task-family policy 1/6.
+
+Those policies had learned the shortcut, so the robustness numbers in `docs/GENERALIZATION.md` flatter them. Task and taskhybrid are being retrained on the fixed spec, warm-started from each clip's tracking policy (`outputs/remote_latent_fix_sj`, `outputs/remote_latent_fix_kick`).
+
 ## For the live demo
 
 A new video becomes an environment within minutes: SAM 3.1, pose and retarget, then this spec and its self-check. The web app shows the key moments as soon as the spec exists; the trained policy follows after 1–2 hours of GPU training.

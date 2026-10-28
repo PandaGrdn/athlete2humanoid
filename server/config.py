@@ -110,6 +110,9 @@ class Settings:
     live_timeout_s: float = field(default_factory=lambda: _num("A2H_LIVE_TIMEOUT_S", 240))
     live_concurrency: int = field(default_factory=lambda: _num("A2H_LIVE_CONCURRENCY", 1, int))
     live_memory_mb: int = field(default_factory=lambda: _num("A2H_LIVE_MEMORY_MB", 8192, int))
+    # Muse names each live upload's key moments (muse/moment_namer.py, ~10 s and ~1 cent a clip). Off by
+    # default: it needs MUSE_API_KEY in this process's environment, and spends it per visitor upload.
+    live_muse_names: bool = field(default_factory=lambda: _env("A2H_MUSE_NAMES", "0") == "1")
     live_ok: bool = field(default=False, repr=False)  # set at startup by server.live.available()
     colab_policies: list = field(default_factory=lambda: _list("A2H_COLAB_POLICIES", "task"))
     colab_init: str = field(default_factory=lambda: _env("A2H_COLAB_INIT", str(REPO / "outputs" / "remote_latent_final")))

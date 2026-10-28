@@ -55,4 +55,22 @@ Runs: `outputs/remote_latent_hyb_sj`, `outputs/remote_latent_hyb_kick` (training
 
 ## Results
 
-(To be filled from `robust_summary.md` when the runs finish.)
+**Squat jump** (`outputs/remote_robust_gen_sj/robust_summary.md`, 64 rollouts per condition): task success, with the fall rate in brackets.
+
+| Policy | Clean | Pushes | Start noise | Tempo 0.5–2x | No reference | Mirrored | Plain squat | V-JEPA |
+|---|---|---|---|---|---|---|---|---|
+| tracking | 100% | 80% (18%) | 70% (27%) | 70% (0%) | 0% | 0% (100%) | 0% (100%) | **0.65** |
+| task | 100% | **97% (3%)** | **87% (13%)** | **100%** | 100% | 0% (100%) | 0% (100%) | 0.33 |
+| taskphase | 100% | 91% (9%) | 78% (22%) | 76% (24%) | 100% | **100% (0%)** | 0% (98%) | 0.26 |
+| taskhybrid | 100% | 96% (4%) | 80% (20%) | **100%** | 100% | 0% (100%) | 0% (100%) | 0.45 |
+
+- **Taskhybrid:** as robust as task, and closer to the video by V-JEPA (0.45 vs 0.33).
+- **Tracking fails off its clip:**
+  - 2x tempo: 14% success;
+  - frozen reference: 0%;
+  - 1.5 m/s shoves: falls 52% of the time.
+- **Nothing transfers to a new clip.** The blind taskphase passes the mirrored squat jump only because a squat jump is nearly symmetric and it never looks at the reference.
+
+**Caveat, found after these runs (`docs/KEYPOSE_SPEC.md`, "The checker was too lenient"):** the task-family policies were tuck-hopping. Feet off the floor for 0.04–0.14 s, the pelvis never above standing height; Muse's critic saw no jumps. Their robustness here is partly the robustness of an easier motion. They are being retrained on the fixed spec from the tracking weights. This table will be redone with those.
+
+**Front kick:** the generalisation eval is running (`outputs/remote_robust_gen_kick`).

@@ -357,6 +357,10 @@ def _spec_stage(st, features, keypose, fps):
     at = (round(frame / fps, 3) if frame is not None and fps else end) if k == "pose" else start
     return {
         "name": name, "kind": k, "start_s": start, "end_s": end, "at_s": at,
+        "description": _text(st.get("description"), 240) if keypose else None,
+        "measured": _text(st.get("measured"), 120) if keypose else None,
+        "hold_s": _sec(st.get("hold_s")) if k == "pose" else None,
+        "pelvis_rise_m": _sec(st.get("pelvis_rise")) if k == "flight" else None,
         "optional": st.get("optional") is True,
         "level": round(float(level), 2) if level is not None and abs(level) < 1e6 else None,
         "frame": frame,
@@ -423,6 +427,8 @@ def task_spec_view(spec, ev=None):
         "format": "keypose" if keypose else "phases",
         "name": _text(spec.get("name"), 80),
         "summary": _text(spec.get("summary"), 600),
+        "action": _text(spec.get("action_description"), 300),
+        "named_by": _text((spec.get("named_by") or {}).get("model") if isinstance(spec.get("named_by"), dict) else None, 60),
         "duration_s": duration,
         "stages": stages,
         "counts": {"moments": len(poses), "required": sum(not st["optional"] for st in poses),

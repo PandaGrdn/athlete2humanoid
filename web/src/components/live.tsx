@@ -199,7 +199,9 @@ export function TaskBreakdown({ spec, t, onSeek }: { spec: TaskSpec; t: number; 
   return (
     <div className="card card-pad live-tasks">
       <div className="eyebrow">Task breakdown · {spec.stages.length} stages</div>
+      {spec.action && <p style={{ fontSize: 14 }}>{spec.action}</p>}
       {spec.summary && <p className="muted" style={{ fontSize: 13.5 }}>{spec.summary}</p>}
+      {spec.named_by && <p className="faint" style={{ fontSize: 12 }}>Moments named by {spec.named_by} from the video; the reward never reads the names.</p>}
       <ol className="live-task-list">
         {spec.stages.map((s, i) => {
           const n = s.kind === "pose" ? ++moment : null;
@@ -212,11 +214,15 @@ export function TaskBreakdown({ spec, t, onSeek }: { spec: TaskSpec; t: number; 
                 <span className="live-task-name">{s.name}</span>
                 <span className="mono faint live-task-time">{s.kind === "flight" ? `${secs(s.start_s)}–${secs(s.end_s)}` : secs(s.at_s)}</span>
               </button>
+              {s.description && <p className="live-task-desc muted">{s.description}</p>}
               <div className="live-task-tags">
                 <span className={`env-tag k-${s.kind}`}>{s.kind}</span>
                 {s.kind !== "settle" && <span className={`env-tag ${s.optional ? "" : "req"}`}>{s.optional ? "optional" : "required"}</span>}
                 <span className="env-tag">feet: {feet(s)}</span>
                 {s.clearance_m != null && <span className="env-tag">clearance {Math.round(s.clearance_m * 100)} cm</span>}
+                {s.pelvis_rise_m ? <span className="env-tag">pelvis +{Math.round(s.pelvis_rise_m * 100)} cm</span> : null}
+                {s.hold_s ? <span className="env-tag">hold {s.hold_s.toFixed(2)} s</span> : null}
+                {s.measured && <span className="env-tag" title="what keypose.py measured changing most">measured: {s.measured}</span>}
               </div>
               {s.body_parts.length > 0 && (
                 <div className="live-parts">
