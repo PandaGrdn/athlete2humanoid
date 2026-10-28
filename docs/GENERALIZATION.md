@@ -91,3 +91,42 @@ Runs: `outputs/remote_latent_hyb_sj`, `outputs/remote_latent_hyb_kick` (training
 **So far, from both clips:**
 1. **Taskhybrid** is the best single policy: robust like task, closer to the video. But all of this was measured before the spec fix.
 2. **None generalises to a new clip.** Training on one clip learns that clip; generalisation has to be trained, with mirrored and tempo-varied copies and held-out clips.
+
+## Training for generalisation: automatic variants (2026-10-28)
+
+A policy trained on one clip learns that clip. To learn the action, it trains on many versions of it, made without knowing what the action is (`skill/variations.py`):
+
+| Operation | What it does | Why it's action-agnostic |
+|---|---|---|
+| Mirror | Left and right swapped through the sagittal plane; exact (1e-5 m by forward kinematics) | A joint-name and axis rule of the G1, nothing about the motion |
+| Tempo | Faster or slower, uniformly or a different speed between each pair of key moments | Key moments come from the compiler; flights keep their real duration because gravity sets them |
+| Amplitude | Every joint, the root's height, travel and turn scaled about the first frame; then the root shifted so the feet touch the floor where they did | A shallower squat, a lower kick, a smaller jack: the same rule for all |
+
+Every variant gets its own keypose spec from the same compiler. It is kept only if:
+- its own reference completes that spec;
+- at most 2% of its joint samples are newly past a limit.
+
+Kept per clip, of 36 training and 7 held-out variants:
+
+| Clip | Training kept | Held-out kept |
+|---|---|---|
+| squat jump, squat, arms, punches, front kick | 36 | 7 |
+| jumping jacks | 36 | 6 |
+| lunge | 15 | 3 |
+
+Lunge loses the most: it walks, so scaling the root's travel makes the planted foot slide, and those variants fail their own specs.
+
+**Training (`experiments/variant_policy.py`):**
+- The training variants are laid end to end in one motion file. Each environment stays inside its variant (`VariantMotionCommand`) and is scored against that variant's spec; one batched `KeyposeMachine` holds them all.
+- mjlab's adaptive sampling over the whole file sends more episodes to the variants the policy fails, so it doubles as a curriculum.
+- Two policies, both warm-started from the clip's tracking policy:
+  - `tracking_var`: a tracker over all variants;
+  - `taskhybrid_var`: keypose task plus tracking.
+- No V-JEPA term: the video's latent is tied to the original timing.
+
+**The test:** `HELD_OUT` has tempos (0.5x, 2x, 0.6x, 1.6x), amplitudes (0.7, 1.25, 0.8, 1.2) and a warp (0.5) outside the training grid (tempo 0.75–1.33, amplitude 0.85–1.1, warp up to 0.25). The robustness eval runs every held-out variant as a transfer clip for:
+- single-clip tracking;
+- the spec-fixed task and taskhybrid;
+- the two variant-trained policies.
+
+Runs: `outputs/remote_variants_var_{sj,kick}`, then `outputs/remote_robust_gen2_{sj,kick}`.
