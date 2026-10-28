@@ -14,7 +14,10 @@ These need your accounts or logins. Everything else is automated or already done
    - Do the first SSH login with Duo yourself.
    - Steps are in `docs/FARMSHARE.md`: add the SSH config block (with your SUNetID), run `ssh farmshare` once (password + Duo; the connection stays open for 12 h), and run the one-line GPU partition check in its step 4. The first job sets up the environments on FarmShare by itself.
    - After that, any job runs there with `--backend farmshare` (4 L40S GPUs per node).
-4. **Deploy the web app.** Run `scripts/deploy.sh`; details are in `docs/DEPLOY.md`. Only you can do these steps:
+4. **Deploy the web app.** Details are in `docs/DEPLOY.md`.
+   - The website is live at https://athlete2humanoid.pages.dev (`scripts/deploy.sh web`). It works offline: the examples load, and live uploads wait for the API.
+   - **API, the plan: the Mac mini.** Install Docker Desktop and `brew install cloudflared`, run `npx wrangler login`, then `scripts/deploy.sh tunnel`. That one command runs the API and redeploys the website pointed at it.
+   - **API, the alternative: a Hugging Face Space.** Docker Spaces now need HF PRO ($9/month). With PRO, follow the steps below.
    - **Accounts.** A Hugging Face account and a free Cloudflare account.
    - **Tools.** Node 18+ (`brew install node`) and uv (`curl -LsSf https://astral.sh/uv/install.sh | sh`).
    - **Logins.** Run `hf auth login` with a **write** token from huggingface.co/settings/tokens. If `hf` isn't

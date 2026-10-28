@@ -107,11 +107,18 @@ failure modes and health endpoints: `docs/SYSTEM_DESIGN.md`.
 
 ## Hosting choices
 
-**Backend: Hugging Face Spaces (Docker, free CPU basic).** It fits the open-weights story: the API sits next to
-the Meta models it talks about. It gives 2 vCPU and 16 GB of RAM for free, builds from a plain Dockerfile, and
-stores videos and checkpoints with Git LFS (`hf upload` handles that). Render's free tier would also work, but it
-spins down after 15 minutes idle (a slow first load on camera) and its free instances have no persistent disk.
-A free Space sleeps only after 48 hours without traffic.
+**Backend: your own machine through a Cloudflare Tunnel (planned: a Mac mini), or a Hugging Face Space.**
+- **Hugging Face Space.** Since 2026, Docker Spaces need HF PRO ($9/month). The free tier now serves only static
+  Spaces: `hf repos create` answers 402. The image and script are ready for when that's paid.
+- **Your own machine.** `scripts/deploy.sh tunnel` runs the same hardened image in Docker (read-only, no
+  capabilities, localhost only, restarted after reboots) and publishes it with `cloudflared`. A Mac mini runs
+  the live pipeline fast and costs nothing monthly. The API is up only while the machine is on, awake and
+  online, and training still needs a GPU (Colab).
+- **Free 512 MB tiers** (Render, Koyeb) are too small: the live pipeline peaks around 1-1.5 GB.
+
+**Until the API is hosted:** `scripts/deploy.sh web` deploys the website alone. The examples work and the header
+says "Offline demo"; uploads and `/live` say the API isn't reachable. Live at https://athlete2humanoid.pages.dev
+since 2026-10-28.
 
 **Frontend: Cloudflare Pages.** The free tier has unlimited bandwidth and requests and allows commercial use
 (Vercel's Hobby plan doesn't). It serves the SPA fallback from `web/public/_redirects`, deploys with one
@@ -120,7 +127,33 @@ cost and connects to the project in two clicks.
 
 ## Deploy
 
-Log in once to each service, then run one script. You need Node 18+ (`brew install node`) and
+**On a Mac mini (or any always-on machine with Docker):**
+
+```bash
+brew install cloudflared
+```
+
+```bash
+npx wrangler login
+```
+
+```bash
+scripts/deploy.sh tunnel
+```
+
+- **Address.** Without a domain this gives a free quick tunnel, `https://<random>.trycloudflare.com`. It changes
+  whenever cloudflared restarts, so after a reboot re-run the script; it redeploys the website with the new
+  address.
+- **A stable address.** Add a domain to your Cloudflare account (Cloudflare Registrar sells them at cost, about
+  $10/year), then:
+  - run `cloudflared tunnel login` once, picking that domain;
+  - deploy with `TUNNEL_HOSTNAME=api.<your-domain> scripts/deploy.sh tunnel`;
+  - keep the tunnel up across reboots with `sudo cloudflared service install`, pointed at `build/tunnel.yml`.
+- **Image architecture.** The image's packages are locked for linux/amd64. On Apple silicon, Docker Desktop runs
+  it under Rosetta (turn on "Use Rosetta for x86_64/amd64 emulation" in its settings). A live build then takes
+  about 30 s instead of 10.
+
+**On a Hugging Face Space (needs HF PRO):** log in once to each service, then run one script. You need Node 18+ (`brew install node`) and
 [uv](https://docs.astral.sh/uv/).
 
 ```bash
