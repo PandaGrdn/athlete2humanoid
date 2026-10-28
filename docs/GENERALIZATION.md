@@ -73,4 +73,21 @@ Runs: `outputs/remote_latent_hyb_sj`, `outputs/remote_latent_hyb_kick` (training
 
 **Caveat, found after these runs (`docs/KEYPOSE_SPEC.md`, "The checker was too lenient"):** the task-family policies were tuck-hopping. Feet off the floor for 0.04–0.14 s, the pelvis never above standing height; Muse's critic saw no jumps. Their robustness here is partly the robustness of an easier motion. They are being retrained on the fixed spec from the tracking weights. This table will be redone with those.
 
-**Front kick:** the generalisation eval is running (`outputs/remote_robust_gen_kick`).
+**Front kick** (`outputs/remote_robust_gen_kick/robust_summary.md`, the same lenient spec):
+
+| Policy | Clean | Pushes | Start noise | Tempo 0.5–2x | No reference | Mirrored | V-JEPA |
+|---|---|---|---|---|---|---|---|
+| tracking | 100% | 96% (4%) | 81% (19%) | 34% (66%) | 0% | 0% (100%) | **0.63** |
+| task | 100% | 99% (1%) | **85% (15%)** | 67% (0%) | 0% | 0% (100%) | 0.36 |
+| taskphase | 100% | 98% (2%) | 79% (21%) | **100%** | **100%** | 0% (100%) | 0.43 |
+| taskhybrid | 100% | 99% (1%) | 79% (21%) | **100%** | 0% | 0% (100%) | 0.57 |
+
+- **Taskhybrid is the best trade on the kick:**
+  - V-JEPA 0.57, close to tracking's 0.63;
+  - never falls under a tempo change, where tracking falls 98% of the time at 0.5x and 100% at 2x.
+- **The kick needs the reference:** only the blind taskphase succeeds with it frozen.
+- **No policy kicks with the other leg (mirrored):** all fall every time.
+
+**So far, from both clips:**
+1. **Taskhybrid** is the best single policy: robust like task, closer to the video. But all of this was measured before the spec fix.
+2. **None generalises to a new clip.** Training on one clip learns that clip; generalisation has to be trained, with mirrored and tempo-varied copies and held-out clips.
