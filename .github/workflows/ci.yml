@@ -55,7 +55,7 @@ jobs:
       # CPU torch + MuJoCo/mink: everything the suite needs except GPUs, SAM and the V-JEPA weights
       - name: Install light deps
         run: |
-          uv pip install --system numpy scipy mujoco mink daqp mediapy imageio-ffmpeg opencv-python-headless
+          uv pip install --system numpy scipy mujoco mink daqp mediapy imageio-ffmpeg opencv-python-headless pytest
           uv pip install --system torch --index-url https://download.pytorch.org/whl/cpu
       - name: Cache the G1 model
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
@@ -68,7 +68,7 @@ jobs:
           mkdir -p assets && cd assets
           git clone -q --depth 1 --filter=blob:none --sparse https://github.com/google-deepmind/mujoco_menagerie.git
           git -C mujoco_menagerie sparse-checkout set unitree_g1
-      - run: python -m unittest discover -s tests -t .
+      - run: python -m pytest -q tests  # runs the unittest-style tests too; test_keypose.py is pytest-style
 
   web:
     name: frontend typecheck + build
