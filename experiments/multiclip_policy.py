@@ -161,8 +161,8 @@ def newest(d):
     return c[-1] if c else None
 
 
-def evaluate(a, out, clips):
-    """robustness_eval per clip, all policies at once."""
+def evaluate(a, out, clips, clips_dir):
+    """robustness_eval per clip, all policies at once (--full-eval: every suite, as the single-clip runs)."""
     for c in clips:
         e = out / "evals" / c
         run = e / "run"
@@ -183,9 +183,14 @@ def evaluate(a, out, clips):
         shutil.copy(e / "task_spec.json", run / "task_spec.json")
         transfer = [f"{f.stem}={f}" for f in sorted((e / "transfer").glob("*.npz"))]
         cmd = [sys.executable, ROOT / "experiments" / "robustness_eval.py", "--runs", run, "--out", e / "robust",
-               "--target", c, "--reps", 4 if a.smoke else a.reps, "--no-vjepa", "--push", *([] if a.smoke else [1.0]),
-               "--init", "--dynamics", 0, "--speed", "--phase-push", "--starts", "--no-noref",
-               "--tempo", *([] if a.smoke else [0.5, 2.0]), "--transfer", *transfer]
+               "--target", c, "--reps", 4 if a.smoke else a.reps, "--transfer", *transfer]
+        if a.full_eval:  # every suite at robustness_eval's defaults, and the V-JEPA score against the clip's video
+            (run / "clips").mkdir(exist_ok=True)
+            if not (run / "clips" / c).exists():
+                (run / "clips" / c).symlink_to(clips_dir / c)
+        else:
+            cmd += ["--no-vjepa", "--push", *([] if a.smoke else [1.0]), "--init", "--dynamics", 0, "--speed",
+                    "--phase-push", "--starts", "--no-noref", "--tempo", *([] if a.smoke else [0.5, 2.0])]
         if a.smoke:
             cmd += ["--max-steps", 20]
         log(f"evaluating on {c} ({len(transfer)} held-out variants)")
@@ -267,7 +272,7 @@ def main(a):
     if a.build_only:
         return
     train_all(a, out, clips_dir)
-    evaluate(a, out, [*train, *held])
+    evaluate(a, out, [*train, *held], clips_dir)
     summarise(out, train, held, [*a.compare, *a.policies])
     pack(out)
 
@@ -279,7 +284,7 @@ if __name__ == "__main__":
     ap.add_argument("--train", nargs="+", default=list(TRAIN_CLIPS))
     ap.add_argument("--held-out", nargs="*", default=list(HELD_OUT_CLIPS))
     ap.add_argument("--policies", nargs="+", default=list(POLICIES), choices=[*POLICIES, "multi_vjc", "tracking_var"])
-    ap.add_argument("--compare", nargs="*", default=[], choices=["multi", "multi_future", "tracking_var"],
+    ap.add_argument("--compare", nargs="*", default=[], choices=["multi", "multi_future", "multi_vjc", "tracking_var"],
                     help="also evaluate these policies from --init-dir, untrained here (none that read the latent file)")
     ap.add_argument("--init", help="checkpoint they start from (a tracking policy)")
     ap.add_argument("--init-dir", help="a folder of policy_<name>/model_*.pt: each policy starts from its own")
@@ -289,5 +294,7 @@ if __name__ == "__main__":
     ap.add_argument("--reps", type=int, default=64, help="rollouts per policy per eval condition")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--build-only", action="store_true")
+    ap.add_argument("--full-eval", action="store_true", help="every robustness suite (pushes, start noise, dynamics, "
+                    "speed, tempo, no reference) and the V-JEPA score; default: a short set")
     ap.add_argument("--smoke", action="store_true", help="2 clips, 2 variants, a few iterations; no V-JEPA model")
     main(ap.parse_args())
