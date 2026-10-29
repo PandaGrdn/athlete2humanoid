@@ -328,7 +328,10 @@ def _compile(pos, fps, skill, max_clearance, name, scale):
         tol = np.maximum(TOL_MIN.numpy(), TOL_FRAC * np.abs(delta)) / np.sqrt(np.maximum(w, 1e-3))
         # root targets: in the previous key moment's heading frame, as root_features() measures them
         dxy, c, s_ = pos[k, PELVIS, :2] - pos[prev_k, PELVIS, :2], np.cos(yaw[prev_k]), np.sin(yaw[prev_k])
-        root = [c * dxy[0] + s_ * dxy[1], -s_ * dxy[0] + c * dxy[1], YAW_R * float(yaw[k] - yaw[prev_k])]
+        # the turn wrapped into [-pi, pi), as root_features() measures it: a spin past 180 deg (a discus
+        # throw) otherwise asks for a turn no rollout, the reference included, can ever show
+        turn = float(np.remainder(yaw[k] - yaw[prev_k] + np.pi, 2 * np.pi) - np.pi)
+        root = [c * dxy[0] + s_ * dxy[1], -s_ * dxy[0] + c * dxy[1], YAW_R * turn]
         goal = np.concatenate([F[k, :D_POSE], root])
         # Required down: a foot the reference has planted by the robot's own rule (T.DOWN), which is what the
         # robot is held to. One the reference merely has low (on its toes, a lunge's back foot, hovering up
