@@ -43,7 +43,7 @@ def video_to_motion(video_path, out_dir=None, use_sam=True, prompt=config.SAM_PR
 
     rt = retarget.G1Retargeter()
     targets, rotations = retarget.human_to_targets(human, rt, fps=fps)
-    qpos = rt.retarget_sequence(targets, rotations)
+    qpos = rt.retarget_sequence(targets, rotations, fps=fps)
     report = retarget.tracking_report(rt, qpos, targets)
     (out_dir / "retarget_report.json").write_text(json.dumps(report, indent=1))
     print("retarget error, cm (mean, max):", {k: tuple(round(x, 1) for x in v) for k, v in report.items()})

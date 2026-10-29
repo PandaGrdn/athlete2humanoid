@@ -52,6 +52,16 @@ PELVIS_LEAN = 0.5
 ANKLE_MARGIN = np.radians(5.0)
 POSTURE_COST = 0.1
 TORSO_COST = 1.0
+# Fastest a joint may turn between video frames (rad per second of video). Without it, one frame's
+# solve can sweep a joint across its whole range: an arm straight overhead pins the shoulder at one
+# limit and then flips it to the other (shot put: 5.8 rad in one frame), and the reference hand
+# teleports. Our clips peak at ~8 rad/s.
+MAX_JOINT_SPEED = 20.0
+# A stretch with neither foot planted is a flight only if the pelvis rises at least this share of
+# what gravity needs for that airtime (g T^2 / 8); otherwise it's a stance the pose estimate lifted
+# off the floor (a pivoting or sliding foot), and the body is lowered until its lowest foot is down.
+FLIGHT_RISE_FRAC = 0.25
+GRAVITY = 9.81
 
 
 def bent_knee_pose(model, knee=0.5):
@@ -214,10 +224,10 @@ class G1Retargeter:
                 out.setdefault(k, []).append(v.copy())
         return {k: np.array(v) for k, v in out.items()}
 
-    def solve(self, targets: dict, rotations: dict | None = None, iters=50, dt=0.02):
+    def solve(self, targets: dict, rotations: dict | None = None, iters=50, dt=0.02, max_step=None):
         """targets: {name: xyz}; rotations: {name or "torso": 3x3 world rotation}. Only frames
         named in targets are driven this call. Warm-starts from the previous frame's solution,
-        so call in time order."""
+        so call in time order. max_step: the most any joint may move this call (rad)."""
         rotations = rotations or {}
         hips = targets.get("hip_centre")
         targets = {("pelvis" if n == "hip_centre" else n): p for n, p in targets.items()}
@@ -233,6 +243,7 @@ class G1Retargeter:
             self.torso.set_target(mink.SE3.from_rotation_and_translation(
                 mink.SO3.from_matrix(rotations["torso"]), np.zeros(3)))
         tasks = [*(self.tasks[n] for n in targets), self.posture, self.torso]
+        limits = self.limits if max_step is None else [*self.limits, self._step_limit(max_step / (iters * dt))]
         pelvis = self.tasks["pelvis"]
         pelvis.set_orientation_cost(HIP_CENTRE_ORIENTATION_COST if hips is not None else ORIENTATION_COST["pelvis"])
         for _ in range(iters):
@@ -241,17 +252,23 @@ class G1Retargeter:
                 pelvis.set_target(mink.SE3.from_rotation_and_translation(
                     pelvis.transform_target_to_world.rotation(),
                     np.asarray(hips, float) + tilt.as_matrix() @ self.pelvis_above_hip_centres))
-            vel = mink.solve_ik(self.config, tasks, dt, "daqp", damping=1e-3, limits=self.limits)
+            vel = mink.solve_ik(self.config, tasks, dt, "daqp", damping=1e-3, limits=limits)
             self.config.integrate_inplace(vel, dt)
         return self.config.q.copy()
 
-    def retarget_sequence(self, targets_seq, rotations_seq=None):
+    def _step_limit(self, speed):
+        """Every hinge joint at most `speed` (rad per solver second)."""
+        names = [self.model.joint(j).name for j in range(self.model.njnt)
+                 if self.model.jnt_type[j] == mujoco.mjtJoint.mjJNT_HINGE]
+        return mink.VelocityLimit(self.model, {n: speed for n in names})
+
+    def retarget_sequence(self, targets_seq, rotations_seq=None, fps=30.0):
         """-> (frames, nq) qpos array. The first frame gets extra iterations to converge from
-        the start pose."""
+        the start pose; after it, no joint moves faster than MAX_JOINT_SPEED of video time."""
         rotations_seq = rotations_seq or [None] * len(targets_seq)
         out = []
         for i, (t, r) in enumerate(zip(targets_seq, rotations_seq)):
-            out.append(self.solve(t, r, iters=300 if i == 0 else 50))
+            out.append(self.solve(t, r, iters=300 if i == 0 else 50, max_step=None if i == 0 else MAX_JOINT_SPEED / fps))
         return np.stack(out)
 
 
@@ -474,6 +491,22 @@ def _pitch_rot(pitch):
     return np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
 
 
+def ground_phantom_flights(root, feet, stance, floor, fps=30.0, clear=0.01):
+    """Stretches with neither foot planted and both above the floor (by `clear` m) that gravity
+    can't explain: the pelvis rises less than FLIGHT_RISE_FRAC of the g T^2 / 8 a T-second flight
+    needs. There the body is lowered until its lowest foot is on the floor. -> (root, feet)."""
+    above = (feet[..., 2] - floor).min(1)  # the lowest foot's height off the floor
+    up = ~stance.any(1) & (above > clear)
+    root, feet = root.copy(), feet.copy()
+    for a, b in _runs(up):
+        T = (b - a + 1) / fps
+        ends = root[[max(a - 1, 0), min(b, len(root) - 1)], 2].mean()
+        if root[a:b, 2].max() - ends < FLIGHT_RISE_FRAC * GRAVITY * T ** 2 / 8:
+            root[a:b, 2] -= above[a:b]
+            feet[a:b, :, 2] -= above[a:b, None]
+    return root, feet
+
+
 def proportional_motion(P, rt: G1Retargeter, fps=30.0):
     """The human's motion on a G1-proportioned skeleton, in world coordinates on the G1's floor.
     -> {"joints": {joint: (T, 3)}, "stance": (T, 2), "pelvis_rot", "torso_rot": (T, 3, 3),
@@ -515,7 +548,9 @@ def proportional_motion(P, rt: G1Retargeter, fps=30.0):
     foot_rot = np.stack([[_yaw_rot(y) @ _pitch_rot(p) for y, p in zip(ys, ps)]
                          for ys, ps in zip(foot_yaw, pitch)])
 
-    root, feet, foot_fix = plant_feet(root, ankles, stance, rt.ankle_clearance(foot_rot))
+    floor = rt.ankle_clearance(foot_rot)
+    root, feet, foot_fix = plant_feet(root, ankles, stance, floor)
+    root, feet = ground_phantom_flights(root, feet, stance, floor, fps)
     start = np.r_[root[0, :2], 0.0]  # hips start over the origin
     root, feet = root - start, feet - start
     joints = {k: root + v for k, v in J.items()}

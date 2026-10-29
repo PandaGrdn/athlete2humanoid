@@ -120,6 +120,30 @@ class Contacts(unittest.TestCase):
         self.assertTrue((feet[..., 2] >= 0.035 - 1e-12).all())  # nothing below the floor
         self.assertGreater(feet[40, 1, 2], 0.1)  # the swing foot still lifts
 
+    def test_phantom_flight_grounded_real_flight_kept(self):
+        T, fps, floor = 90, 30.0, 0.035
+        stance = np.ones((T, 2), bool)
+        stance[30:60] = False  # 1 s with neither foot planted
+        feet = np.full((T, 2, 3), floor)
+        root = np.c_[np.zeros(T), np.zeros(T), np.full(T, 0.7)]
+        # Phantom: both feet 6 cm up for a second, the pelvis level (a lifted stance, not a flight).
+        hover = feet.copy()
+        hover[30:60, :, 2] += 0.06
+        r, f = retarget.ground_phantom_flights(root, hover, stance, floor, fps)
+        np.testing.assert_allclose(f[..., 2].min(1), floor, atol=1e-9)  # the lowest foot back down
+        np.testing.assert_allclose(r[30:60, 2], 0.7 - 0.06)  # the body lowered with it
+        # A real jump: the pelvis rises on a ballistic arc (apex g T^2 / 8 for T = 0.4 s), the feet with it.
+        stance[:] = True
+        stance[40:52] = False
+        s = (np.arange(40, 52) - 39.5) / fps
+        rise = 9.81 / 2 * s * (12 / fps - s)
+        jump, jroot = feet.copy(), root.copy()
+        jroot[40:52, 2] += rise
+        jump[40:52, :, 2] += rise[:, None]
+        r, f = retarget.ground_phantom_flights(jroot, jump, stance, floor, fps)
+        np.testing.assert_allclose(r, jroot)
+        np.testing.assert_allclose(f, jump)
+
     def test_level_feet_keeps_leg_angles(self):
         J = retarget.rescale_bones(synthetic_squat(T=10), G1_LIKE)
         J["left_ankle"] = J["left_ankle"] + [0, 0, 0.04]  # depth error: one foot looks higher
@@ -165,6 +189,8 @@ class OnTheG1(unittest.TestCase):
         for prop in (False, True):
             rt = retarget.G1Retargeter()
             qpos = rt.retarget_sequence(*retarget.human_to_targets(self.P, rt, proportional=prop))
+            # continuous: no joint faster than MAX_JOINT_SPEED (rad/s of video) after the first frame
+            self.assertLessEqual(np.abs(np.diff(qpos[:, 7:], axis=0)).max() * 30, retarget.MAX_JOINT_SPEED + 1e-6)
             robot = retarget.flexion_angles(rt.skeleton(qpos))
             err[prop] = {k: np.abs(robot[k] - human[k]).mean() for k in human}
             feet = rt.skeleton(qpos)["left_ankle"]
