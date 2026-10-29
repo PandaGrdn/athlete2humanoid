@@ -29,7 +29,8 @@ Runs inside mjlab's virtualenv; takes the same flags as mjlab's `train`:
   0.5 / 1 s ahead (A2H_VIDEO_LATENT, per motion step; latent/video_condition.py), so it is told in
   V-JEPA's latent space what the video shows. A2H-TrackingFuture-Flat-Unitree-G1 is its control: the
   retarget's joints and pelvis height 0.5 / 1 s ahead instead, the same look-ahead without V-JEPA
-  (experiments/multiclip_policy.py).
+  (experiments/multiclip_policy.py). A2H-TrackingVJCausal sees only the video up to where the robot is:
+  the latent of the ~1 s ending now and 0.5 s ago, from trailing windows (latent/video_condition.py).
 A2H_VARIANTS=variants.json (experiments/variant_policy.py) makes any of them train on variants of the
 clip (skill/variations.py: mirrored, re-timed, scaled) laid end to end in one motion file: each env
 stays inside its variant (VariantMotionCommand) and the task reward scores it against that variant's
@@ -454,17 +455,21 @@ VIDEO_LATENT_ENV = "A2H_VIDEO_LATENT"
 
 
 def _ahead(cmd, steps):
-    """Each env's motion step `steps` ahead, held at the end of its clip (or of its variant)."""
+    """Each env's motion step `steps` ahead (behind, if negative), held at the end (start) of its clip
+    or of its variant."""
     T = cmd.motion.time_step_total
     ts = cmd.time_steps.clamp(max=T - 1)
-    end = cmd.seg_end[ts] if getattr(cmd, "seg_end", None) is not None and len(cmd.seg_end) == T else T - 1
-    return torch.minimum(ts + steps, torch.as_tensor(end, device=ts.device))
+    seg = getattr(cmd, "seg_end", None) is not None and len(cmd.seg_end) == T
+    end = cmd.seg_end[ts] if seg else torch.full_like(ts, T - 1)
+    start = cmd.seg_start[cmd.seg_of[ts]] if seg else torch.zeros_like(ts)
+    return torch.maximum(torch.minimum(ts + steps, end), start)
 
 
-def video_latent_table(env, T):
+def video_latent_table(env, T, causal=False):
     """(T, K): the video's latent per motion step: env.a2h_video_latent (robustness_eval sets it per
     condition), else A2H_VIDEO_LATENT's file; re-timed to T steps when the motion was (the video plays
-    along). None when there is none (the observation is being sized)."""
+    along; causal: each step holds the latest latent at or before it, never blending in a later one).
+    None when there is none (the observation is being sized)."""
     lat = getattr(env, "a2h_video_latent", None)
     if lat is None:
         path = os.environ.get(VIDEO_LATENT_ENV)
@@ -474,18 +479,23 @@ def video_latent_table(env, T):
     if len(lat) != T:
         idx = torch.linspace(0, len(lat) - 1, T, device=lat.device)
         i0 = idx.floor().long().clamp(max=len(lat) - 1)
-        i1, w = (i0 + 1).clamp(max=len(lat) - 1), (idx - i0)[:, None]
+        i1, w = (i0 + 1).clamp(max=len(lat) - 1), (idx - i0)[:, None] * (not causal)
         lat = env.a2h_video_latent = lat[i0] * (1 - w) + lat[i1] * w
     return lat
 
 
-def video_latent(env, command_name="motion", offsets_s=video_condition.OFFSETS_S):
+def video_latent(env, command_name="motion", offsets_s=video_condition.OFFSETS_S, causal=False):
     """The video's V-JEPA latent (PCA'd) now and offsets_s ahead."""
     cmd = env.command_manager.get_term(command_name)
-    lat = video_latent_table(env, cmd.motion.time_step_total)
+    lat = video_latent_table(env, cmd.motion.time_step_total, causal)
     if lat is None:
         return torch.zeros(env.num_envs, video_condition.K * len(offsets_s), device=env.device)
     return torch.cat([lat[_ahead(cmd, round(o / env.step_dt))] for o in offsets_s], -1)
+
+
+def video_latent_causal(env, command_name="motion"):
+    """The video's latent from trailing windows (A2H_VIDEO_LATENT holds those), now and 0.5 s ago."""
+    return video_latent(env, command_name, offsets_s=video_condition.CAUSAL_OFFSETS_S, causal=True)
 
 
 FUTURE_S = (0.5, 1.0)
@@ -715,6 +725,7 @@ register_mjlab_task(task_id="A2H-Tracking-Flat-Unitree-G1", env_cfg=use_variants
                     play_env_cfg=use_variants(unitree_g1_flat_tracking_env_cfg(play=True)),
                     rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
 for task, name, term in (("A2H-TrackingVJ-Flat-Unitree-G1", "video_latent", video_latent),
+                         ("A2H-TrackingVJCausal-Flat-Unitree-G1", "video_latent", video_latent_causal),
                          ("A2H-TrackingFuture-Flat-Unitree-G1", "future_reference", future_reference)):
     register_mjlab_task(task_id=task, env_cfg=use_variants(conditioned_tracking_cfg(name, term)),
                         play_env_cfg=use_variants(conditioned_tracking_cfg(name, term, play=True)),

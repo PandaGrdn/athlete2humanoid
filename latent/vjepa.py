@@ -70,6 +70,18 @@ class VJepa:
                     dense[t], best[t] = per_win[w, k], dist
         return dense
 
+    def embed_trailing(self, video, window=WINDOW, batch=16):
+        """(T, H, W, 3) video -> (T // 2, D): step s from the window of frames ending at frame 2s
+        ([2s + 1 - window, 2s], the first frame repeated before the start), mean-pooled. Causal:
+        nothing after frame 2s is in it."""
+        steps = np.arange(len(video) // TUBELET)
+        offs = np.arange(-window + 1, 1)
+        out = []
+        for i in range(0, len(steps), batch):
+            idx = np.clip(TUBELET * steps[i:i + batch, None] + offs, 0, len(video) - 1)
+            out.append(self.embed_clips([video[j] for j in idx]))
+        return np.concatenate(out)
+
     def embed_centred(self, video, every=1, window=WINDOW, batch=16):
         """(T, H, W, 3) video -> (embeddings (n, D), steps (n,)) for dense steps 0, every, 2 * every...
         Step s covers frames 2s, 2s + 1; its window is frames [2s - 15, 2s + 16], edge-padded."""

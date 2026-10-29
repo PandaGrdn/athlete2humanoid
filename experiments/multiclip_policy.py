@@ -49,7 +49,7 @@ def clip_qpos(d):
     return np.load(d / "qpos.npy"), float(json.loads((d / "meta.json").read_text())["fps"])
 
 
-def latents(clips_dir, names, smoke):
+def latents(clips_dir, names, smoke, causal=False):
     """name -> (dense latent, mirrored video's dense latent), from V-JEPA 2 on the silhouette videos.
     smoke: the stored latent for both (no GPU, no model download)."""
     from latent import video_condition as VC
@@ -59,7 +59,7 @@ def latents(clips_dir, names, smoke):
     vj = VJepa()
     out = {}
     for c in names:
-        out[c] = VC.dense_latents(clips_dir / c / "silhouette.mp4", vj)
+        out[c] = VC.dense_latents(clips_dir / c / "silhouette.mp4", vj, causal)
         log(f"{c}: V-JEPA latents {out[c][0].shape} (+ mirrored)")
     import torch
     del vj
@@ -67,17 +67,18 @@ def latents(clips_dir, names, smoke):
     return out
 
 
-def build(clips_dir, out, py, env, train, held, seed=0, smoke=False, pca=None):
+def build(clips_dir, out, py, env, train, held, seed=0, smoke=False, pca=None, causal=False):
     """-> out/motion_variants.npz (+ .vjl.npy), variants/variants.json, vjl_pca.npz, and per clip
     evals/<clip>/{motion.npz, motion.vjl.npy, task_spec.json, transfer/<variant>.npz (+ .vjl.npy)}.
-    pca: an earlier run's (its policies' latent space), else fitted on the training clips."""
+    pca: an earlier run's (its policies' latent space), else fitted on the training clips. causal: every
+    latent from the video up to that moment only (multi_vjc)."""
     from latent import video_condition as VC
     from skill import variations as V
     from skill import task as T
     from skill.keypose import compile_keypose_spec
     from train_motion import csv_to_npz
     g1 = V.G1()
-    raw = latents(clips_dir, [*train, *held], smoke)
+    raw = latents(clips_dir, [*train, *held], smoke, causal)
     if pca is None:
         pca = VC.fit_pca([x for c in train for x in raw[c]])
         log(f"PCA on the {len(train)} training clips' latents: {VC.K} components keep {pca['explained']:.0%} of the variance")
@@ -98,7 +99,7 @@ def build(clips_dir, out, py, env, train, held, seed=0, smoke=False, pca=None):
             d = out / "variants" / v["name"]
             m = dict(np.load(csv_to_npz(py, d / "motion.csv", fps, d / "motion.npz", env)))
             n50 = len(m["joint_pos"])
-            lats.append(VC.per_step(z[c][int(v["params"]["mirror"])], v["src_frame"], fps, n50))
+            lats.append(VC.per_step(z[c][int(v["params"]["mirror"])], v["src_frame"], fps, n50, causal))
             segs.append({"name": v["name"], "clip": c, "start": start, "length": n50,
                          "spec": f"{v['name']}/task_spec.json", "params": v["params"]})
             parts.append(m)
@@ -114,7 +115,7 @@ def build(clips_dir, out, py, env, train, held, seed=0, smoke=False, pca=None):
         e = out / "evals" / c
         (e / "transfer").mkdir(parents=True, exist_ok=True)
         n50 = len(np.load(csv_to_npz(py, clips_dir / c / "motion.csv", fps, e / "motion.npz", env))["joint_pos"])
-        np.save(e / "motion.vjl.npy", VC.per_step(z[c][0], np.arange(len(qpos), dtype=float), fps, n50))
+        np.save(e / "motion.vjl.npy", VC.per_step(z[c][0], np.arange(len(qpos), dtype=float), fps, n50, causal))
         spec = compile_keypose_spec(T.body_positions_from_qpos(qpos), fps, name=c)
         (e / "task_spec.json").write_text(json.dumps(spec, indent=1))
         vs = V.generate(qpos, fps, held_grid, seed + 1000, g1, log)
@@ -123,7 +124,7 @@ def build(clips_dir, out, py, env, train, held, seed=0, smoke=False, pca=None):
             V.write([v], e / "held_out")
             f = csv_to_npz(py, d / "motion.csv", fps, e / "transfer" / f"{v['name']}.npz", env)
             np.save(f.with_suffix(".vjl.npy"),
-                    VC.per_step(z[c][int(v["params"]["mirror"])], v["src_frame"], fps, len(np.load(f)["joint_pos"])))
+                    VC.per_step(z[c][int(v["params"]["mirror"])], v["src_frame"], fps, len(np.load(f)["joint_pos"]), causal))
         log(f"{c}: eval set, {len(list((e / 'transfer').glob('*.npz')))} held-out variants")
 
 
@@ -137,7 +138,7 @@ def train_all(a, out, clips_dir):
         cmd = [sys.executable, ROOT / "train_motion.py", "--csv", clips_dir / rollout / "motion.csv", "--fps", 30,
                "--out", d, "--iters", a.iters, "--num-envs", a.num_envs, "--task", TASKS[name],
                "--variants", out / "variants" / "variants.json", "--train-motion", out / "motion_variants.npz"]
-        if name == "multi_vj":
+        if name in ("multi_vj", "multi_vjc"):
             cmd += ["--video-latent", out / "motion_variants.vjl.npy", "--rollout-video-latent", roll / "motion.vjl.npy"]
         own = sorted(Path(a.init_dir).glob(f"policy_{name}/model_*.pt"), key=lambda p: int(p.stem.split("_")[1])) if a.init_dir else []
         init = own[-1] if own else a.init
@@ -167,8 +168,11 @@ def evaluate(a, out, clips):
         run = e / "run"
         if (e / "robust" / "robust.json").exists():
             continue
-        for name in a.policies:
-            ck = newest(out / f"policy_{name}")
+        for name in [*a.policies, *a.compare]:
+            if name in a.compare:  # trained in an earlier run: its checkpoint in --init-dir
+                ck = max(Path(a.init_dir).glob(f"policy_{name}/model_*.pt"), key=lambda p: int(p.stem.split("_")[1]), default=None)
+            else:
+                ck = newest(out / f"policy_{name}")
             if ck is None:
                 log(f"{name}: no checkpoint, left out of the eval")
                 continue
@@ -257,12 +261,14 @@ def main(a):
     py = Path(os.environ.get("A2H_MJLAB_PYTHON", "/content/mjlab_env/bin/python"))
     env = dict(os.environ, MUJOCO_GL=os.environ.get("MUJOCO_GL", "egl"), WANDB_MODE="disabled")
     if not (out / "motion_variants.npz").exists():
-        build(clips_dir, out, py, env, train, held, a.seed, a.smoke, dict(np.load(a.pca)) if a.pca else None)
+        build(clips_dir, out, py, env, train, held, a.seed, a.smoke, dict(np.load(a.pca)) if a.pca else None,
+              causal="multi_vjc" in a.policies)
+    assert not ({"multi_vj", "multi_vjc"} <= set(a.policies)), "one latent file per run: causal or not"
     if a.build_only:
         return
     train_all(a, out, clips_dir)
     evaluate(a, out, [*train, *held])
-    summarise(out, train, held, a.policies)
+    summarise(out, train, held, [*a.compare, *a.policies])
     pack(out)
 
 
@@ -272,7 +278,9 @@ if __name__ == "__main__":
     ap.add_argument("--out", required=True)
     ap.add_argument("--train", nargs="+", default=list(TRAIN_CLIPS))
     ap.add_argument("--held-out", nargs="*", default=list(HELD_OUT_CLIPS))
-    ap.add_argument("--policies", nargs="+", default=list(POLICIES), choices=[*POLICIES, "tracking_var"])
+    ap.add_argument("--policies", nargs="+", default=list(POLICIES), choices=[*POLICIES, "multi_vjc", "tracking_var"])
+    ap.add_argument("--compare", nargs="*", default=[], choices=["multi", "multi_future", "tracking_var"],
+                    help="also evaluate these policies from --init-dir, untrained here (none that read the latent file)")
     ap.add_argument("--init", help="checkpoint they start from (a tracking policy)")
     ap.add_argument("--init-dir", help="a folder of policy_<name>/model_*.pt: each policy starts from its own")
     ap.add_argument("--pca", help="an earlier run's vjl_pca.npz (adapting its policies)")

@@ -12,20 +12,29 @@ clips only, then laid out per 50 Hz motion step so it lines up with the motion f
 
 A new clip gets its latent the same way, from its own video, through the same PCA: the policy never
 sees anything at test time that it couldn't be given for any video.
+
+Causal (causal=True; A2H-TrackingVJCausal): the default latent sees ahead (embed_dense's windows are
+centred, and OFFSETS_S look 0.5 / 1 s further), i.e. up to ~1.5 s of video the robot hasn't reached.
+The causal one is embed_trailing's: each step from the ~1 s of video ending at that frame, read at the
+latest step whose window ends at or before the robot's frame, now and 0.5 s ago (CAUSAL_OFFSETS_S): the
+video only up to where the robot is, as if it were watching it live.
 """
 
 import numpy as np
 
 K = 32                    # PCA components kept
 OFFSETS_S = (0.0, 0.5, 1.0)  # the policy sees the latent now and this far ahead (each ~1 s of context)
+CAUSAL_OFFSETS_S = (-0.5, 0.0)  # causal: now and 0.5 s ago (each the ~1 s of video before it)
 STEP_HZ = 50.0
 
 
-def dense_latents(silhouette_mp4, vj):
-    """A silhouette video -> (dense latent, dense latent of its mirror image), (T // 2, 1024) each."""
+def dense_latents(silhouette_mp4, vj, causal=False):
+    """A silhouette video -> (dense latent, dense latent of its mirror image), (T // 2, 1024) each;
+    causal: from trailing windows (vjepa.embed_trailing)."""
     import mediapy
     sil = np.asarray(mediapy.read_video(str(silhouette_mp4)))
-    return vj.embed_dense(sil), vj.embed_dense(np.ascontiguousarray(sil[:, :, ::-1]))
+    embed = vj.embed_trailing if causal else vj.embed_dense
+    return embed(sil), embed(np.ascontiguousarray(sil[:, :, ::-1]))
 
 
 def fit_pca(denses, k=K):
@@ -52,9 +61,16 @@ def at_frames(z, frames):
     return (z[i0] * (1 - w) + z[i1] * w).astype(np.float32)
 
 
-def per_step(z, src_frame, fps, n_steps):
+def at_frames_causal(z, frames):
+    """Trailing latent (n, k) at fractional video frames: the latest step whose window ends at or
+    before the frame (step s ends at frame 2s); no interpolation towards later steps."""
+    s = np.floor(np.asarray(frames, np.float64) / 2).astype(int)
+    return z[np.clip(s, 0, len(z) - 1)].astype(np.float32)
+
+
+def per_step(z, src_frame, fps, n_steps, causal=False):
     """The latent for each of a motion file's n_steps (50 Hz) steps. src_frame: for each frame of the
     motion at `fps`, the video frame it shows (identity for the clip itself)."""
     t = np.arange(n_steps) / STEP_HZ * fps  # this motion's own frame at each step
     src = np.interp(t, np.arange(len(src_frame)), src_frame)
-    return at_frames(z, src)
+    return at_frames_causal(z, src) if causal else at_frames(z, src)

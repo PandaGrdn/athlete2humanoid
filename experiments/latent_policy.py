@@ -48,7 +48,8 @@ TASKS = {"tracking": "Mjlab-Tracking-Flat-Unitree-G1", "hybrid": "A2H-Hybrid-Fla
          # one policy over several clips' variants (experiments/multiclip_policy.py): plain, with the
          # video's V-JEPA latent as an input, with the retarget's look-ahead instead (the control)
          "multi": "A2H-Tracking-Flat-Unitree-G1", "multi_vj": "A2H-TrackingVJ-Flat-Unitree-G1",
-         "multi_future": "A2H-TrackingFuture-Flat-Unitree-G1"}
+         "multi_future": "A2H-TrackingFuture-Flat-Unitree-G1",
+         "multi_vjc": "A2H-TrackingVJCausal-Flat-Unitree-G1"}  # the latent of the video so far only
 TASK_FIRST = ("task", "taskphase", "taskcmd", "taskhybrid", "taskhybrid_var")  # trained on the semantic task spec (skill/task.py)
 
 
