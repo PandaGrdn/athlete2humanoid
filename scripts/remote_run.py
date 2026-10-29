@@ -37,6 +37,7 @@ VIDEO_EXT = {".mp4", ".mov", ".m4v"}
 SKIP = {"bedroom"}  # test footage, not an action clip
 REMOTE = "/content/a2h"  # on FarmShare: <fs-root>/runs/<session>, set in main()
 OUT = SESSION = None  # set in main()
+CLIPS_DIR = REPO / "clips"  # --clips-dir
 
 
 def latent_out(a):
@@ -46,6 +47,10 @@ def latent_out(a):
 
 def job_spec(a):
     """(setup flag, command run in the repo after setup, {local name: remote path} to fetch)."""
+    if a.job == "process":  # experiments/process_clips.py: new videos -> clip folders (SAM, retarget, V-JEPA), no training
+        out = f"{REMOTE}/outputs/process" + (f"_{a.tag}" if a.tag else "")
+        return ("--with-sam", f"python3 experiments/process_clips.py {{clips}} --out {out}",
+                {"results.tar.gz": f"{out}/results.tar.gz"})
     if a.job == "probe":
         out = f"{REMOTE}/outputs/cross_embodiment"
         return ("--with-sam", f"python3 experiments/cross_embodiment_probe.py {{clips}} --out {out}",
@@ -100,7 +105,7 @@ def colab(*args, timeout=600, check=True):
 
 
 def clips():
-    return sorted(p for p in (REPO / "clips").iterdir()
+    return sorted(p for p in CLIPS_DIR.iterdir()
                   if p.suffix.lower() in VIDEO_EXT and p.stem.lower() not in SKIP)
 
 
@@ -345,7 +350,8 @@ def run_farmshare(a, fs, found, setup, cmd, fetch, inputs):
 
 
 def main(a):
-    global OUT, SESSION, REMOTE
+    global OUT, SESSION, REMOTE, CLIPS_DIR
+    CLIPS_DIR = Path(a.clips_dir).resolve()
     SESSION = a.job + ("_smoke" if a.smoke else "") + (f"_{a.tag}" if a.tag else "")
     OUT = REPO / "outputs" / f"remote_{SESSION}"
     OUT.mkdir(parents=True, exist_ok=True)
@@ -412,8 +418,9 @@ def main(a):
 
 def parser():
     ap = argparse.ArgumentParser()
-    ap.add_argument("job", choices=["probe", "latent", "robust", "relevance", "variants", "multiclip"])
+    ap.add_argument("job", choices=["probe", "latent", "robust", "relevance", "variants", "multiclip", "process"])
     ap.add_argument("--min-clips", type=int, default=6)
+    ap.add_argument("--clips-dir", default=str(REPO / "clips"), help="where the videos to upload are (default clips/)")
     ap.add_argument("--max-wait-h", type=float, default=8)
     ap.add_argument("--target", default="squat")
     ap.add_argument("--iters", type=int, default=1500)

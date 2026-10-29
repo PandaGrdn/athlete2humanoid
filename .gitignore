@@ -9,3 +9,4 @@ __pycache__/
 .DS_Store
 weights/
 build/
+clips_pro/
