@@ -1,0 +1,110 @@
+/* The 3D showcase (pages/Showcase.tsx). Written for the aether design; the classic one gets the same layout
+   with its own colours and type through the shared variables. */
+
+.sc { --sc-display: var(--display, var(--sans)); --sc-gutter: max(24px, calc((100vw - 1240px) / 2 + 24px)); overflow-x: clip; }
+
+/* --- the stage: full bleed, the robot in the middle ---------------------------------------------- */
+.sc-stage { position: relative; height: min(calc(100svh - 68px), 900px); min-height: 540px; overflow: hidden;
+  background: radial-gradient(70% 60% at 50% 46%, #101010 0%, #050505 55%, #000 100%); border-bottom: 1px solid var(--border); }
+.sc-glow { position: absolute; left: 50%; top: 44%; width: min(70vw, 760px); aspect-ratio: 1; transform: translate(-50%, -50%);
+  border-radius: 50%; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02) 60%, transparent); }
+.sc-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; outline: none; }
+.sc-canvas:active { cursor: grabbing; }
+.sc-fallback { position: absolute; inset: 0; height: 100%; object-fit: contain; background: transparent; }
+.sc-loading { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--text-3); }
+.sc-loading .dot { display: inline-block; margin-right: 10px; vertical-align: middle; }
+
+.sc-head { position: absolute; top: 44px; left: var(--sc-gutter); max-width: 420px; pointer-events: none; }
+.sc-kicker { font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-3); display: flex; align-items: center; gap: 10px; }
+.sc-kicker::before { content: ""; width: 34px; height: 1px; background: currentColor; }
+.sc-head h1 { margin-top: 20px; font-family: var(--sc-display); font-weight: 200; font-size: clamp(52px, 6.2vw, 96px); line-height: 0.88;
+  letter-spacing: -0.02em; background: linear-gradient(180deg, #fff 30%, rgba(255, 255, 255, 0.5)); -webkit-background-clip: text;
+  background-clip: text; color: transparent; }
+.sc-lede { margin-top: 22px; color: var(--text-2); font-size: 14.5px; line-height: 1.6; max-width: 360px; }
+
+.sc-source { position: absolute; right: var(--sc-gutter); bottom: 28px; margin: 0; width: clamp(110px, 11vw, 168px); }
+.sc-crop { position: relative; overflow: hidden; border: 1px solid var(--border-strong); background: #000; border-radius: var(--radius-sm); }
+.sc-crop video { height: 100%; max-width: none; object-fit: cover; }
+.sc-source figcaption { margin-top: 8px; font-size: 11px; color: var(--text-2); display: flex; gap: 8px; align-items: baseline; justify-content: flex-end; }
+.sc-source figcaption .mono { font-size: 9.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-3); }
+
+.sc-hint { position: absolute; left: 50%; bottom: 30px; transform: translateX(-50%); display: flex; pointer-events: none;
+  font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-3); white-space: nowrap; transition: opacity 1.2s; }
+.sc-hint span { padding: 0 14px; border-right: 1px solid var(--border-strong); }
+.sc-hint span:last-child { border-right: 0; color: var(--text-2); }
+.sc-hint.gone { opacity: 0; }
+
+.sc-chip { position: absolute; top: 44px; right: var(--sc-gutter); max-width: min(320px, calc(100% - 32px)); display: flex; flex-direction: column;
+  gap: 4px; padding: 12px 14px; background: rgba(0, 0, 0, 0.62); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: sc-in 0.25s var(--ease, ease-out); pointer-events: none; }
+.sc-chip .k { font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-3); }
+.sc-chip .v { font-size: 13.5px; color: var(--text); }
+.sc-chip.live { border-color: rgba(255, 255, 255, 0.55); box-shadow: 0 0 28px rgba(255, 255, 255, 0.08); }
+.sc-chip.fell { border-color: var(--bad); }
+.sc-chip.fell .k { color: var(--bad); }
+@keyframes sc-in { from { opacity: 0; transform: translateY(-4px); } }
+
+/* --- the transport bar ------------------------------------------------------------------------- */
+.sc-controls { border-bottom: 1px solid var(--border); background: rgba(255, 255, 255, 0.01); }
+.sc-controls-inner { display: flex; align-items: center; gap: 18px; padding-top: 14px; padding-bottom: 14px; }
+.sc-play { width: 38px; padding: 0 !important; justify-content: center; flex: none; }
+.sc-time { flex: 1; min-width: 0; }
+.sc-stage-name { font-size: 12.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: 18px; }
+.sc-stage-name .mono { display: inline-block; width: 56px; font-size: 11px; }
+.sc-track { position: relative; height: 22px; cursor: pointer; touch-action: none; margin-top: 2px; }
+.sc-track::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--border-strong); }
+.sc-track .seg { position: absolute; top: calc(50% - 1px); height: 3px; background: rgba(255, 255, 255, 0.28); border-left: 1px solid #000; }
+.sc-track .seg.k-flight { top: calc(50% - 4px); height: 9px; background: rgba(255, 255, 255, 0.75); }
+.sc-track .head { position: absolute; top: 0; bottom: 0; width: 1px; background: #fff; box-shadow: 0 0 10px rgba(255, 255, 255, 0.8); transform: translateX(-0.5px); }
+.sc-track .mark { position: absolute; top: 2px; width: 7px; height: 7px; border: 1px solid #fff; transform: translateX(-3.5px) rotate(45deg); background: #000; }
+.sc-track:focus-visible { outline-offset: 2px; }
+.sc-opts { display: flex; align-items: center; gap: 10px; flex: none; }
+.sc-seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; }
+.sc-seg button { background: none; border: 0; border-right: 1px solid var(--border-strong); color: var(--text-3); cursor: pointer;
+  height: 32px; padding: 0 11px; font-size: 11.5px; font-family: var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.sc-seg button:last-child { border-right: 0; }
+.sc-seg button .mono { color: inherit; opacity: 0.6; margin-left: 4px; }
+.sc-seg button.on { background: var(--text); color: var(--bg); }
+
+/* --- below the stage --------------------------------------------------------------------------- */
+.sc-steps { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--border); margin-top: 56px; border-radius: var(--radius); }
+.sc-step { padding: 24px 22px 26px; border-right: 1px solid var(--border); }
+.sc-step:last-child { border-right: 0; }
+.sc-n { font-size: 10.5px; letter-spacing: 0.2em; color: var(--text-3); }
+.sc-step h3 { margin-top: 14px; font-family: var(--sc-display); font-weight: 300; font-size: 26px; letter-spacing: 0.01em; }
+.sc-step p { margin-top: 8px; color: var(--text-2); font-size: 14px; line-height: 1.6; }
+.sc-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0; margin-top: 40px; border-top: 1px solid var(--border); }
+.sc-fact { padding: 22px 18px 4px 0; display: flex; flex-direction: column; gap: 6px; }
+.sc-fact .v { font-family: var(--sc-display); font-weight: 200; font-size: 56px; line-height: 0.9; letter-spacing: -0.01em; }
+.sc-fact .l { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-3); }
+.sc-honest { margin: 40px 0 72px; display: flex; flex-direction: column; gap: 12px; }
+.sc-honest p { color: var(--text-2); font-size: 14px; line-height: 1.65; max-width: 860px; }
+.sc-links { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+
+@media (max-width: 900px) {
+  .sc-controls-inner { flex-wrap: wrap; gap: 12px; }
+  .sc-time { flex-basis: calc(100% - 56px); }
+  .sc-opts { flex-wrap: wrap; width: 100%; }
+  .sc-steps { grid-template-columns: 1fr; }
+  .sc-step { border-right: 0; border-bottom: 1px solid var(--border); }
+  .sc-step:last-child { border-bottom: 0; }
+}
+@media (max-width: 640px) {
+  .sc { --sc-gutter: 16px; }
+  .sc-stage { height: 74svh; min-height: 460px; }
+  .sc-head { top: 20px; right: 16px; }
+  .sc-head h1 { font-size: 44px; margin-top: 12px; }
+  .sc-lede { display: none; }
+  .sc-source { bottom: 16px; left: 16px; right: auto; width: 84px; }
+  .sc-source figcaption { display: none; }
+  .sc-hint { bottom: 18px; left: auto; right: 16px; transform: none; flex-direction: column; align-items: flex-end; gap: 4px; font-size: 9px; }
+  .sc-hint span { border: 0; padding: 0; }
+  .sc-chip { top: auto; bottom: 16px; right: 16px; max-width: calc(100% - 132px); }
+  .sc-fact .v { font-size: 44px; }
+}
+
+/* aether: square corners, hairlines */
+[data-ui="aether"] :is(.sc-crop, .sc-chip, .sc-seg, .sc-steps) { border-radius: 2px; }
+[data-ui="aether"] .sc-crop video { filter: grayscale(1) contrast(1.15); }

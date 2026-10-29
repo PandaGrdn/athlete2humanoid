@@ -42,7 +42,7 @@ export function AetherHero({ video, poster, title, to }: { video?: string; poste
           trains a humanoid to perform it: in simulation, under pushes, at any tempo.
         </p>
         <div className="ae-cta">
-          <Link className="btn primary" to="/examples"><Icon name="play" size={14} />See the examples</Link>
+          <Link className="btn primary" to="/showcase"><Icon name="cube" size={14} />Push the robot, in 3D</Link>
           <a className="btn" href="#run"><Icon name="upload" size={14} />Run a video</a>
         </div>
         <div className="ae-stack mono">
