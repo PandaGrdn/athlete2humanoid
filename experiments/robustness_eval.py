@@ -309,7 +309,7 @@ def mjlab_stage(a, out):
     names = list(pols)
     motion_file = Path(pols[names[0]]["motion"])
     for n in names[1:]:  # all policies were trained on the same clip
-        assert np.allclose(np.load(pols[n]["motion"])["joint_pos"], np.load(motion_file)["joint_pos"]), n
+        assert np.allclose(np.load(pols[n]["motion"])["joint_pos"], np.load(motion_file)["joint_pos"], atol=1e-4), n  # (variants: float noise)
 
     # The task spec: the one the task-first policies were trained on, or (v1 runs) one read off the
     # reference the policies were trained on, at 50 Hz; then the retarget must pass it, as in skill/task.py.
