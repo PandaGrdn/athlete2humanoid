@@ -1,6 +1,6 @@
 /* Aether: the black-and-white design (theme.ts), after Nous Research's Hermes Agent: thin condensed display
    type, spaced uppercase labels, hairlines, and the robot at the centre of a radiant halo. Every rule is
-   scoped to :root[data-ui="aether"], so the classic design (styles.css) is untouched and stays the fallback. */
+   scoped to :root[data-ui="aether"], so the classic design (styles.css) is untouched and stays the fallback. Aether is the default. */
 
 :root[data-ui="aether"] {
   --bg: #000;

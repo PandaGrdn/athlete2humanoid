@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 
-/** Two designs over the same pages: "classic" (the original) and "aether" (black and white, after
- *  Nous Research's Hermes Agent). Either can be picked from the footer, or with ?ui=classic / ?ui=aether;
+/** Two designs over the same pages: "aether" (the default: black and white, after Nous Research's Hermes
+ *  Agent) and "classic" (the original). Either can be picked from the footer, or with ?ui=classic / ?ui=aether;
  *  the choice is remembered per browser. Classic stays the fallback: anything aether doesn't restyle
- *  looks as it always did. */
+ *  looks as it always did. VITE_DEFAULT_UI=classic builds with classic as the default again. */
 export type Ui = "classic" | "aether";
 const KEY = "a2h-ui";
-const DEFAULT: Ui = import.meta.env.VITE_DEFAULT_UI === "aether" ? "aether" : "classic";
+const DEFAULT: Ui = import.meta.env.VITE_DEFAULT_UI === "classic" ? "classic" : "aether";
 const isUi = (v: unknown): v is Ui => v === "classic" || v === "aether";
 
 function initial(): Ui {
