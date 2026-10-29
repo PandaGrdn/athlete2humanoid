@@ -192,7 +192,8 @@ export type LiveData = {
   timings_s: Record<string, number>;
 };
 
-export const url = (path: string) => (path.startsWith("http") ? path : API_BASE + path);
+/** A path the API serves (/api/...) on the API's origin; the site's own static files (/examples, /live-demo, ...) stay here. */
+export const url = (path: string) => (path.startsWith("/api/") ? API_BASE + path : path);
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(url(path), init);
