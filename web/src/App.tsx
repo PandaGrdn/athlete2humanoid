@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useState } from "react";
-import { Link, NavLink, Route, Routes, useLocation } from "react-router";
+import { createContext, lazy, Suspense, useContext, useEffect, useState } from "react";
+import { Link, Navigate, NavLink, Route, Routes, useLocation, useParams } from "react-router";
 import { api, type Health } from "./api";
 import { UiSwitch } from "./components/aether";
 import { Icon } from "./components/ui";
@@ -9,6 +9,16 @@ import JobPage from "./pages/JobPage";
 import LivePage, { LiveReplayPage } from "./pages/LivePage";
 import RunPage from "./pages/RunPage";
 import { useUi, type Ui } from "./theme";
+
+// three.js only loads with the showcase
+const Showcase = lazy(() => import("./pages/Showcase"));
+const ShowcaseFallback = <div className="sc-stage-skeleton skeleton" style={{ height: "min(calc(100svh - 68px), 900px)" }} />;
+
+/** The old /examples/:id links: the examples now live under /research. */
+function OldExample() {
+  const { id = "" } = useParams();
+  return <Navigate to={`/research/${id}`} replace />;
+}
 
 const HealthCtx = createContext<{ health: Health | null; error: string | null }>({ health: null, error: null });
 export const useHealth = () => useContext(HealthCtx);
@@ -54,7 +64,8 @@ export default function App() {
           </Link>
           <nav className="nav-links">
             <NavLink to="/live" className="nav-ex">Live</NavLink>
-            <NavLink to="/examples" className="nav-ex">Examples</NavLink>
+            <NavLink to="/showcase" className="nav-ex">Showcase</NavLink>
+            <NavLink to="/research" className="nav-ex">Research</NavLink>
             <Link to="/#run">Run</Link>
             <Link to="/#gallery">Gallery</Link>
             <Link to="/#how">How it works</Link>
@@ -65,7 +76,7 @@ export default function App() {
             )}
             {health?.runners.includes("colab") && <span className="pill accent">Colab A100 enabled</span>}
             {error && !health && (
-              <Link to="/examples" className="pill warn" title={`The pipeline API isn't reachable (${error}). The examples work without it.`}>
+              <Link to="/showcase" className="pill warn" title={`The pipeline API isn't reachable (${error}). The showcase and research pages work without it.`}>
                 Offline demo
               </Link>
             )}
@@ -80,8 +91,11 @@ export default function App() {
           <Route path="/live/:id?" element={<LivePage />} />
           <Route path="/jobs/:id" element={<JobPage />} />
           <Route path="/runs/:id" element={<RunPage />} />
-          <Route path="/examples" element={<ExamplesIndex />} />
-          <Route path="/examples/:id" element={<ExampleDetail />} />
+          <Route path="/showcase" element={<Suspense fallback={ShowcaseFallback}><Showcase /></Suspense>} />
+          <Route path="/research" element={<ExamplesIndex />} />
+          <Route path="/research/:id" element={<ExampleDetail />} />
+          <Route path="/examples" element={<Navigate to="/research" replace />} />
+          <Route path="/examples/:id" element={<OldExample />} />
           <Route path="*" element={<div className="container section"><h2>Not found</h2><p className="muted" style={{ marginTop: 8 }}><Link to="/">Back to the start</Link></p></div>} />
         </Routes>
       </main>
@@ -106,7 +120,8 @@ function AetherNav() {
       <div className="container ae-nav-inner">
         <nav className="ae-links">
           <NavLink to="/live">Live</NavLink>
-          <NavLink to="/examples">Examples</NavLink>
+          <NavLink to="/showcase">Showcase</NavLink>
+          <NavLink to="/research">Research</NavLink>
           <Link to="/#run">Run</Link>
         </nav>
         <Link to="/" className="ae-brand" aria-label="athlete2humanoid, home">
@@ -114,7 +129,7 @@ function AetherNav() {
         </Link>
         <nav className="ae-links right">
           <Link to="/#how">Method</Link>
-          <span className="ae-status mono" title={error && !health ? `The pipeline API isn't reachable (${error}). The examples work without it.` : undefined}>
+          <span className="ae-status mono" title={error && !health ? `The pipeline API isn't reachable (${error}). The showcase and research pages work without it.` : undefined}>
             <i className={`dot ${health ? "live" : ""}`} />{status}
           </span>
           <a href={REPO_URL} target="_blank" rel="noreferrer" aria-label="Code on GitHub"><Icon name="github" size={15} /></a>

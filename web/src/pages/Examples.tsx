@@ -50,7 +50,7 @@ function ExampleCard({ ex, n }: { ex: ExampleSummary; n: number }) {
   );
   return pending
     ? <div className="card ex-card pending">{body}</div>
-    : <Link to={`/examples/${ex.id}`} className="card ex-card">{body}</Link>;
+    : <Link to={`/research/${ex.id}`} className="card ex-card">{body}</Link>;
 }
 
 export function ExamplesIndex() {
@@ -58,7 +58,7 @@ export function ExamplesIndex() {
   return (
     <div className="container">
       <section className="ex-intro">
-        <div className="eyebrow">Examples</div>
+        <div className="eyebrow">Research</div>
         <h1>What the robot was shown, what it learned, and how we know</h1>
         <p className="lede">
           Recorded results from the full pipeline: phone videos in, simulated Unitree G1 policies out. Every number
@@ -66,6 +66,11 @@ export function ExamplesIndex() {
           pipeline is asleep.
         </p>
       </section>
+      <div className="card ex-showcase">
+        <p><strong>In 3D:</strong> the squat-jump policy next to its source video, with recorded responses to pushes you
+          trigger by clicking it.</p>
+        <Link className="btn sm" to="/showcase">Open the showcase <Icon name="arrow" size={14} /></Link>
+      </div>
       <ExampleCards {...idx} />
     </div>
   );
@@ -93,11 +98,11 @@ export function ExampleDetail() {
   const next = i >= 0 && i < ready.length - 1 ? ready[i + 1] : null;
   return (
     <div className="container">
-      <div className="ex-crumbs"><Link to="/examples">Examples</Link><span className="faint">/</span><span>{ex.kicker}</span></div>
+      <div className="ex-crumbs"><Link to="/research">Research</Link><span className="faint">/</span><span>{ex.kicker}</span></div>
       <Story key={ex.id} ex={ex} />
       <nav className="ex-pager">
-        {prev ? <Link className="card" to={`/examples/${prev.id}`}><span className="faint">← Previous</span><strong>{prev.title}</strong></Link> : <span />}
-        {next ? <Link className="card next" to={`/examples/${next.id}`}><span className="faint">Next →</span><strong>{next.title}</strong></Link> : <span />}
+        {prev ? <Link className="card" to={`/research/${prev.id}`}><span className="faint">← Previous</span><strong>{prev.title}</strong></Link> : <span />}
+        {next ? <Link className="card next" to={`/research/${next.id}`}><span className="faint">Next →</span><strong>{next.title}</strong></Link> : <span />}
       </nav>
     </div>
   );

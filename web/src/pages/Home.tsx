@@ -5,7 +5,7 @@ import { useHealth, useUiMode } from "../App";
 import { AetherHero } from "../components/aether";
 import { Icon, LoopVideo } from "../components/ui";
 import { exUrl } from "../examples";
-import { ExampleCards, useExampleIndex } from "./Examples";
+import { useExampleIndex } from "./Examples";
 
 const PIPELINE = [
   { title: "Silhouette", text: "Segment and track the person through every frame.", model: "SAM 3.1" },
@@ -38,7 +38,7 @@ export default function Home() {
     <div className="container">
       {/* aether: the robot alone at the centre of the halo, the best policy's own rollout (static, so it shows offline) */}
       {ui === "aether" && <AetherHero video={exUrl(AETHER_HERO)} poster={exUrl(AETHER_HERO.replace(/mp4$/, "jpg"))}
-        title="The G1 squat-jumping: the policy trained on variants of one clip" to="/examples/squat-jump-variants" />}
+        title="The G1 squat-jumping: the policy trained on variants of one clip" to="/showcase" />}
       {ui !== "aether" && <section className="hero">
         <div className="fade-in">
           <div className="models">
@@ -54,14 +54,14 @@ export default function Home() {
             like the clip, not only for matching its joint angles.
           </p>
           <div className="cta">
-            <Link className="btn primary" to="/examples"><Icon name="play" size={16} />See the examples</Link>
+            <Link className="btn primary" to="/showcase"><Icon name="cube" size={16} />Push the robot, in 3D</Link>
             <a className="btn" href="#run"><Icon name="upload" size={16} />Run a video</a>
             {featured && <Link className="btn ghost" to={`/runs/${featured.id}`}>Latest run <Icon name="arrow" size={16} /></Link>}
           </div>
         </div>
         <div className="fade-in">
           {lead?.video ? (
-            <Link to={`/examples/${lead.id}`} className="video-frame" style={{ display: "block" }}>
+            <Link to="/showcase" className="video-frame" style={{ display: "block" }}>
               <LoopVideo src={exUrl(lead.video)} poster={lead.poster ? exUrl(lead.poster) : undefined} label={lead.title} />
               <div className="tag"><span className="pill">Phone video</span><span className="pill accent">Unitree G1</span></div>
             </Link>
@@ -76,17 +76,9 @@ export default function Home() {
         </div>
       </section>}
 
-      {!offline && <section className="section" id="examples">
-        <div className="section-head">
-          <div>
-            <div className="eyebrow">Examples</div>
-            <h2 style={{ marginTop: 6 }}>What the robot learned, and how we know</h2>
-            <p>Recorded results, each as a short story with synchronized videos and the numbers behind it.</p>
-          </div>
-          <Link className="btn sm" to="/examples">All examples <Icon name="arrow" size={14} /></Link>
-        </div>
-        <ExampleCards {...exIdx} />
-      </section>}
+      <section className="section" id="examples">
+        <ShowcaseTeaser more={exIdx.items?.filter((e) => e.status === "ready").length ?? null} />
+      </section>
 
       <section className="section" id="how">
         <div className="section-head">
@@ -120,7 +112,7 @@ export default function Home() {
             <Icon name="cube" />
             <div><strong>The live pipeline is offline right now.</strong> The hosted API sleeps when idle; this page
               keeps checking and uploads come back when it answers. Everything under{" "}
-              <Link to="/examples" style={{ color: "var(--accent)" }}>Examples</Link> works without it.</div>
+              <Link to="/showcase" style={{ color: "var(--accent)" }}>Showcase</Link> works without it.</div>
           </div>
         )}
         <Link to="/live" className="card live-cta">
@@ -163,11 +155,38 @@ export default function Home() {
           </div>
         </div>
         {err && <div className="error-box">Couldn't load runs: {err}</div>}
-        {offline && !runs && <ExampleCards {...exIdx} />}
+        {offline && !runs && (
+          <div className="notice">The run gallery needs the pipeline API, which is asleep. The recorded results are
+            on the <Link to="/research" style={{ color: "var(--accent)" }}>research page</Link>.</div>
+        )}
         {!runs && !err && !offline && <div className="gallery">{[0, 1].map((i) => <div key={i} className="skeleton" style={{ height: 380 }} />)}</div>}
         {runs && runs.length === 0 && <div className="notice">No finished runs found in the runs folder yet.</div>}
         {runs && runs.length > 0 && <div className="gallery">{runs.map((r) => <RunCard key={r.id} run={r} />)}</div>}
       </section>
+    </div>
+  );
+}
+
+/** One example, big: the 3D showcase. The rest are on /research. */
+function ShowcaseTeaser({ more }: { more: number | null }) {
+  return (
+    <div className="home-sc card">
+      <Link to="/showcase" className="home-sc-media" aria-label="Open the 3D showcase">
+        <LoopVideo src={exUrl(AETHER_HERO)} poster={exUrl(AETHER_HERO.replace(/mp4$/, "jpg"))} label="The trained squat-jump policy" />
+        <span className="pill">Trained policy · mjlab</span>
+      </Link>
+      <div className="home-sc-body">
+        <div className="eyebrow">Showcase</div>
+        <h2>Push the robot</h2>
+        <p>
+          The squat-jump policy in 3D, next to the phone video it learned from. Orbit it, zoom in, and click it: it
+          plays the trained policy's recorded response to a shove from that side.
+        </p>
+        <div className="home-sc-cta">
+          <Link className="btn primary" to="/showcase"><Icon name="cube" size={15} />Open the showcase</Link>
+          <Link className="btn ghost" to="/research">All results{more ? ` (${more})` : ""} <Icon name="arrow" size={14} /></Link>
+        </div>
+      </div>
     </div>
   );
 }

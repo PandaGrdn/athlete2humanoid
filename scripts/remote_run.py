@@ -65,6 +65,12 @@ def job_spec(a):
         return ("--with-main", f"python3 experiments/robustness_eval.py --runs {inp} --out {out} --target {a.target} {a.args}",
                 {"robust.json": f"{out}/robust.json", "robust_summary.md": f"{out}/robust_summary.md",
                  "rollouts.npz": f"{out}/rollouts.npz"})
+    if a.job == "pushes":  # experiments/push_showcase.py: the site's recorded pushes of one policy
+        out, inp = f"{REMOTE}/outputs/pushes" + (f"_{a.tag}" if a.tag else ""), f"{REMOTE}/inputs"
+        # The job clones main: until the script is there, it rides along in the inputs (pack_reuse)
+        return ("--with-main", f"test -f experiments/push_showcase.py || cp {inp}/push_showcase.py experiments/; "
+                f"$A2H_MJLAB_PYTHON experiments/push_showcase.py --runs {inp} --out {out} {a.args}",
+                {"push_showcase.npz": f"{out}/push_showcase.npz", "push_showcase.json": f"{out}/push_showcase.json"})
     if a.job == "relevance":  # experiments/goal_relevance.py: V-JEPA importance + the counterfactual policies
         out, inp = f"{REMOTE}/outputs/relevance" + (f"_{a.tag}" if a.tag else ""), f"{REMOTE}/inputs"
         return ("--with-main", f"python3 experiments/goal_relevance.py --inputs {inp} --target {a.target} --out {out} "
@@ -139,10 +145,11 @@ def check_token():
         raise SystemExit("HF token in .env is invalid or lacks SAM 3.1 access; update .env and rerun.")
 
 
-def pack_reuse(src, policies=False, checkpoints=None):
+def pack_reuse(src, policies=False, checkpoints=None, script=None):
     """An earlier run's processed clips and policy rollouts, as one archive to upload. policies: its
     trained weights too (robust job; latent jobs with --with-weights, for --init/--resume-from).
-    checkpoints: this run's own synced checkpoints (retry after a lost VM) -> inputs/checkpoints."""
+    checkpoints: this run's own synced checkpoints (retry after a lost VM) -> inputs/checkpoints.
+    script: a file to put at the archive's top (the pushes job's own script)."""
     f = OUT / "inputs.tar.gz"
     with tarfile.open(f, "w:gz") as tar:
         if checkpoints:
@@ -157,6 +164,8 @@ def pack_reuse(src, policies=False, checkpoints=None):
         for name in ("reward.pt", "distill_report.json", "vjl_pca.npz"):  # --args "--reward ..."; multiclip --pca
             if (src / name).exists():
                 tar.add(src / name, name)
+        if script:
+            tar.add(script, script.name)
         if (src / "transfer").is_dir():  # robust job: clips the policies never trained on (--transfer)
             tar.add(src / "transfer", "transfer")
         if policies:  # the robust job: the trained policies themselves, and their eval
@@ -374,9 +383,10 @@ def main(a):
         REMOTE = fs.run_dir
     setup, cmd, fetch = job_spec(a)
     found = [] if a.smoke or (a.reuse and a.job != "pro") else wait_for_clips(a.min_clips, a.max_wait_h)
-    if a.job in ("robust", "relevance") and not a.reuse:
+    if a.job in ("robust", "relevance", "pushes") and not a.reuse:
         raise SystemExit(f"{a.job} needs --reuse <a latent run's results folder>")
-    inputs = (pack_reuse(a.reuse, policies=a.job == "robust" or a.with_weights) if a.reuse
+    inputs = (pack_reuse(a.reuse, policies=a.job in ("robust", "pushes") or a.with_weights,
+                         script=REPO / "experiments/push_showcase.py" if a.job == "pushes" else None) if a.reuse
               else pack_weights(a.init_weights) if a.init_weights else None)
     if found:
         log(f"clips ready: {', '.join(p.name for p in found)}")
@@ -423,7 +433,7 @@ def main(a):
 
 def parser():
     ap = argparse.ArgumentParser()
-    ap.add_argument("job", choices=["probe", "latent", "robust", "relevance", "variants", "multiclip", "process", "pro"])
+    ap.add_argument("job", choices=["probe", "latent", "robust", "relevance", "variants", "multiclip", "process", "pro", "pushes"])
     ap.add_argument("--min-clips", type=int, default=6)
     ap.add_argument("--clips-dir", default=str(REPO / "clips"), help="where the videos to upload are (default clips/)")
     ap.add_argument("--max-wait-h", type=float, default=8)

@@ -549,3 +549,19 @@ button.env-mark:focus-visible { outline: 2px solid var(--accent); outline-offset
 .curve polyline.ghost { stroke: var(--border-strong); stroke-width: 1.5; }
 .curve circle { fill: var(--accent); }
 .linklike { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; }
+
+/* home: the one example shown big (the 3D showcase); the rest are on /research */
+.home-sc { display: grid; grid-template-columns: 1.15fr 1fr; overflow: hidden; }
+.home-sc-media { position: relative; display: block; background: #000; aspect-ratio: 4 / 3; overflow: hidden; }
+.home-sc-media video { width: 100%; height: 100%; object-fit: cover; }
+.home-sc-media .pill { position: absolute; left: 14px; bottom: 14px; background: rgba(0, 0, 0, 0.7); }
+.home-sc-body { padding: 36px 34px; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+.home-sc-body h2 { font-size: clamp(30px, 3.6vw, 46px); }
+.home-sc-body p { color: var(--text-2); max-width: 440px; }
+.home-sc-cta { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.ex-showcase { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 18px 20px; margin-bottom: 18px; }
+.ex-showcase p { color: var(--text-2); font-size: 14px; max-width: 640px; }
+@media (max-width: 760px) {
+  .home-sc { grid-template-columns: 1fr; }
+  .home-sc-body { padding: 22px 18px 24px; }
+}

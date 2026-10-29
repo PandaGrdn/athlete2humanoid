@@ -138,7 +138,7 @@ function LiveStart({ onFile, err }: { onFile: (f: File) => void; err: string | n
         <div className="notice">
           <Icon name="cube" />
           <div><strong>This deployment can't build environments live.</strong> Its API has no live runner (it may be an
-            older version, or the host lacks the pose and IK models). The <Link to="/examples" style={{ color: "var(--accent)" }}>examples</Link> walk
+            older version, or the host lacks the pose and IK models). The <Link to="/research" style={{ color: "var(--accent)" }}>research examples</Link> walk
             through recorded runs, environments included.</div>
         </div>
       )}
@@ -447,7 +447,7 @@ function PolicyCard({ job, file }: { job: Job; file: File | null }) {
               ))}
             </ul>
           ) : (
-            <p className="faint" style={{ fontSize: 13 }}>None in this gallery yet; the <Link to="/examples" style={{ color: "var(--accent)" }}>examples</Link> show trained policies.</p>
+            <p className="faint" style={{ fontSize: 13 }}>None in this gallery yet; the <Link to="/showcase" style={{ color: "var(--accent)" }}>showcase</Link> and <Link to="/research" style={{ color: "var(--accent)" }}>research</Link> pages show trained policies.</p>
           )}
         </>
       )}
