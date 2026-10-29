@@ -1,33 +1,24 @@
 {
  "version": 1,
- "generated_at": "2026-10-28T18:31:53+00:00",
+ "generated_at": "2026-10-29T03:54:56+00:00",
  "examples": [
   {
-   "id": "squat-jump-final",
-   "kicker": "The task policy",
-   "title": "Squat jump: stand, squat, jump, land",
-   "tagline": "Rewarded for the action, not for copying the clip: the Tracking, Task and Task (no reference) policies completed every stage (9/9) with 0 falls; the task policies did it 0.4–1.1 m (mean torso distance) away from the clip's own path.",
+   "id": "squat-jump-variants",
+   "kicker": "Generalisation",
+   "title": "Squat jump: learning the action, not the recording",
+   "tagline": "Trained on 36 automatic variants of one clip, the tracker completes 78% of 7 variants it never saw, with 0% falls. The best single-clip policy manages 28% and falls 29% of the time.",
    "status": "ready",
-   "poster": "squat-jump-final/source.jpg",
-   "video": "squat-jump-final/source.mp4"
+   "poster": "squat-jump-variants/source.jpg",
+   "video": "squat-jump-variants/source.mp4"
   },
   {
-   "id": "front-kick",
-   "kicker": "Any action",
-   "title": "Front kick, learned from its video alone",
-   "tagline": "No kick-specific reward: the clip's four key moments became the task, and all three completed it (6/6) with no falls; the warm start managed 1/6.",
+   "id": "front-kick-variants",
+   "kicker": "Generalisation",
+   "title": "Front kick: learning the action, not the recording",
+   "tagline": "Trained on 36 automatic variants of one clip, the tracker completes 100% of 7 variants it never saw, with 0% falls. The best single-clip policy manages 43% and falls 57% of the time.",
    "status": "ready",
-   "poster": "front-kick/source.jpg",
-   "video": "front-kick/source.mp4"
-  },
-  {
-   "id": "squat-v1",
-   "kicker": "Learning the action",
-   "title": "Squat: three rewards, one skill",
-   "tagline": "Shown one phone video of two squats, three policies trained with different rewards all complete it (5/5 stages, no falls), though their V-JEPA 2 similarity to the clip ranges from 0.53 to 0.71.",
-   "status": "ready",
-   "poster": "squat-v1/source.jpg",
-   "video": "squat-v1/source.mp4"
+   "poster": "front-kick-variants/source.jpg",
+   "video": "front-kick-variants/source.mp4"
   },
   {
    "id": "retarget",
@@ -46,24 +37,6 @@
    "status": "ready",
    "poster": "goal-relevance/hype.jpg",
    "video": "goal-relevance/hype.mp4"
-  },
-  {
-   "id": "robustness",
-   "kicker": "Stress test",
-   "title": "Pushed, tripped, re-weighted",
-   "tagline": "64 simulated rollouts per condition: the squat policies barely notice friction and mass changes, and tracking is the sturdiest under shoves and noisy starts. Latent falls most, which is why the task reward only pays while the robot stays upright.",
-   "status": "ready",
-   "poster": "squat-v1/policy_tracking.jpg",
-   "video": null
-  },
-  {
-   "id": "robustness-final",
-   "kicker": "Stress test",
-   "title": "Squat jump, pushed and without its reference",
-   "tagline": "64 rollouts per condition. Under random shoves the task policy still finishes the squat jump 94% of the time (tracking 65%); with the reference frozen, tracking stands still (0%) while both task policies complete it (100%, 100%).",
-   "status": "ready",
-   "poster": "squat-jump-final/policy_tracking.jpg",
-   "video": null
   }
  ]
 }

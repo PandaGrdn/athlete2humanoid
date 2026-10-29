@@ -1,0 +1,824 @@
+{
+ "id": "front-kick-variants",
+ "status": "ready",
+ "kicker": "Generalisation",
+ "title": "Front kick: learning the action, not the recording",
+ "tagline": "Trained on 36 automatic variants of one clip, the tracker completes 100% of 7 variants it never saw, with 0% falls. The best single-clip policy manages 43% and falls 57% of the time.",
+ "story": {
+  "shown": "The front kick phone video, retargeted to the G1, then turned into variants with nothing action-specific: mirrored, faster and slower, bigger and smaller, unevenly re-timed. Each variant gets its own key-moment spec from the same compiler.",
+  "learned": "Two policies trained on all the training variants at once, warm-started from the clip's tracking policy. Each environment plays one variant and is scored against that variant's spec.",
+  "how": "7 held-out variants outside the training range (mirrored, 0.6x tempo, 0.8x size; mirrored, 1.6x tempo, 1.2x size; 0.5x tempo; 0.7x size; 1.25x size; uneven tempo 0.5; 2x tempo), 64 rollouts each. Success: every key moment in order, no fall."
+ },
+ "duration_s": 5.57,
+ "stages": [
+  {
+   "kind": "pose",
+   "label": "Right foot up, right foot forward",
+   "start_s": 0.033,
+   "end_s": 1.4
+  },
+  {
+   "kind": "pose",
+   "label": "Right foot down, right foot back",
+   "start_s": 1.4,
+   "end_s": 1.967
+  },
+  {
+   "kind": "pose",
+   "label": "Right foot up, right foot right",
+   "start_s": 1.967,
+   "end_s": 4.2
+  },
+  {
+   "kind": "pose",
+   "label": "Right foot down, right foot left",
+   "start_s": 4.2,
+   "end_s": 4.733
+  },
+  {
+   "kind": "settle",
+   "label": "Finish",
+   "start_s": 4.733,
+   "end_s": 5.567
+  }
+ ],
+ "primary": {
+  "src": "front-kick-variants/source.mp4",
+  "poster": "front-kick-variants/source.jpg",
+  "label": "Phone video → G1 reference",
+  "width": 752,
+  "height": 480,
+  "duration_s": 5.53,
+  "panels": [
+   {
+    "label": "Athlete",
+    "from": 0,
+    "to": 0.361
+   },
+   {
+    "label": "G1 reference",
+    "from": 0.361,
+    "to": 1,
+    "tone": "good"
+   }
+  ]
+ },
+ "grid": [
+  {
+   "src": "front-kick-variants/policy_tracking_var.mp4",
+   "poster": "front-kick-variants/policy_tracking_var.jpg",
+   "label": "Tracking, trained on variants",
+   "width": 416,
+   "height": 312,
+   "duration_s": 5.5,
+   "color": "#1f9e5b",
+   "policy": "tracking_var"
+  },
+  {
+   "src": "front-kick-variants/policy_taskhybrid_var.mp4",
+   "poster": "front-kick-variants/policy_taskhybrid_var.jpg",
+   "label": "Task + tracking, trained on variants",
+   "width": 416,
+   "height": 312,
+   "duration_s": 5.5,
+   "color": "#b8417a",
+   "policy": "taskhybrid_var"
+  },
+  {
+   "src": "front-kick-variants/policy_tracking.mp4",
+   "poster": "front-kick-variants/policy_tracking.jpg",
+   "label": "Tracking, this clip only",
+   "width": 416,
+   "height": 312,
+   "duration_s": 5.5,
+   "color": "#3987e5",
+   "policy": "tracking"
+  }
+ ],
+ "grid_caption": "On the original clip. Solid robot: the trained policy, physically simulated. Green ghost: the reference.",
+ "extra": [],
+ "metrics": [
+  {
+   "label": "Held-out variants completed",
+   "display": "100%",
+   "note": "tracking trained on variants; 43% for the best single-clip policy",
+   "tone": "good"
+  },
+  {
+   "label": "Falls on held-out variants",
+   "display": "0%",
+   "note": "57% for that single-clip policy",
+   "tone": null
+  },
+  {
+   "label": "V-JEPA 2 similarity",
+   "display": "0.66",
+   "note": "on the clip; single-clip tracking 0.63"
+  }
+ ],
+ "policies": [
+  {
+   "key": "tracking_var",
+   "label": "Tracking, trained on variants",
+   "color": "#1f9e5b",
+   "reward": "Joint tracking, trained on 36 automatic variants of the clip (mirrored, re-timed, scaled) at once.",
+   "values": {
+    "heldout": {
+     "value": 0.998,
+     "display": "100%",
+     "good": true
+    },
+    "heldout_falls": {
+     "value": 0.002,
+     "display": "0%",
+     "good": false
+    },
+    "clean": {
+     "value": 1.0,
+     "display": "100%",
+     "good": true
+    },
+    "vjepa": {
+     "value": 0.657,
+     "display": "0.66"
+    },
+    "joint_deg": {
+     "value": 6.3,
+     "display": "6.3°"
+    }
+   }
+  },
+  {
+   "key": "taskhybrid_var",
+   "label": "Task + tracking, trained on variants",
+   "color": "#b8417a",
+   "reward": "Key moments plus tracking, each variant scored against its own spec; trained on the same 36 variants.",
+   "values": {
+    "heldout": {
+     "value": 0.679,
+     "display": "68%",
+     "good": false
+    },
+    "heldout_falls": {
+     "value": 0.154,
+     "display": "15%",
+     "good": false
+    },
+    "clean": {
+     "value": 1.0,
+     "display": "100%",
+     "good": true
+    },
+    "vjepa": {
+     "value": 0.381,
+     "display": "0.38"
+    },
+    "joint_deg": {
+     "value": 18.9,
+     "display": "18.9°"
+    }
+   }
+  },
+  {
+   "key": "tracking",
+   "label": "Tracking",
+   "color": "#3987e5",
+   "reward": "Copies the retarget's joint angles (the standard motion-imitation reward).",
+   "values": {
+    "heldout": {
+     "value": 0.429,
+     "display": "43%",
+     "good": false
+    },
+    "heldout_falls": {
+     "value": 0.571,
+     "display": "57%",
+     "good": false
+    },
+    "clean": {
+     "value": 1.0,
+     "display": "100%",
+     "good": true
+    },
+    "vjepa": {
+     "value": 0.63,
+     "display": "0.63"
+    },
+    "joint_deg": {
+     "value": 5.9,
+     "display": "5.9°"
+    }
+   }
+  },
+  {
+   "key": "taskhybrid",
+   "label": "Task + tracking",
+   "color": "#d95926",
+   "reward": "The clip's key moments in order, plus joint tracking. Trained on the clip alone.",
+   "values": {
+    "heldout": {
+     "value": 0.183,
+     "display": "18%",
+     "good": false
+    },
+    "heldout_falls": {
+     "value": 0.531,
+     "display": "53%",
+     "good": false
+    },
+    "clean": {
+     "value": 1.0,
+     "display": "100%",
+     "good": true
+    },
+    "vjepa": {
+     "value": 0.529,
+     "display": "0.53"
+    },
+    "joint_deg": {
+     "value": 14.2,
+     "display": "14.2°"
+    }
+   }
+  },
+  {
+   "key": "task",
+   "label": "Task",
+   "color": "#c98bf0",
+   "reward": "Rewarded for reaching the clip's key moments in order (keypose spec), plus weak V-JEPA 2 and tracking style terms. Sees the retarget. Ends only on a fall.",
+   "values": {
+    "heldout": {
+     "value": 0.388,
+     "display": "39%",
+     "good": false
+    },
+    "heldout_falls": {
+     "value": 0.301,
+     "display": "30%",
+     "good": false
+    },
+    "clean": {
+     "value": 1.0,
+     "display": "100%",
+     "good": true
+    },
+    "vjepa": {
+     "value": 0.449,
+     "display": "0.45"
+    },
+    "joint_deg": {
+     "value": 18.1,
+     "display": "18.1°"
+    }
+   }
+  }
+ ],
+ "columns": [
+  {
+   "key": "heldout",
+   "label": "Held-out variants",
+   "note": "Task success on 7 variants outside the training range (64 rollouts each)"
+  },
+  {
+   "key": "heldout_falls",
+   "label": "Falls, held out",
+   "note": "Fall rate on those variants"
+  },
+  {
+   "key": "clean",
+   "label": "On the clip",
+   "note": "Task success on the original clip"
+  },
+  {
+   "key": "vjepa",
+   "label": "V-JEPA 2 similarity",
+   "note": "Cosine similarity to the clip in V-JEPA 2's video embedding (1 = identical)"
+  },
+  {
+   "key": "joint_deg",
+   "label": "Joint-angle gap",
+   "note": "Mean joint-angle difference from the retarget"
+  }
+ ],
+ "robust": {
+  "policies": [
+   {
+    "key": "tracking_var",
+    "label": "Tracking, trained on variants",
+    "color": "#1f9e5b"
+   },
+   {
+    "key": "taskhybrid_var",
+    "label": "Task + tracking, trained on variants",
+    "color": "#b8417a"
+   },
+   {
+    "key": "tracking",
+    "label": "Tracking",
+    "color": "#3987e5"
+   },
+   {
+    "key": "taskhybrid",
+    "label": "Task + tracking",
+    "color": "#d95926"
+   },
+   {
+    "key": "task",
+    "label": "Task",
+    "color": "#c98bf0"
+   }
+  ],
+  "conditions": [
+   {
+    "suite": "transfer",
+    "suite_label": "Held-out variant",
+    "level": "mirrored, 0.6x tempo, 0.8x size",
+    "cells": {
+     "tracking_var": {
+      "fall_rate": 0.0,
+      "vjepa": null,
+      "task_success": 1.0
+     },
+     "taskhybrid_var": {
+      "fall_rate": 0.016,
+      "vjepa": null,
+      "task_success": 0.969
+     },
+     "tracking": {
+      "fall_rate": 1.0,
+      "vjepa": null,
+      "task_success": 0.0
+     },
+     "taskhybrid": {
+      "fall_rate": 1.0,
+      "vjepa": null,
+      "task_success": 0.0
+     },
+     "task": {
+      "fall_rate": 1.0,
+      "vjepa": null,
+      "task_success": 0.0
+     }
+    }
+   },
+   {
+    "suite": "transfer",
+    "suite_label": "Held-out variant",
+    "level": "mirrored, 1.6x tempo, 1.2x size",
+    "cells": {
+     "tracking_var": {
+      "fall_rate": 0.0,
+      "vjepa": null,
+      "task_success": 1.0
+     },
+     "taskhybrid_var": {
+      "fall_rate": 0.484,
+      "vjepa": null,
+      "task_success": 0.5
+     },
+     "tracking": {
+      "fall_rate": 1.0,
+      "vjepa": null,
+      "task_success": 0.0
+     },
+     "taskhybrid": {
+      "fall_rate": 1.0,
+      "vjepa": null,
+      "task_success": 0.0
+     },
+     "task": {
+      "fall_rate": 1.0,
+      "vjepa": null,
+      "task_success": 0.0
+     }
+    }
+   },
+   {
+    "suite": "transfer",
+    "suite_label": "Held-out variant",
+    "level": "0.5x tempo",
+    "cells": {
+     "tracking_var": {
+      "fall_rate": 0.016,
+      "vjepa": null,
+      "task_success": 0.984
+     },
+     "taskhybrid_var": {
+      "fall_rate": 0.578,
+      "vjepa": null,
+      "task_success": 0.422
+     },
+     "tracking": {
+      "fall_rate": 1.0,
+      "vjepa": null,
+      "task_success": 0.0
+     },
+     "taskhybrid": {
+      "fall_rate": 0.906,
+      "vjepa": null,
+      "task_success": 0.094
+     },
+     "task": {
+      "fall_rate": 0.109,
+      "vjepa": null,
+      "task_success": 0.719
+     }
+    }
+   },
+   {
+    "suite": "transfer",
+    "suite_label": "Held-out variant",
+    "level": "0.7x size",
+    "cells": {
+     "tracking_var": {
+      "fall_rate": 0.0,
+      "vjepa": null,
+      "task_success": 1.0
+     },
+     "taskhybrid_var": {
+      "fall_rate": 0.0,
+      "vjepa": null,
+      "task_success": 0.859
+     },
+     "tracking": {
+      "fall_rate": 0.0,
+      "vjepa": null,
+      "task_success": 1.0
+     },
+     "taskhybrid": {
+      "fall_rate": 0.0,
+      "vjepa": null,
+      "task_success": 0.0
+     },
+     "task": {
+      "fall_rate": 0.0,
+      "vjepa": null,
+      "task_success": 0.0
+     }
+    }
+   },
+   {
+    "suite": "transfer",
+    "suite_label": "Held-out variant",
+    "level": "1.25x size",
+    "cells": {
+     "tracking_var": {
+      "fall_rate": 0.0,
+      "vjepa": null,
+      "task_success": 1.0
+     },
+     "taskhybrid_var": {
+      "fall_rate": 0.0,
+      "vjepa": null,
+      "task_success": 0.0
+     },
+     "tracking": {
+      "fall_rate": 0.0,
+      "vjepa": null,
+      "task_success": 1.0
+     },
+     "taskhybrid": {
+      "fall_rate": 0.0,
+      "vjepa": null,
+      "task_success": 0.0
+     },
+     "task": {
+      "fall_rate": 0.0,
+      "vjepa": null,
+      "task_success": 0.0
+     }
+    }
+   },
+   {
+    "suite": "transfer",
+    "suite_label": "Held-out variant",
+    "level": "uneven tempo 0.5",
+    "cells": {
+     "tracking_var": {
+      "fall_rate": 0.0,
+      "vjepa": null,
+      "task_success": 1.0
+     },
+     "taskhybrid_var": {
+      "fall_rate": 0.0,
+      "vjepa": null,
+      "task_success": 1.0
+     },
+     "tracking": {
+      "fall_rate": 0.0,
+      "vjepa": null,
+      "task_success": 1.0
+     },
+     "taskhybrid": {
+      "fall_rate": 0.0,
+      "vjepa": null,
+      "task_success": 1.0
+     },
+     "task": {
+      "fall_rate": 0.0,
+      "vjepa": null,
+      "task_success": 1.0
+     }
+    }
+   },
+   {
+    "suite": "transfer",
+    "suite_label": "Held-out variant",
+    "level": "2x tempo",
+    "cells": {
+     "tracking_var": {
+      "fall_rate": 0.0,
+      "vjepa": null,
+      "task_success": 1.0
+     },
+     "taskhybrid_var": {
+      "fall_rate": 0.0,
+      "vjepa": null,
+      "task_success": 1.0
+     },
+     "tracking": {
+      "fall_rate": 1.0,
+      "vjepa": null,
+      "task_success": 0.0
+     },
+     "taskhybrid": {
+      "fall_rate": 0.812,
+      "vjepa": null,
+      "task_success": 0.188
+     },
+     "task": {
+      "fall_rate": 0.0,
+      "vjepa": null,
+      "task_success": 1.0
+     }
+    }
+   },
+   {
+    "suite": "tempo",
+    "suite_label": "Tempo",
+    "level": "0.5x",
+    "cells": {
+     "tracking_var": {
+      "fall_rate": 0.016,
+      "vjepa": 0.677,
+      "task_success": 0.984
+     },
+     "taskhybrid_var": {
+      "fall_rate": 0.219,
+      "vjepa": 0.424,
+      "task_success": 0.781
+     },
+     "tracking": {
+      "fall_rate": 0.984,
+      "vjepa": 0.492,
+      "task_success": 0.016
+     },
+     "taskhybrid": {
+      "fall_rate": 0.688,
+      "vjepa": 0.59,
+      "task_success": 0.312
+     },
+     "task": {
+      "fall_rate": 0.047,
+      "vjepa": 0.468,
+      "task_success": 0.906
+     }
+    }
+   },
+   {
+    "suite": "tempo",
+    "suite_label": "Tempo",
+    "level": "1.5x",
+    "cells": {
+     "tracking_var": {
+      "fall_rate": 0.0,
+      "vjepa": 0.674,
+      "task_success": 1.0
+     },
+     "taskhybrid_var": {
+      "fall_rate": 0.0,
+      "vjepa": 0.497,
+      "task_success": 1.0
+     },
+     "tracking": {
+      "fall_rate": 0.0,
+      "vjepa": 0.621,
+      "task_success": 1.0
+     },
+     "taskhybrid": {
+      "fall_rate": 0.0,
+      "vjepa": 0.582,
+      "task_success": 1.0
+     },
+     "task": {
+      "fall_rate": 0.0,
+      "vjepa": 0.486,
+      "task_success": 1.0
+     }
+    }
+   },
+   {
+    "suite": "tempo",
+    "suite_label": "Tempo",
+    "level": "2x",
+    "cells": {
+     "tracking_var": {
+      "fall_rate": 0.0,
+      "vjepa": 0.661,
+      "task_success": 0.719
+     },
+     "taskhybrid_var": {
+      "fall_rate": 0.0,
+      "vjepa": 0.532,
+      "task_success": 0.0
+     },
+     "tracking": {
+      "fall_rate": 1.0,
+      "vjepa": 0.355,
+      "task_success": 0.0
+     },
+     "taskhybrid": {
+      "fall_rate": 1.0,
+      "vjepa": 0.345,
+      "task_success": 0.0
+     },
+     "task": {
+      "fall_rate": 0.0,
+      "vjepa": 0.488,
+      "task_success": 0.5
+     }
+    }
+   },
+   {
+    "suite": "push",
+    "suite_label": "Pushed (random)",
+    "level": "0.5 m/s",
+    "cells": {
+     "tracking_var": {
+      "fall_rate": 0.0,
+      "vjepa": 0.646,
+      "task_success": 0.859
+     },
+     "taskhybrid_var": {
+      "fall_rate": 0.016,
+      "vjepa": 0.483,
+      "task_success": 0.984
+     },
+     "tracking": {
+      "fall_rate": 0.0,
+      "vjepa": 0.626,
+      "task_success": 0.953
+     },
+     "taskhybrid": {
+      "fall_rate": 0.0,
+      "vjepa": 0.521,
+      "task_success": 1.0
+     },
+     "task": {
+      "fall_rate": 0.0,
+      "vjepa": 0.451,
+      "task_success": 1.0
+     }
+    }
+   },
+   {
+    "suite": "push",
+    "suite_label": "Pushed (random)",
+    "level": "0.75 m/s",
+    "cells": {
+     "tracking_var": {
+      "fall_rate": 0.0,
+      "vjepa": 0.607,
+      "task_success": 0.938
+     },
+     "taskhybrid_var": {
+      "fall_rate": 0.0,
+      "vjepa": 0.485,
+      "task_success": 1.0
+     },
+     "tracking": {
+      "fall_rate": 0.0,
+      "vjepa": 0.615,
+      "task_success": 0.875
+     },
+     "taskhybrid": {
+      "fall_rate": 0.0,
+      "vjepa": 0.524,
+      "task_success": 1.0
+     },
+     "task": {
+      "fall_rate": 0.0,
+      "vjepa": 0.48,
+      "task_success": 1.0
+     }
+    }
+   },
+   {
+    "suite": "push",
+    "suite_label": "Pushed (random)",
+    "level": "1 m/s",
+    "cells": {
+     "tracking_var": {
+      "fall_rate": 0.062,
+      "vjepa": 0.609,
+      "task_success": 0.75
+     },
+     "taskhybrid_var": {
+      "fall_rate": 0.031,
+      "vjepa": 0.49,
+      "task_success": 0.969
+     },
+     "tracking": {
+      "fall_rate": 0.031,
+      "vjepa": 0.6,
+      "task_success": 0.922
+     },
+     "taskhybrid": {
+      "fall_rate": 0.0,
+      "vjepa": 0.529,
+      "task_success": 1.0
+     },
+     "task": {
+      "fall_rate": 0.0,
+      "vjepa": 0.461,
+      "task_success": 1.0
+     }
+    }
+   },
+   {
+    "suite": "push",
+    "suite_label": "Pushed (random)",
+    "level": "1.5 m/s",
+    "cells": {
+     "tracking_var": {
+      "fall_rate": 0.078,
+      "vjepa": 0.604,
+      "task_success": 0.844
+     },
+     "taskhybrid_var": {
+      "fall_rate": 0.156,
+      "vjepa": 0.476,
+      "task_success": 0.828
+     },
+     "tracking": {
+      "fall_rate": 0.156,
+      "vjepa": 0.576,
+      "task_success": 0.719
+     },
+     "taskhybrid": {
+      "fall_rate": 0.031,
+      "vjepa": 0.512,
+      "task_success": 0.969
+     },
+     "task": {
+      "fall_rate": 0.031,
+      "vjepa": 0.471,
+      "task_success": 0.969
+     }
+    }
+   },
+   {
+    "suite": "noref",
+    "suite_label": "No reference",
+    "level": "frozen",
+    "cells": {
+     "tracking_var": {
+      "fall_rate": 0.0,
+      "vjepa": 0.402,
+      "task_success": 0.0
+     },
+     "taskhybrid_var": {
+      "fall_rate": 0.906,
+      "vjepa": 0.32,
+      "task_success": 0.0
+     },
+     "tracking": {
+      "fall_rate": 0.0,
+      "vjepa": 0.355,
+      "task_success": 0.0
+     },
+     "taskhybrid": {
+      "fall_rate": 0.0,
+      "vjepa": 0.344,
+      "task_success": 0.0
+     },
+     "task": {
+      "fall_rate": 0.0,
+      "vjepa": 0.328,
+      "task_success": 0.0
+     }
+    }
+   }
+  ],
+  "reps": 64,
+  "metric": "task_success"
+ },
+ "sources": [
+  "outputs/remote_robust_gen2_kick/robust.json",
+  "outputs/remote_variants_var_kick/task_spec.json",
+  "outputs/remote_variants_var_kick/variants/variants.json"
+ ],
+ "notes": [
+  "Single-clip task and task + tracking are the spec-fixed retrains (docs/KEYPOSE_SPEC.md)."
+ ]
+}

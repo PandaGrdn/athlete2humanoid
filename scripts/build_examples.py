@@ -16,6 +16,12 @@ Examples:
                      exists, then filled by re-running this script
   front-kick         the keypose task (docs/KEYPOSE_SPEC.md) on a front kick, an action no earlier run
                      trained on (outputs/remote_latent_kp_kick)
+  squat-jump-variants, front-kick-variants
+                     policies trained on automatic variants of the clip, tested on held-out variants
+                     (docs/GENERALIZATION.md; outputs/remote_variants_var_*, outputs/remote_robust_gen2_*)
+
+The gallery shows BUILDERS: the variant-trained policies first, then the retarget and goal-relevance
+pieces of the pipeline. The other builders are kept for older runs but no longer listed.
 
 Videos are re-encoded to H.264 yuv420p (plays everywhere, unlike the 4:4:4 clip renders), at most
 720 px tall, 30 fps, a keyframe every 0.5 s so synchronized scrubbing is snappy. Encodes are cached by
@@ -40,7 +46,8 @@ REPO = Path(__file__).resolve().parents[1]
 OUT = REPO / "web" / "public" / "examples"
 MAX_FILE_MB = 25
 MAX_TOTAL_MB = 60
-POLICY_COLOR = {"tracking": "#3987e5", "hybrid": "#d95926", "latent": "#199e70", "task": "#c98bf0", "taskphase": "#e0a43a"}
+POLICY_COLOR = {"tracking": "#3987e5", "hybrid": "#d95926", "latent": "#199e70", "task": "#c98bf0", "taskphase": "#e0a43a",
+                "taskhybrid": "#d95926", "tracking_var": "#1f9e5b", "taskhybrid_var": "#b8417a"}
 POLICY_INFO = {
     "tracking": ("Tracking", "Copies the retarget's joint angles (the standard motion-imitation reward)."),
     "hybrid": ("Hybrid", "Joint tracking plus a V-JEPA 2 latent reward: rewarded for looking like the clip."),
@@ -49,6 +56,11 @@ POLICY_INFO = {
                      "V-JEPA 2 style. Ends only on a fall."),
     "taskphase": ("Task (no reference)", "Like Task, but the policy never sees the retarget: only its own body, "
                                          "a clock and the current stage."),
+    "taskhybrid": ("Task + tracking", "The clip's key moments in order, plus joint tracking. Trained on the clip alone."),
+    "tracking_var": ("Tracking, trained on variants", "Joint tracking, trained on 36 automatic variants of the clip "
+                                                      "(mirrored, re-timed, scaled) at once."),
+    "taskhybrid_var": ("Task + tracking, trained on variants", "Key moments plus tracking, each variant scored "
+                                                               "against its own spec; trained on the same 36 variants."),
 }
 STAGE_LABEL = {"stand": "Stand", "squat": "Squat", "jump": "Jump", "land": "Land"}
 
@@ -215,6 +227,9 @@ def policy_rows(ev, keys):
 
 
 POLICY_COLUMNS = {
+    "heldout": ("Held-out variants", "Task success on 7 variants outside the training range (64 rollouts each)"),
+    "heldout_falls": ("Falls, held out", "Fall rate on those variants"),
+    "clean": ("On the clip", "Task success on the original clip"),
     "stages": ("Stages done", "Stages of the action completed in order, judged on the robot's own body"),
     "falls": ("Falls", "Falls in the evaluation rollout"),
     "jump_q": ("Jump quality", "Per jump: 1 = apex within the clip's height range"),
@@ -830,6 +845,103 @@ def ex_keypose_kick(runs, media):
             "notes": []}
 
 
+# --- variant-trained policies (docs/GENERALIZATION.md) ----------------------------------------------
+
+def variant_label(name):
+    """skill.variations.name -> words: 'm_t0.6_a0.8' -> 'mirrored, 0.6x tempo, 0.8x size'."""
+    parts = name.split("_")
+    out = ["mirrored"] if parts[0] == "m" else []
+    for p in parts[1:]:
+        if p.startswith("t") and p != "t1":
+            out.append(f"{p[1:]}x tempo")
+        elif p.startswith("a") and p != "a1":
+            out.append(f"{p[1:]}x size")
+        elif p.startswith("w"):
+            out.append(f"uneven tempo {p[1:]}")
+    return ", ".join(out) or "the clip"
+
+
+def ex_variants(runs, media, short, target, title, single_run):
+    """Tracking and task+tracking trained on automatic variants of a clip, against the single-clip policies on
+    held-out variants (experiments/variant_policy.py, then robustness_eval with --transfer)."""
+    ex_id = f"{target.replace('_', '-')}-variants"
+    run, rb_f = runs / f"remote_variants_var_{short}", runs / f"remote_robust_gen2_{short}" / "robust.json"
+    rb = read_json(rb_f)
+    summ, meta = rb["summary"], rb["meta"]
+    keys = ["tracking_var", "taskhybrid_var", "tracking", "taskhybrid", "task"]
+    pct = lambda x: f"{x:.0%}"  # noqa: E731
+    spec = read_json(run / "task_spec.json")
+    clip = run / "clips" / target
+    held = [c for c in rb["conditions"] if c["suite"] == "transfer"]
+    moments = [st for st in spec["stages"] if st["kind"] == "pose"]
+    poster_at = moments[0]["start_s"] if moments else None
+    rows = []
+    for k in keys:
+        label, what = POLICY_INFO[k][0], KEYPOSE_REWARD.get(k, POLICY_INFO[k][1])
+        t, c = summ[k]["transfer"], summ[k]["clean"]
+        v = {"heldout": {"value": r(t["task_success"]), "display": pct(t["task_success"]), "good": t["task_success"] >= 0.75},
+             "heldout_falls": {"value": r(t["fall_rate"]), "display": pct(t["fall_rate"]), "good": t["fall_rate"] == 0},
+             "clean": {"value": r(c["task_success"]), "display": pct(c["task_success"]), "good": c["task_success"] == 1}}
+        if c.get("vjepa_aligned") is not None:
+            v["vjepa"] = {"value": r(c["vjepa_aligned"]), "display": f"{c['vjepa_aligned']:.2f}"}
+        if c.get("dtw_joint_rad") is not None:
+            v["joint_deg"] = {"value": r(c["dtw_joint_rad"] * 57.29578, 1), "display": f"{c['dtw_joint_rad'] * 57.29578:.1f}°"}
+        rows.append({"key": k, "label": label, "color": POLICY_COLOR[k], "reward": what, "values": v})
+    best = max(("tracking", "taskhybrid", "task"), key=lambda k: summ[k]["transfer"]["task_success"])
+    tv, base = summ["tracking_var"]["transfer"], summ[best]["transfer"]
+    names = {"transfer": "Held-out variant", "tempo": "Tempo", "push": "Pushed (random)", "noref": "No reference"}
+    conditions = [{"suite": c["suite"], "suite_label": names[c["suite"]],
+                   "level": variant_label(c["level"]) if c["suite"] == "transfer" else c["level"],
+                   "cells": {k: {"fall_rate": r(c["policies"][k]["fall_rate"]), "vjepa": r(c["policies"][k].get("vjepa_aligned")),
+                                 "task_success": r(c["policies"][k].get("task_success"))} for k in keys}}
+                  for c in rb["conditions"] if c["suite"] in names]
+    conditions.sort(key=lambda c: list(names).index(c["suite"]))
+    grid = (policy_videos(media, ex_id, run, ["tracking_var", "taskhybrid_var"], poster_at=poster_at)
+            + policy_videos(media, ex_id, runs / single_run, ["tracking"], poster_at=poster_at))
+    for v in grid:
+        if v["policy"] == "tracking":
+            v["label"] = "Tracking, this clip only"
+    return {
+        "id": ex_id, "status": "ready", "kicker": "Generalisation",
+        "title": f"{title}: learning the action, not the recording",
+        "tagline": (f"Trained on 36 automatic variants of one clip, the tracker completes {pct(tv['task_success'])} of "
+                    f"{len(held)} variants it never saw, with {pct(tv['fall_rate'])} falls. The best single-clip policy "
+                    f"manages {pct(base['task_success'])} and falls {pct(base['fall_rate'])} of the time."),
+        "story": {
+            "shown": (f"The {target.replace('_', ' ')} phone video, retargeted to the G1, then turned into variants with "
+                      "nothing action-specific: mirrored, faster and slower, bigger and smaller, unevenly re-timed. "
+                      "Each variant gets its own key-moment spec from the same compiler."),
+            "learned": ("Two policies trained on all the training variants at once, warm-started from the clip's "
+                        "tracking policy. Each environment plays one variant and is scored against that variant's spec."),
+            "how": (f"{len(held)} held-out variants outside the training range ("
+                    + "; ".join(variant_label(c["level"]) for c in held)
+                    + f"), {meta['reps']} rollouts each. Success: every key moment in order, no fall."),
+        },
+        "duration_s": clip_duration(clip),
+        "stages": keypose_stages(spec),
+        "primary": (media.video(ex_id, "source", clip / "side_by_side.mp4", label="Phone video → G1 reference",
+                                panels=_sbs_panels(clip / "side_by_side.mp4"), poster_at=poster_at)
+                    if (clip / "side_by_side.mp4").exists() else None),
+        "grid": grid,
+        "grid_caption": "On the original clip. Solid robot: the trained policy, physically simulated. Green ghost: the reference.",
+        "extra": [],
+        "metrics": [
+            {"label": "Held-out variants completed", "display": pct(tv["task_success"]),
+             "note": f"tracking trained on variants; {pct(base['task_success'])} for the best single-clip policy", "tone": "good"},
+            {"label": "Falls on held-out variants", "display": pct(tv["fall_rate"]),
+             "note": f"{pct(base['fall_rate'])} for that single-clip policy", "tone": "good" if tv["fall_rate"] == 0 else None},
+            {"label": "V-JEPA 2 similarity", "display": f"{summ['tracking_var']['clean']['vjepa_aligned']:.2f}",
+             "note": f"on the clip; single-clip tracking {summ['tracking']['clean']['vjepa_aligned']:.2f}"},
+        ],
+        "policies": rows,
+        "columns": columns_for(rows),
+        "robust": {"policies": [{"key": k, "label": POLICY_INFO[k][0], "color": POLICY_COLOR[k]} for k in keys],
+                   "conditions": conditions, "reps": meta["reps"], "metric": "task_success"},
+        "sources": [_rel(runs, rb_f), _rel(runs, run / "task_spec.json"), _rel(runs, run / "variants" / "variants.json")],
+        "notes": ["Single-clip task and task + tracking are the spec-fixed retrains (docs/KEYPOSE_SPEC.md)."],
+    }
+
+
 # --- small formatting helpers ---------------------------------------------------------------------
 
 def _n(k, word):
@@ -854,7 +966,7 @@ def _sbs_panels(path):
 
 # --- build / check -------------------------------------------------------------------------------
 
-BUILDERS = ["squat-v1", "retarget", "goal-relevance", "robustness", "squat-jump-final", "robustness-final", "front-kick"]
+BUILDERS = ["squat-jump-variants", "front-kick-variants", "retarget", "goal-relevance"]
 
 
 def build(runs, out, force=False):
@@ -869,16 +981,18 @@ def build(runs, out, force=False):
               "robustness": lambda: ex_robustness(runs, built["squat-v1"]["grid"]),
               "squat-jump-final": lambda: ex_final(runs, media),
               "robustness-final": lambda: ex_robustness_final(runs, built.get("squat-jump-final")),
-              "front-kick": lambda: ex_keypose_kick(runs, media)}[name]()
+              "front-kick": lambda: ex_keypose_kick(runs, media),
+              "squat-jump-variants": lambda: ex_variants(runs, media, "sj", "squat_jump", "Squat jump", "remote_latent_final"),
+              "front-kick-variants": lambda: ex_variants(runs, media, "kick", "front_kick", "Front kick",
+                                                         "remote_latent_kp_kick")}[name]()
         built[name] = ex
         ex.setdefault("status", "ready")
         (out / ex["id"]).mkdir(parents=True, exist_ok=True)
         (out / ex["id"] / "example.json").write_text(json.dumps(ex, indent=1, ensure_ascii=False) + "\n")
         exs.append(ex)
         print(f"  ok ({time.time() - t:.1f} s)")
-    # The finished task policy leads once it exists, then the keypose kick; a pending slot goes last.
-    first = {"squat-jump-final": 0, "front-kick": 1, "robustness-final": 2}
-    exs.sort(key=lambda e: (e["status"] != "ready", first.get(e["id"], 2)))
+    # In BUILDERS order; a pending slot goes last.
+    exs.sort(key=lambda e: (e["status"] != "ready", BUILDERS.index(e["id"])))
     index = {"version": 1, "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
              "examples": [{k: e.get(k) for k in ("id", "kicker", "title", "tagline", "status")}
                           | {"poster": _poster(e), "video": (e.get("primary") or {}).get("src")} for e in exs]}

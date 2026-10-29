@@ -69,7 +69,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="section" id="examples">
+      {!offline && <section className="section" id="examples">
         <div className="section-head">
           <div>
             <div className="eyebrow">Examples</div>
@@ -79,7 +79,7 @@ export default function Home() {
           <Link className="btn sm" to="/examples">All examples <Icon name="arrow" size={14} /></Link>
         </div>
         <ExampleCards {...exIdx} />
-      </section>
+      </section>}
 
       <section className="section" id="how">
         <div className="section-head">
@@ -156,10 +156,7 @@ export default function Home() {
           </div>
         </div>
         {err && <div className="error-box">Couldn't load runs: {err}</div>}
-        {offline && !runs && (
-          <div className="notice"><Icon name="film" /><div>Finished runs are listed by the pipeline API, which isn't
-            reachable. The <Link to="/examples" style={{ color: "var(--accent)" }}>examples</Link> show the same runs' results.</div></div>
-        )}
+        {offline && !runs && <ExampleCards {...exIdx} />}
         {!runs && !err && !offline && <div className="gallery">{[0, 1].map((i) => <div key={i} className="skeleton" style={{ height: 380 }} />)}</div>}
         {runs && runs.length === 0 && <div className="notice">No finished runs found in the runs folder yet.</div>}
         {runs && runs.length > 0 && <div className="gallery">{runs.map((r) => <RunCard key={r.id} run={r} />)}</div>}
