@@ -62,7 +62,7 @@ export default function Showcase() {
     <div className="sc">
       <section className="sc-stage" aria-label="The trained G1 policy in 3D">
         <div className="sc-glow" aria-hidden="true" />
-        {!glErr && <canvas ref={canvas} className="sc-canvas" aria-label="The Unitree G1 performing the squat jump. Drag to orbit, scroll or pinch to zoom, click the robot to push it." />}
+        {!glErr && <canvas ref={canvas} className="sc-canvas" aria-label="The Unitree G1 performing the squat jump. Drag to orbit, pinch or ctrl-scroll to zoom, click the robot to push it." />}
         {glErr && data && (
           <video className="sc-fallback" src={exUrl(`${data.show.example}/policy_tracking_var.mp4`)} autoPlay muted loop playsInline />
         )}
@@ -192,7 +192,7 @@ function Hint() {
   useEffect(() => { const id = window.setTimeout(() => setGone(true), 9000); return () => window.clearTimeout(id); }, []);
   return (
     <div className={`sc-hint mono ${gone ? "gone" : ""}`} aria-hidden="true">
-      <span>Drag to orbit</span><span>Scroll or pinch to zoom</span><span>Click the robot to push</span>
+      <span>Drag to orbit</span><span>Pinch or ⌘/ctrl + scroll to zoom</span><span>Click the robot to push</span>
     </div>
   );
 }
