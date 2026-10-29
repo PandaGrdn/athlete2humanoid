@@ -47,6 +47,11 @@ def latent_out(a):
 
 def job_spec(a):
     """(setup flag, command run in the repo after setup, {local name: remote path} to fetch)."""
+    if a.job == "pro":  # scripts/pro_clips.sh: new videos -> SAM (installed at job start) -> trained, tested policies
+        if not a.reuse:
+            raise SystemExit("pro needs --reuse <a folder with policy_*/model_*.pt and vjl_pca.npz>")
+        return ("--with-main", f"bash scripts/pro_clips.sh {a.iters} {{clips}}",
+                {"results.tar.gz": f"{REMOTE}/outputs/pro/results.tar.gz"})
     if a.job == "process":  # experiments/process_clips.py: new videos -> clip folders (SAM, retarget, V-JEPA), no training
         out = f"{REMOTE}/outputs/process" + (f"_{a.tag}" if a.tag else "")
         return ("--with-sam", f"python3 experiments/process_clips.py {{clips}} --out {out}",
@@ -368,7 +373,7 @@ def main(a):
         fs.resolve()
         REMOTE = fs.run_dir
     setup, cmd, fetch = job_spec(a)
-    found = [] if a.smoke or a.reuse else wait_for_clips(a.min_clips, a.max_wait_h)
+    found = [] if a.smoke or (a.reuse and a.job != "pro") else wait_for_clips(a.min_clips, a.max_wait_h)
     if a.job in ("robust", "relevance") and not a.reuse:
         raise SystemExit(f"{a.job} needs --reuse <a latent run's results folder>")
     inputs = (pack_reuse(a.reuse, policies=a.job == "robust" or a.with_weights) if a.reuse
@@ -418,7 +423,7 @@ def main(a):
 
 def parser():
     ap = argparse.ArgumentParser()
-    ap.add_argument("job", choices=["probe", "latent", "robust", "relevance", "variants", "multiclip", "process"])
+    ap.add_argument("job", choices=["probe", "latent", "robust", "relevance", "variants", "multiclip", "process", "pro"])
     ap.add_argument("--min-clips", type=int, default=6)
     ap.add_argument("--clips-dir", default=str(REPO / "clips"), help="where the videos to upload are (default clips/)")
     ap.add_argument("--max-wait-h", type=float, default=8)
