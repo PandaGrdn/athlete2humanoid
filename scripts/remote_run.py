@@ -26,6 +26,7 @@ docs/FARMSHARE.md): for when Colab compute units run out. Colab stays the defaul
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tarfile
@@ -38,6 +39,7 @@ SKIP = {"bedroom"}  # test footage, not an action clip
 REMOTE = "/content/a2h"  # on FarmShare: <fs-root>/runs/<session>, set in main()
 OUT = SESSION = None  # set in main()
 CLIPS_DIR = REPO / "clips"  # --clips-dir
+BRANCH = "main"  # --branch: the code the GPU job runs
 
 
 def latent_out(a):
@@ -206,9 +208,10 @@ def launch(found, setup, cmd, inputs=None):
 import os, subprocess
 R = "/content/athlete2humanoid"
 if not os.path.exists(R):
-    subprocess.run(["git", "clone", "-q", "https://github.com/PandaGrdn/athlete2humanoid.git", R], check=True)
+    subprocess.run(["git", "clone", "-q", "--branch", "{BRANCH}", "https://github.com/PandaGrdn/athlete2humanoid.git", R], check=True)
 else:
-    subprocess.run(["git", "-C", R, "pull", "-q"], check=True)
+    subprocess.run(["git", "-C", R, "fetch", "-q", "origin", "{BRANCH}"], check=True)
+    subprocess.run(["git", "-C", R, "checkout", "-q", "-B", "{BRANCH}", "FETCH_HEAD"], check=True)
 env = dict(os.environ, MUJOCO_GL="egl", A2H_SAM_PYTHON="/content/sam_env/bin/python",
            A2H_OUTPUT_DIR="{REMOTE}/outputs", A2H_SECRETS_DIR="{REMOTE}/env", A2H_ASSETS_DIR=R + "/assets")
 subprocess.Popen(["python3", R + "/scripts/job.py", "{SESSION}", "--", "bash", "-c", {inner!r}], env=env,
@@ -320,7 +323,7 @@ def run_modal(a, mr, found, setup, cmd, fetch, inputs):
         raise SystemExit("the Modal image has no SAM 3.1 (new videos): run this job on Colab, or --reuse processed clips")
     mr.deploy()
     mr.upload(found, inputs, REPO / ".env")
-    mr.submit(cmd.format(clips=" ".join(f"'{REMOTE}/clips/{p.name}'" for p in found)))
+    mr.submit(cmd.format(clips=" ".join(f"'{REMOTE}/clips/{p.name}'" for p in found)), a.branch)
     try:
         state = wait(mr, lambda: sync_checkpoints(a, mr.download))
     except KeyboardInterrupt:
@@ -365,8 +368,14 @@ def run_farmshare(a, fs, found, setup, cmd, fetch, inputs):
 
 
 def main(a):
-    global OUT, SESSION, REMOTE, CLIPS_DIR
+    global OUT, SESSION, REMOTE, CLIPS_DIR, BRANCH
     CLIPS_DIR = Path(a.clips_dir).resolve()
+    BRANCH = a.branch
+    if not re.fullmatch(r"[A-Za-z0-9._/-]+", BRANCH):
+        raise SystemExit(f"odd branch name: {BRANCH}")
+    pushed = subprocess.run(["git", "ls-remote", "--heads", "origin", BRANCH], cwd=REPO, capture_output=True, text=True)
+    if BRANCH not in pushed.stdout:
+        raise SystemExit(f"branch {BRANCH} isn't on GitHub: push it first (the GPU job clones it from there)")
     SESSION = a.job + ("_smoke" if a.smoke else "") + (f"_{a.tag}" if a.tag else "")
     OUT = REPO / "outputs" / f"remote_{SESSION}"
     OUT.mkdir(parents=True, exist_ok=True)
@@ -442,6 +451,7 @@ def parser():
     ap.add_argument("--iters", type=int, default=1500)
     ap.add_argument("--smoke", action="store_true")
     ap.add_argument("--tag", default="", help="names the run (outputs/remote_<job>_<tag>)")
+    ap.add_argument("--branch", default="main", help="the repo branch the GPU job runs (pushed to GitHub); Modal and Colab")
     ap.add_argument("--reuse", help="an earlier latent run's results folder: its clips and rollouts")
     ap.add_argument("--with-weights", action="store_true",
                     help="with --reuse: upload its trained policies too (for --args '--init/--resume-from /content/a2h/inputs')")

@@ -54,9 +54,9 @@ class ModalRun:
                 b.put_file(io.BytesIO((token.strip() + "\n").encode()), f"{self.rel}/env/HF_TOKEN")
         self.log(f"uploaded {len(found)} clip(s)" + (", inputs" if inputs else "") + (", HF token line" if token else ""))
 
-    def submit(self, cmd):
+    def submit(self, cmd, branch="main"):
         fn = self.modal.Function.from_name(APP, "run_job")
-        self.call = fn.spawn(self.session, cmd)
+        self.call = fn.spawn(self.session, cmd, branch)
         (self.out / "modal_call.json").write_text(json.dumps({"call_id": self.call.object_id, "session": self.session}))
         self.log(f"{self.session} running on Modal (call {self.call.object_id})")
 

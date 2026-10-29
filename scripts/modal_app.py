@@ -65,10 +65,11 @@ def _gl():
 
 
 @app.function(gpu=GPU, volumes={MOUNT: vol}, timeout=TIMEOUT_H * 3600, cpu=8, memory=65536)
-def run_job(session: str, cmd: str) -> int:
-    """cmd (from remote_run.job_spec) under scripts/job.py, with runs/<session>/ as its data folder."""
+def run_job(session: str, cmd: str, branch: str = "main") -> int:
+    """cmd (from remote_run.job_spec) under scripts/job.py, with runs/<session>/ as its data folder;
+    the code is `branch` of the repo (remote_run.py --branch), main by default."""
     remote = f"{MOUNT}/runs/{session}"
-    subprocess.run(["git", "clone", "-q", "--depth", "1", REPO_URL, R], check=True)
+    subprocess.run(["git", "clone", "-q", "--depth", "1", "--branch", branch, REPO_URL, R], check=True)
     os.symlink("/opt/a2h/assets", f"{R}/assets")
     if Path(f"{remote}/inputs.tar.gz").exists():
         import tarfile
