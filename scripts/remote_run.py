@@ -144,7 +144,7 @@ def pack_reuse(src, policies=False, checkpoints=None):
         tar.add(src / "clips", "clips")
         for q in src.glob("policy_*/policy_qpos.npy"):
             tar.add(q, f"{q.parent.name}/{q.name}")
-        for name in ("reward.pt", "distill_report.json"):  # used only with --args "--reward ..."
+        for name in ("reward.pt", "distill_report.json", "vjl_pca.npz"):  # --args "--reward ..."; multiclip --pca
             if (src / name).exists():
                 tar.add(src / name, name)
         if (src / "transfer").is_dir():  # robust job: clips the policies never trained on (--transfer)

@@ -14,6 +14,10 @@
      multi_vj      + the video's V-JEPA latent now and 0.5 / 1 s ahead
      multi_future  + the retarget's joints and pelvis height 0.5 / 1 s ahead (the control: the same
                    look-ahead, no V-JEPA; if multi_vj only beats multi, it may be the look-ahead)
+Adapting to a new clip (--train <clip> --held-out --pca <first run>/vjl_pca.npz --init-dir <first run>): the
+same three, each fine-tuned briefly from its own weights on the new clip's variants, against a policy
+that never saw the other clips (tracking_var, from --init): does the generalist adapt faster?
+
 4. experiments/robustness_eval.py runs each clip, trained on or held out, with all three: the clip
    itself, its HELD_OUT variants (each with its own latent), tempo changes and pushes. Summarised in
    multiclip_summary.md.
@@ -63,9 +67,10 @@ def latents(clips_dir, names, smoke):
     return out
 
 
-def build(clips_dir, out, py, env, train, held, seed=0, smoke=False):
+def build(clips_dir, out, py, env, train, held, seed=0, smoke=False, pca=None):
     """-> out/motion_variants.npz (+ .vjl.npy), variants/variants.json, vjl_pca.npz, and per clip
-    evals/<clip>/{motion.npz, motion.vjl.npy, task_spec.json, transfer/<variant>.npz (+ .vjl.npy)}."""
+    evals/<clip>/{motion.npz, motion.vjl.npy, task_spec.json, transfer/<variant>.npz (+ .vjl.npy)}.
+    pca: an earlier run's (its policies' latent space), else fitted on the training clips."""
     from latent import video_condition as VC
     from skill import variations as V
     from skill import task as T
@@ -73,10 +78,11 @@ def build(clips_dir, out, py, env, train, held, seed=0, smoke=False):
     from train_motion import csv_to_npz
     g1 = V.G1()
     raw = latents(clips_dir, [*train, *held], smoke)
-    pca = VC.fit_pca([x for c in train for x in raw[c]])
+    if pca is None:
+        pca = VC.fit_pca([x for c in train for x in raw[c]])
+        log(f"PCA on the {len(train)} training clips' latents: {VC.K} components keep {pca['explained']:.0%} of the variance")
     np.savez(out / "vjl_pca.npz", **pca)
     z = {c: tuple(VC.project(x, pca) for x in raw[c]) for c in raw}
-    log(f"PCA on the {len(train)} training clips' latents: {VC.K} components keep {pca['explained']:.0%} of the variance")
 
     grid = V.TRAIN[:2] if smoke else V.TRAIN
     held_grid = V.HELD_OUT[:2] if smoke else V.HELD_OUT
@@ -123,17 +129,20 @@ def build(clips_dir, out, py, env, train, held, seed=0, smoke=False):
 
 def train_all(a, out, clips_dir):
     procs = {}
-    roll = out / "evals" / ROLLOUT_CLIP
+    rollout = ROLLOUT_CLIP if ROLLOUT_CLIP in a.train else a.train[0]
+    roll = out / "evals" / rollout
     for name in a.policies:
         d = out / f"policy_{name}"
         d.mkdir(exist_ok=True)
-        cmd = [sys.executable, ROOT / "train_motion.py", "--csv", clips_dir / ROLLOUT_CLIP / "motion.csv", "--fps", 30,
+        cmd = [sys.executable, ROOT / "train_motion.py", "--csv", clips_dir / rollout / "motion.csv", "--fps", 30,
                "--out", d, "--iters", a.iters, "--num-envs", a.num_envs, "--task", TASKS[name],
                "--variants", out / "variants" / "variants.json", "--train-motion", out / "motion_variants.npz"]
         if name == "multi_vj":
             cmd += ["--video-latent", out / "motion_variants.vjl.npy", "--rollout-video-latent", roll / "motion.vjl.npy"]
-        if a.init:
-            cmd += ["--init", a.init]
+        own = sorted(Path(a.init_dir).glob(f"policy_{name}/model_*.pt"), key=lambda p: int(p.stem.split("_")[1])) if a.init_dir else []
+        init = own[-1] if own else a.init
+        if init:
+            cmd += ["--init", init]
         procs[name] = subprocess.Popen(list(map(str, cmd)), stdout=open(d / "train.log", "w"), stderr=subprocess.STDOUT)
         log(f"training {name} ({TASKS[name]}); log {d / 'train.log'}")
     while procs:
@@ -248,7 +257,7 @@ def main(a):
     py = Path(os.environ.get("A2H_MJLAB_PYTHON", "/content/mjlab_env/bin/python"))
     env = dict(os.environ, MUJOCO_GL=os.environ.get("MUJOCO_GL", "egl"), WANDB_MODE="disabled")
     if not (out / "motion_variants.npz").exists():
-        build(clips_dir, out, py, env, train, held, a.seed, a.smoke)
+        build(clips_dir, out, py, env, train, held, a.seed, a.smoke, dict(np.load(a.pca)) if a.pca else None)
     if a.build_only:
         return
     train_all(a, out, clips_dir)
@@ -262,9 +271,11 @@ if __name__ == "__main__":
     ap.add_argument("clips", help="folder of processed clips (qpos.npy, meta.json, motion.csv, silhouette.mp4, video_latent.npz)")
     ap.add_argument("--out", required=True)
     ap.add_argument("--train", nargs="+", default=list(TRAIN_CLIPS))
-    ap.add_argument("--held-out", nargs="+", default=list(HELD_OUT_CLIPS))
-    ap.add_argument("--policies", nargs="+", default=list(POLICIES), choices=list(POLICIES))
-    ap.add_argument("--init", help="checkpoint all three start from (a tracking policy)")
+    ap.add_argument("--held-out", nargs="*", default=list(HELD_OUT_CLIPS))
+    ap.add_argument("--policies", nargs="+", default=list(POLICIES), choices=[*POLICIES, "tracking_var"])
+    ap.add_argument("--init", help="checkpoint they start from (a tracking policy)")
+    ap.add_argument("--init-dir", help="a folder of policy_<name>/model_*.pt: each policy starts from its own")
+    ap.add_argument("--pca", help="an earlier run's vjl_pca.npz (adapting its policies)")
     ap.add_argument("--iters", type=int, default=2000)
     ap.add_argument("--num-envs", type=int, default=4096)
     ap.add_argument("--reps", type=int, default=64, help="rollouts per policy per eval condition")
