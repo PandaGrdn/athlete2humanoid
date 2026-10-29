@@ -122,7 +122,6 @@ function AetherNav() {
           <NavLink to="/live">Live</NavLink>
           <NavLink to="/showcase">Showcase</NavLink>
           <NavLink to="/research">Research</NavLink>
-          <Link to="/#run">Run</Link>
         </nav>
         <Link to="/" className="ae-brand" aria-label="athlete2humanoid, home">
           <span>Athlete</span><span>2 Humanoid</span>

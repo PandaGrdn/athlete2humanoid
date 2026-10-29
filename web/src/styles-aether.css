@@ -1,5 +1,5 @@
 /* Aether: the black-and-white design (theme.ts), after Nous Research's Hermes Agent: thin condensed display
-   type, spaced uppercase labels, hairlines, and the robot at the centre of a radiant halo. Every rule is
+   type, spaced uppercase labels, hairlines (video keeps its own colour), and the robot at the centre of a radiant halo. Every rule is
    scoped to :root[data-ui="aether"], so the classic design (styles.css) is untouched and stays the fallback. Aether is the default. */
 
 :root[data-ui="aether"] {
@@ -46,7 +46,6 @@
 
 [data-ui="aether"] h1, [data-ui="aether"] h2 { font-family: var(--display); font-weight: 200; letter-spacing: -0.01em; }
 [data-ui="aether"] h3, [data-ui="aether"] h4 { font-family: var(--display); font-weight: 500; letter-spacing: 0.01em; font-size: 1.12em; }
-[data-ui="aether"] video { filter: grayscale(1) contrast(1.06); }
 
 /* --- nav: links either side of a stacked wordmark ------------------------------------------- */
 [data-ui="aether"] .ae-nav { border-bottom: 1px solid var(--border); }
@@ -94,7 +93,7 @@
 .ae-core { position: absolute; inset: 26%; border-radius: 50%; overflow: hidden; background: #000;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25), 0 0 80px 10px rgba(255, 255, 255, 0.06); }
 .ae-core a, .ae-core video { display: block; width: 100%; height: 100%; }
-.ae-core video { object-fit: cover; object-position: 46% 50%; transform: scale(1.18); filter: grayscale(1) contrast(1.2) brightness(1.08); }
+.ae-core video { object-fit: cover; object-position: 46% 50%; transform: scale(1.18); }
 @keyframes ae-turn { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .ae-rays { animation: none; } }
 
@@ -162,6 +161,5 @@
 /* --- home: the showcase teaser ------------------------------------------------------------------ */
 [data-ui="aether"] .home-sc { background: transparent; }
 [data-ui="aether"] .home-sc-media { border-right: 1px solid var(--border); }
-[data-ui="aether"] .home-sc-media video { filter: grayscale(1) contrast(1.1); }
 [data-ui="aether"] .home-sc-body h2 { font-size: clamp(40px, 5vw, 72px); line-height: 0.9; }
 [data-ui="aether"] .home-sc-body p { font-size: 14.5px; line-height: 1.65; }

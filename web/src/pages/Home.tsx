@@ -6,6 +6,7 @@ import { AetherHero } from "../components/aether";
 import { Icon, LoopVideo } from "../components/ui";
 import { exUrl } from "../examples";
 import { useExampleIndex } from "./Examples";
+import { startLiveBuild } from "./LivePage";
 
 const PIPELINE = [
   { title: "Silhouette", text: "Segment and track the person through every frame.", model: "SAM 3.1" },
@@ -248,12 +249,18 @@ function UploadPanel({ offline }: { offline: boolean }) {
   const exts = health?.limits.extensions ?? [".mp4", ".mov", ".m4v", ".webm"];
   const maxMb = health?.limits.max_upload_mb ?? 100;
   const runners = (health?.runners ?? []).filter((r) => r !== "live"); // live builds have their own page
+  const live = !!health?.runners.includes("live");
 
   const pick = (f: File | undefined) => {
     setErr(null);
     if (!f) return;
     const bad = checkVideo(f, health);
     if (bad) return setErr(bad);
+    if (live) {  // straight to the live view: the clip, its pose, the G1 and the task, stage by stage
+      setBusy(true);
+      startLiveBuild(f, nav).catch((e) => { setErr((e as Error).message); setBusy(false); });
+      return;
+    }
     if (preview) URL.revokeObjectURL(preview);
     setFile(f);
     setPreview(URL.createObjectURL(f));
@@ -283,7 +290,7 @@ function UploadPanel({ offline }: { offline: boolean }) {
         onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && input.current?.click()}
       >
         <div className="icon"><Icon name="upload" size={22} /></div>
-        <h3>Drop a video, or click to choose</h3>
+        <h3>{busy && live ? "Uploading…" : "Drop a video, or click to choose"}</h3>
         <p>{exts.join(" ")} · up to {maxMb} MB · one person, full body, 5–20 s works best</p>
         <input ref={input} type="file" accept={exts.join(",") + ",video/*"} hidden onChange={(e) => pick(e.target.files?.[0])} />
       </div>

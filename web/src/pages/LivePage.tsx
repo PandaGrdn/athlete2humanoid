@@ -18,6 +18,15 @@ const STEPS = [
 // survive the navigation (not a reload: then the job's processed video stands in).
 const localFiles = new Map<string, File>();
 
+/** Upload a clip as a live build and open its page, where the clip plays as each stage arrives.
+ *  Used by /live and by the home page's drop zone, so a dropped video always lands on its live view. */
+export async function startLiveBuild(f: File, nav: (to: string) => void) {
+  const j = await api.createJob({ file: f, runner: "live" });
+  localFiles.set(j.id, f);
+  nav(`/live/${j.id}`);
+  return j;
+}
+
 const done = (job: Job | null, key: string) => job?.stages.find((s) => s.key === key)?.status === "done";
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
@@ -84,10 +93,7 @@ export default function LivePage() {
     setFile(f);
     setBusy(true);
     try {
-      const j = await api.createJob({ file: f, runner: "live" });
-      localFiles.set(j.id, f);
-      setJob(j);
-      nav(`/live/${j.id}`);
+      setJob(await startLiveBuild(f, nav));
     } catch (e) {
       setErr((e as Error).message);
       setFile(null);

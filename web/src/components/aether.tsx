@@ -43,7 +43,7 @@ export function AetherHero({ video, poster, title, to }: { video?: string; poste
         </p>
         <div className="ae-cta">
           <Link className="btn primary" to="/showcase"><Icon name="cube" size={14} />Push the robot, in 3D</Link>
-          <a className="btn" href="#run"><Icon name="upload" size={14} />Run a video</a>
+          <Link className="btn" to="/live"><Icon name="upload" size={14} />Run your video</Link>
         </div>
         <div className="ae-stack mono">
           <span>SAM 3.1</span><span>MediaPipe</span><span>mink IK</span><span>V-JEPA 2</span><span>PPO · mjlab</span>
