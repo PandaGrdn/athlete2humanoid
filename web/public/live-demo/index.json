@@ -3,25 +3,29 @@
   {
    "id": "front-kick",
    "title": "Front kick",
-   "summary": "4 key moments: ready -> right kick extended -> right leg lowered -> right kick extended -> standing stance -> finish",
+   "summary": "4 key moments: ready -> right foot up, right foot forward -> right foot down, right foot left -> right foot up, right foot right -> right foot down, right foot back -> finish",
    "duration_s": 5.5,
    "poster": "processed.jpg",
    "policies": [
     "Tracking",
     "Task + tracking",
-    "Task"
+    "Task",
+    "Tracking, trained on variants",
+    "Task + tracking, trained on variants"
    ]
   },
   {
    "id": "squat-jump",
    "title": "Squat jump",
-   "summary": "6 key moments, 2 jumps: ready -> crouch left arm forward -> jump -> land -> left leg landing stance -> deep crouch -> rising left arm back -> jump -> land -> crouch left arm forward -> standing left foot back (finish)",
+   "summary": "6 key moments, 2 jumps: ready -> crouch, left hand forward -> jump -> land -> crouch, left foot down -> crouch -> rise, left hand back -> jump -> land -> crouch, left hand forward -> rise, left foot back (finish)",
    "duration_s": 9.0,
    "poster": "processed.jpg",
    "policies": [
     "Tracking",
     "Task + tracking",
-    "Task"
+    "Task",
+    "Tracking, trained on variants",
+    "Task + tracking, trained on variants"
    ]
   },
   {

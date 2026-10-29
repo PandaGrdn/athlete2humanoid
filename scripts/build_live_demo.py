@@ -33,15 +33,20 @@ RUNS = REPO / "outputs"
 CLIPS = [
     ("front-kick", "front_kick", "Front kick",
      [("tracking", "remote_latent_kp_kick/policy_tracking"), ("taskhybrid", "remote_latent_fix_kick/policy_taskhybrid"),
-      ("task", "remote_latent_fix_kick/policy_task")]),
+      ("task", "remote_latent_fix_kick/policy_task"),
+      ("tracking_var", "remote_variants_var_kick/policy_tracking_var"),
+      ("taskhybrid_var", "remote_variants_var_kick/policy_taskhybrid_var")]),
     ("squat-jump", "squat_jump", "Squat jump",
      [("tracking", "remote_latent_final/policy_tracking"), ("taskhybrid", "remote_latent_fix_sj/policy_taskhybrid"),
-      ("task", "remote_latent_fix_sj/policy_task")]),
+      ("task", "remote_latent_fix_sj/policy_task"),
+      ("tracking_var", "remote_variants_var_sj/policy_tracking_var"),
+      ("taskhybrid_var", "remote_variants_var_sj/policy_taskhybrid_var")]),
     ("jumping-jacks", "jumping_jacks", "Jumping jacks", [("task", "remote_latent_kp_jacks/policy_task")]),
     ("lunge", "lunge", "Lunge", [("task", "remote_latent_loose_lunge/policy_task")]),
     ("punches", "punches", "Punches", [("task", "remote_latent_loose_punch/policy_task")]),
 ]
-POLICY_LABEL = {"tracking": "Tracking", "task": "Task", "taskhybrid": "Task + tracking", "taskphase": "Task (no reference)"}
+POLICY_LABEL = {"tracking": "Tracking", "task": "Task", "taskhybrid": "Task + tracking", "taskphase": "Task (no reference)",
+                "tracking_var": "Tracking, trained on variants", "taskhybrid_var": "Task + tracking, trained on variants"}
 STAGES = [("video", "Video check"), ("pose", "Pose"), ("retarget", "Retarget"), ("environment", "Task environment"),
           ("policy", "Policy")]
 
