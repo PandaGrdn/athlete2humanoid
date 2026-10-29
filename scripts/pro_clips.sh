@@ -3,9 +3,10 @@
 #   1. SAM 3.1 installed at job start (the Modal image has none), then experiments/process_clips.py
 #   2. per clip, experiments/multiclip_policy.py: tracking_var / multi / multi_vjc, each from its own
 #      checkpoint in inputs/ (--init-dir), trained on the clip's variants, then every robustness suite
-#   bash scripts/pro_clips.sh <iters> <video>...
+#   [POLICIES="multi"] bash scripts/pro_clips.sh <iters> <video>...   (default: all three, compared)
 set -u
 ITERS=$1; shift
+POLICIES="${POLICIES:-tracking_var multi multi_vjc}"
 D=$A2H_JOB_DATA
 OUT=$D/outputs/pro
 mkdir -p "$OUT" "$D/inputs/clips"
@@ -25,7 +26,7 @@ tar xzf "$OUT/process/results.tar.gz" -C "$D/inputs"
 for c in $(ls "$OUT/process" >/dev/null && tar tzf "$OUT/process/results.tar.gz" | cut -d/ -f2 | sort -u); do
   echo "=== $c"
   python3 experiments/multiclip_policy.py "$D/inputs/clips" --out "$OUT/$c" --train "$c" --held-out \
-    --policies tracking_var multi multi_vjc --init-dir "$D/inputs" --pca "$D/inputs/vjl_pca.npz" \
+    --policies $POLICIES --init-dir "$D/inputs" --pca "$D/inputs/vjl_pca.npz" \
     --iters "$ITERS" --full-eval || echo "$c: multiclip_policy failed"
 done
 

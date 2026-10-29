@@ -50,7 +50,8 @@ def job_spec(a):
     if a.job == "pro":  # scripts/pro_clips.sh: new videos -> SAM (installed at job start) -> trained, tested policies
         if not a.reuse:
             raise SystemExit("pro needs --reuse <a folder with policy_*/model_*.pt and vjl_pca.npz>")
-        return ("--with-main", f"bash scripts/pro_clips.sh {a.iters} {{clips}}",
+        pols = " ".join(x for x in a.args.split() if x.isidentifier()) or "tracking_var multi multi_vjc"
+        return ("--with-main", f"POLICIES='{pols}' bash scripts/pro_clips.sh {a.iters} {{clips}}",
                 {"results.tar.gz": f"{REMOTE}/outputs/pro/results.tar.gz"})
     if a.job == "process":  # experiments/process_clips.py: new videos -> clip folders (SAM, retarget, V-JEPA), no training
         out = f"{REMOTE}/outputs/process" + (f"_{a.tag}" if a.tag else "")
