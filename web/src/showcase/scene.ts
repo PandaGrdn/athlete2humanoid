@@ -365,7 +365,7 @@ export class ShowcasePlayer {
   // --- the clock ----------------------------------------------------------------------------------
   private tick = (now: number) => {
     this.raf = requestAnimationFrame(this.tick);
-    const dt = Math.min(0.1, (now - this.last) / 1000);
+    const dt = Math.max(0, Math.min(0.1, (now - this.last) / 1000)); // a frame's timestamp can predate the constructor
     this.last = now;
     if (!this.visible || document.hidden) return;
     const { fps, frames } = this.data.show;
