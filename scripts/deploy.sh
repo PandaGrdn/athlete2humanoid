@@ -8,16 +8,19 @@
 #   scripts/deploy.sh tunnel             # the API on this machine (e.g. a Mac mini) in Docker, public through a
 #                                        #   Cloudflare Tunnel, then the website pointed at it
 #   scripts/deploy.sh [space] [hf-user]  # the API on a Hugging Face Space (Docker Spaces need HF PRO)
+#   scripts/deploy.sh cloudrun [project] # the API on Google Cloud Run (free tier: scales to zero, one instance)
 #
 # Logins, once: `npx wrangler login` (all modes); `hf auth login` with a write token (space);
-# `brew install cloudflared` + `cloudflared tunnel login` (tunnel with your own domain; see below).
+# `brew install cloudflared` + `cloudflared tunnel login` (tunnel with your own domain; see below);
+# `gcloud auth login` and a project with billing linked (cloudrun; billing is required even at $0, see DEPLOY.md).
 #
 # Optional environment:
 #   PAGES_PROJECT    default athlete2humanoid
 #   CORS             extra frontend origin(s), comma-separated (e.g. a custom domain), added to the Pages one
 #   SPACE_NAME       space mode: default athlete2humanoid-api
 #   ONNX_PY          a Python with torch + onnx: ships policy.onnx next to each checkpoint
-#   SKIP_WEB=1       space / tunnel: the API only
+#   SKIP_WEB=1       space / tunnel / cloudrun: the API only
+#   GCP_REGION       cloudrun mode: default us-central1
 #   TUNNEL_HOSTNAME  tunnel mode: a stable https://<hostname> on a domain in your Cloudflare account (a named
 #                    tunnel). Without it: a free quick tunnel (https://<random>.trycloudflare.com) that changes
 #                    every time it restarts, so the website is redeployed with the new address each run.
@@ -28,7 +31,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO"
 MODE=space
-case "${1:-}" in static|web|tunnel|space) MODE="$1"; shift ;; esac
+case "${1:-}" in static|web|tunnel|space|cloudrun) MODE="$1"; shift ;; esac
 SPACE_NAME="${SPACE_NAME:-athlete2humanoid-api}"
 PAGES_PROJECT="${PAGES_PROJECT:-athlete2humanoid}"
 WRANGLER="wrangler@4.149.0"
@@ -134,6 +137,43 @@ except (ValueError, IndexError, AttributeError):
     --commit-message "deploy $(git rev-parse --short HEAD 2>/dev/null || echo local)"
   say "Waiting for $API_BASE/readyz (the first image build takes ~5-10 min)"
   wait_ready "$API_BASE" 80 "hf spaces logs $SPACE"
+  ;;
+
+# --- the API on Google Cloud Run --------------------------------------------------------------------
+cloudrun)
+  GCLOUD="$(command -v gcloud || echo "$HOME/google-cloud-sdk/bin/gcloud")"
+  [ -x "$GCLOUD" ] || die "gcloud not found. Install the Google Cloud CLI (see docs/DEPLOY.md)."
+  gcloud() { "$GCLOUD" "$@"; }
+  need docker "Install Docker Desktop and start it."
+  docker info >/dev/null 2>&1 || die "Docker isn't running: start Docker Desktop."
+  [ -n "$(gcloud auth list --filter=status:ACTIVE --format='value(account)' 2>/dev/null)" ] || die "not logged in. Run: gcloud auth login"
+  PROJECT="${1:-$(gcloud config get-value project 2>/dev/null || true)}"
+  [ -n "$PROJECT" ] || die "no project: pass one, or gcloud config set project <id>"
+  [ "$(gcloud billing projects describe "$PROJECT" --format='value(billingEnabled)' 2>/dev/null)" = True ] \
+    || die "project $PROJECT has no billing account linked (Cloud Run needs one even inside the free tier): console.cloud.google.com/billing"
+  REGION="${GCP_REGION:-us-central1}"
+  SERVICE="${SERVICE_NAME:-athlete2humanoid-api}"
+  REPO_AR="$REGION-docker.pkg.dev/$PROJECT/a2h"
+  TAG="$REPO_AR/api:$(git rev-parse --short HEAD 2>/dev/null || date +%s)"
+  say "Google Cloud: project $PROJECT, $REGION"
+  gcloud services enable run.googleapis.com artifactregistry.googleapis.com --project "$PROJECT"
+  gcloud artifacts repositories describe a2h --location "$REGION" --project "$PROJECT" >/dev/null 2>&1 \
+    || gcloud artifacts repositories create a2h --repository-format docker --location "$REGION" --project "$PROJECT"
+  gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet >/dev/null
+  bundle
+  say "Docker image $TAG (linux/amd64)"
+  docker build --platform linux/amd64 -t "$TAG" "$BUNDLE"
+  docker push "$TAG"
+  # Free tier: scales to zero, at most one instance (jobs and rate limits live in its memory), CPU kept on
+  # between requests so a job's thread keeps running. /tmp is memory on Cloud Run: uploads capped to fit.
+  say "Cloud Run service $SERVICE"
+  gcloud run deploy "$SERVICE" --image "$TAG" --project "$PROJECT" --region "$REGION" --platform managed \
+    --allow-unauthenticated --port 7860 --cpu 2 --memory 4Gi --min-instances 0 --max-instances 1 \
+    --no-cpu-throttling --concurrency 80 --timeout 3600 --execution-environment gen2 \
+    --set-env-vars A2H_MAX_UPLOAD_STORAGE_MB=400 --quiet  # CORS is baked into the bundle (build_space.py --cors)
+  API_BASE="$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format 'value(status.url)')"
+  say "Waiting for $API_BASE/readyz"
+  wait_ready "$API_BASE" 20 "gcloud run services logs read $SERVICE --region $REGION --project $PROJECT"
   ;;
 
 # --- the API on this machine, through a Cloudflare Tunnel ------------------------------------------

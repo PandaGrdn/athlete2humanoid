@@ -114,6 +114,19 @@ failure modes and health endpoints: `docs/SYSTEM_DESIGN.md`.
   capabilities, localhost only, restarted after reboots) and publishes it with `cloudflared`. A Mac mini runs
   the live pipeline fast and costs nothing monthly. The API is up only while the machine is on, awake and
   online, and training still needs a GPU (Colab).
+- **Google Cloud Run (free tier).** `scripts/deploy.sh cloudrun [project]` pushes the same image to Artifact
+  Registry and runs it as one Cloud Run service. Settings:
+  - 2 vCPU, 4 GiB, min 0 and max 1 instance (jobs live in its memory);
+  - CPU kept on between requests, so a job's thread runs;
+  - uploads capped to 400 MB, since `/tmp` is memory there.
+
+  The free tier (instance-based: 240k vCPU-s and 450k GiB-s a month) covers demo traffic: an instance stays
+  up about 15 min after its last request, then scales to zero. Images over Artifact Registry's free 0.5 GB
+  cost cents a month.
+  - **Cloud Run needs a billing account linked to the project, even at $0:** a card on file, added by you in
+    the console. A budget alert there is cheap insurance.
+  - **Once:** `gcloud auth login`, a project (`gcloud projects create <id>`), billing linked
+    (console.cloud.google.com/billing).
 - **Free 512 MB tiers** (Render, Koyeb) are too small: the live pipeline peaks around 1-1.5 GB.
 
 **Until the API is hosted:** `scripts/deploy.sh static` deploys the website alone, live at
