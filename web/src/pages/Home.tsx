@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { api, checkVideo, fmt, policyColor, type RunSummary } from "../api";
-import { useHealth } from "../App";
+import { useHealth, useUiMode } from "../App";
+import { AetherHero } from "../components/aether";
 import { Icon, LoopVideo } from "../components/ui";
 import { exUrl } from "../examples";
 import { ExampleCards, useExampleIndex } from "./Examples";
@@ -16,6 +17,8 @@ const PIPELINE = [
   { title: "Evaluate", text: "Re-render rollouts; score them against the source clip.", model: "V-JEPA 2 · DTW" },
 ];
 
+const AETHER_HERO = "squat-jump-variants/policy_tracking_var.mp4";
+
 export default function Home() {
   const [runs, setRuns] = useState<RunSummary[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -29,10 +32,14 @@ export default function Home() {
   // The hero is the lead curated example (static, so it shows at once and offline); else the newest run.
   const lead = exIdx.items?.find((e) => e.status === "ready" && e.video);
   const offline = !!apiError && !health;
+  const ui = useUiMode();
 
   return (
     <div className="container">
-      <section className="hero">
+      {/* aether: the robot alone at the centre of the halo, the best policy's own rollout (static, so it shows offline) */}
+      {ui === "aether" && <AetherHero video={exUrl(AETHER_HERO)} poster={exUrl(AETHER_HERO.replace(/mp4$/, "jpg"))}
+        title="The G1 squat-jumping: the policy trained on variants of one clip" to="/examples/squat-jump-variants" />}
+      {ui !== "aether" && <section className="hero">
         <div className="fade-in">
           <div className="models">
             <span className="pill accent">Meta V-JEPA 2</span>
@@ -67,7 +74,7 @@ export default function Home() {
             <div className="skeleton" style={{ aspectRatio: "751 / 480" }} />
           )}
         </div>
-      </section>
+      </section>}
 
       {!offline && <section className="section" id="examples">
         <div className="section-head">

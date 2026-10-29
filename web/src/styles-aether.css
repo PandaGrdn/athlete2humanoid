@@ -1,0 +1,160 @@
+/* Aether: the black-and-white design (theme.ts), after Nous Research's Hermes Agent: thin condensed display
+   type, spaced uppercase labels, hairlines, and the robot at the centre of a radiant halo. Every rule is
+   scoped to :root[data-ui="aether"], so the classic design (styles.css) is untouched and stays the fallback. */
+
+:root[data-ui="aether"] {
+  --bg: #000;
+  --surface-1: #050505;
+  --surface-2: #0b0b0b;
+  --surface-3: #141414;
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.2);
+  --text: #f2f2f2;
+  --text-2: #a3a3a3;
+  --text-3: #626262;
+  --accent: #f2f2f2;
+  --accent-ink: #000;
+  --accent-rgb: 242, 242, 242;
+  --info-rgb: 150, 150, 150;
+  --accent-hover: #fff;
+  --console-bg: #000;
+  --tooltip-bg: #080808;
+  --nav-bg: rgba(0, 0, 0, 0.72);
+  --warn: #d9d9d9;
+  --bad: #ef7d7d;
+  --radius: 2px;
+  --radius-sm: 2px;
+  --display: "Barlow Condensed", "Arial Narrow", ui-sans-serif, sans-serif;
+  --mono: "DM Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: "Inter Variable", "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --ease: cubic-bezier(0.2, 0.7, 0.1, 1);
+}
+
+[data-ui="aether"] body { font-size: 14.5px; letter-spacing: 0.002em; }
+/* a faint light from above, and film grain over everything */
+[data-ui="aether"] body::before {
+  background:
+    radial-gradient(1100px 620px at 50% -18%, rgba(255, 255, 255, 0.075), transparent 62%),
+    radial-gradient(600px 600px at 50% 120%, rgba(255, 255, 255, 0.03), transparent 70%);
+}
+[data-ui="aether"] body::after {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 30;
+  background: url("/aether/grain.svg"); opacity: 0.05; mix-blend-mode: screen;
+}
+[data-ui="aether"] ::selection { background: #f2f2f2; color: #000; }
+[data-ui="aether"] :focus-visible { outline: 1px solid #f2f2f2; outline-offset: 3px; }
+
+[data-ui="aether"] h1, [data-ui="aether"] h2 { font-family: var(--display); font-weight: 200; letter-spacing: -0.01em; }
+[data-ui="aether"] h3, [data-ui="aether"] h4 { font-family: var(--display); font-weight: 500; letter-spacing: 0.01em; font-size: 1.12em; }
+[data-ui="aether"] video { filter: grayscale(1) contrast(1.06); }
+
+/* --- nav: links either side of a stacked wordmark ------------------------------------------- */
+[data-ui="aether"] .ae-nav { border-bottom: 1px solid var(--border); }
+.ae-nav-inner { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; height: 68px; }
+.ae-links { display: flex; align-items: center; gap: 30px; }
+.ae-links.right { justify-content: flex-end; }
+.ae-links a, .ae-status {
+  font-family: var(--display); font-weight: 500; font-size: 14px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--text-2); transition: color 0.2s;
+}
+.ae-links a:hover, .ae-links a.active { color: var(--text); }
+.ae-status { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; color: var(--text-3); }
+.ae-status .dot { width: 5px; height: 5px; background: var(--text-3); }
+.ae-brand { display: flex; flex-direction: column; align-items: center; line-height: 0.86; font-family: var(--display);
+  font-weight: 300; font-size: 19px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text); }
+.ae-brand span + span { font-size: 15px; letter-spacing: 0.14em; color: var(--text-2); margin-top: 3px; }
+@media (max-width: 760px) {
+  .ae-nav-inner { grid-template-columns: auto 1fr; }
+  .ae-brand { order: -1; align-items: flex-start; }
+  .ae-links { display: none; }
+  .ae-links.right { display: flex; gap: 16px; }
+  .ae-links.right > a:first-child { display: none; }
+}
+
+/* --- hero ---------------------------------------------------------------------------------------- */
+.ae-hero { display: grid; grid-template-columns: 1.05fr 1fr; gap: 40px; align-items: center; padding: 72px 0 40px; min-height: min(760px, calc(100vh - 68px)); }
+.ae-kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-3); display: flex; align-items: center; gap: 10px; }
+.ae-kicker::before { content: ""; width: 34px; height: 1px; background: var(--text-3); }
+.ae-kicker span { color: var(--text-2); }
+.ae-hero h1 { margin-top: 26px; font-size: clamp(64px, 9.4vw, 136px); line-height: 0.88; font-weight: 200; letter-spacing: -0.025em;
+  background: linear-gradient(180deg, #fff 35%, rgba(255, 255, 255, 0.55)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.ae-lede { margin-top: 28px; max-width: 470px; color: var(--text-2); font-size: 15.5px; line-height: 1.65; }
+.ae-cta { display: flex; gap: 12px; margin-top: 34px; flex-wrap: wrap; }
+.ae-stack { display: flex; flex-wrap: wrap; gap: 0; margin-top: 48px; border-top: 1px solid var(--border); padding-top: 16px; max-width: 520px; }
+.ae-stack span { font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-3); padding-right: 14px; margin-right: 14px; border-right: 1px solid var(--border); line-height: 1; }
+.ae-stack span:last-child { border-right: 0; }
+@media (max-width: 900px) { .ae-hero { grid-template-columns: 1fr; padding-top: 40px; gap: 20px; min-height: 0; } }
+
+.ae-halo { position: relative; width: min(100%, 600px); aspect-ratio: 1; margin: 0 auto; }
+.ae-rays { position: absolute; inset: 0; width: 100%; height: 100%; animation: ae-turn 240s linear infinite; overflow: visible; }
+.ae-rays line { stroke: #fff; stroke-width: 0.7; vector-effect: non-scaling-stroke; }
+.ae-ring { fill: none; stroke: rgba(255, 255, 255, 0.55); stroke-width: 0.8; vector-effect: non-scaling-stroke; }
+.ae-ring.faint { stroke: rgba(255, 255, 255, 0.12); }
+.ae-ring.dashed { stroke-dasharray: 2 6; }
+.ae-core { position: absolute; inset: 26%; border-radius: 50%; overflow: hidden; background: #000;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25), 0 0 80px 10px rgba(255, 255, 255, 0.06); }
+.ae-core a, .ae-core video { display: block; width: 100%; height: 100%; }
+.ae-core video { object-fit: cover; object-position: 46% 50%; transform: scale(1.18); filter: grayscale(1) contrast(1.2) brightness(1.08); }
+@keyframes ae-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ae-rays { animation: none; } }
+
+/* --- primitives -------------------------------------------------------------------------------- */
+[data-ui="aether"] .btn {
+  height: 42px; padding: 0 20px; border-radius: 2px; border: 1px solid var(--border-strong); background: transparent;
+  font-family: var(--display); font-weight: 500; font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase;
+  transition: background 0.25s var(--ease), color 0.25s var(--ease), border-color 0.25s var(--ease);
+}
+[data-ui="aether"] .btn:hover { background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.45); }
+[data-ui="aether"] .btn.primary { background: #f2f2f2; border-color: #f2f2f2; color: #000; }
+[data-ui="aether"] .btn.primary:hover { background: #fff; box-shadow: 0 0 32px rgba(255, 255, 255, 0.18); }
+[data-ui="aether"] .btn.ghost { border-color: transparent; }
+[data-ui="aether"] .btn.sm { height: 32px; padding: 0 13px; font-size: 12.5px; border-radius: 2px; }
+
+[data-ui="aether"] .pill {
+  height: 22px; border-radius: 2px; background: transparent; font-family: var(--mono); font-weight: 400;
+  font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+}
+[data-ui="aether"] .pill.accent { color: #000; background: #e8e8e8; border-color: #e8e8e8; }
+[data-ui="aether"] .pill.warn { color: var(--text-2); border-style: dashed; background: transparent; }
+[data-ui="aether"] .card { border-radius: 2px; background: rgba(255, 255, 255, 0.012); }
+[data-ui="aether"] .eyebrow { font-size: 10.5px; letter-spacing: 0.24em; display: flex; align-items: center; gap: 10px; }
+[data-ui="aether"] .eyebrow::before { content: ""; width: 22px; height: 1px; background: currentColor; }
+[data-ui="aether"] .section { padding-top: 88px; }
+[data-ui="aether"] .section-head { margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+[data-ui="aether"] .section-head h2 { font-size: clamp(34px, 4vw, 52px); line-height: 0.95; margin-top: 12px !important; }
+[data-ui="aether"] .section-head p { font-size: 14px; margin-top: 12px; }
+[data-ui="aether"] .video-frame, [data-ui="aether"] .ex-video { border-radius: 2px; }
+[data-ui="aether"] .video-frame .tag .pill { background: rgba(0, 0, 0, 0.7); color: var(--text-2); border-color: var(--border-strong); }
+[data-ui="aether"] .progress { height: 2px; border-radius: 0; }
+[data-ui="aether"] .progress > div { border-radius: 0; box-shadow: 0 0 12px rgba(255, 255, 255, 0.6); }
+[data-ui="aether"] .notice, [data-ui="aether"] .error-box, [data-ui="aether"] .select, [data-ui="aether"] .file-chip { border-radius: 2px; }
+[data-ui="aether"] .skeleton { border-radius: 2px; }
+[data-ui="aether"] .mono { letter-spacing: 0.02em; }
+
+/* --- home ---------------------------------------------------------------------------------------- */
+[data-ui="aether"] .pipeline { border-radius: 2px; background: transparent; }
+[data-ui="aether"] .pipeline .step { padding: 22px 18px 24px; transition: background 0.3s var(--ease); }
+[data-ui="aether"] .pipeline .step:hover { background: rgba(255, 255, 255, 0.03); }
+[data-ui="aether"] .pipeline .step .n { font-size: 10.5px; letter-spacing: 0.2em; }
+[data-ui="aether"] .pipeline .step h4 { font-size: 20px; font-weight: 300; margin: 14px 0 8px; }
+[data-ui="aether"] .pipeline .step .model { color: var(--text-2); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; }
+[data-ui="aether"] .dropzone { border-radius: 2px; border: 1px dashed var(--border-strong); background: transparent; }
+[data-ui="aether"] .dropzone:hover, [data-ui="aether"] .dropzone.drag { border-color: #f2f2f2; background: rgba(255, 255, 255, 0.03); }
+[data-ui="aether"] .run-card:hover, [data-ui="aether"] .ex-card:hover { transform: none; border-color: rgba(255, 255, 255, 0.35); }
+
+/* --- footer and the interface switch ------------------------------------------------------------- */
+[data-ui="aether"] footer.site { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; }
+.ui-switch { display: inline-flex; align-items: center; gap: 4px; }
+.ui-switch > span { margin-right: 6px; }
+.ui-switch button { background: none; border: 1px solid var(--border-strong); color: var(--text-3); font-size: 11px; padding: 3px 9px; cursor: pointer; border-radius: 6px; }
+.ui-switch button.on { color: var(--text); border-color: var(--text-2); }
+[data-ui="aether"] .ui-switch button { border-radius: 2px; font-family: var(--mono); letter-spacing: 0.12em; text-transform: uppercase; font-size: 10px; }
+[data-ui="aether"] .ui-switch button.on { background: #f2f2f2; color: #000; border-color: #f2f2f2; }
+
+/* --- square corners everywhere the classic design rounds them (not dots, marks or the halo) ------- */
+[data-ui="aether"] :is(.dropzone .icon, .stage, .heat, .dl .ico, .tooltip, .ex-card .ex-num, .sync-track, .sync-rate,
+  .env-track, .env-row, .env-check, .live-cta-ico, .live-pending, .live-task, .live-runs a, .console, .table-wrap,
+  .file-chip video, .replay-thumb, .replay-policy, .live-overlay, .live-robot, .env-tag, .cmp-bar, .sync-stage) { border-radius: 2px; }
+[data-ui="aether"] :is(.dropzone .icon, .live-cta-ico) { background: transparent; border: 1px solid var(--border-strong); }
+[data-ui="aether"] .console { font-size: 12px; letter-spacing: 0.01em; }
+[data-ui="aether"] .tooltip { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 12px 32px rgba(0, 0, 0, 0.7); }

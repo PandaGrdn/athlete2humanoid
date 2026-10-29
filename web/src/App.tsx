@@ -1,15 +1,19 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { Link, NavLink, Route, Routes, useLocation } from "react-router";
 import { api, type Health } from "./api";
+import { UiSwitch } from "./components/aether";
 import { Icon } from "./components/ui";
 import { ExampleDetail, ExamplesIndex } from "./pages/Examples";
 import Home from "./pages/Home";
 import JobPage from "./pages/JobPage";
 import LivePage, { LiveReplayPage } from "./pages/LivePage";
 import RunPage from "./pages/RunPage";
+import { useUi, type Ui } from "./theme";
 
 const HealthCtx = createContext<{ health: Health | null; error: string | null }>({ health: null, error: null });
 export const useHealth = () => useContext(HealthCtx);
+const UiCtx = createContext<Ui>("classic");
+export const useUiMode = () => useContext(UiCtx);
 
 const REPO_URL = "https://github.com/PandaGrdn/athlete2humanoid";
 
@@ -17,6 +21,7 @@ export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { pathname, hash } = useLocation();
+  const [ui, setUi] = useUi();
 
   // Without the API the site is an offline demo (the examples are static); keep checking so uploads
   // come back as soon as a sleeping API wakes up.
@@ -40,7 +45,8 @@ export default function App() {
 
   return (
     <HealthCtx.Provider value={{ health, error }}>
-      <header className="nav">
+      <UiCtx.Provider value={ui}>
+      {ui === "aether" ? <AetherNav /> : <header className="nav">
         <div className="container nav-inner">
           <Link to="/" className="brand">
             <img src="/favicon.svg" alt="" />
@@ -66,7 +72,7 @@ export default function App() {
             <a className="btn ghost sm" href={REPO_URL} target="_blank" rel="noreferrer"><Icon name="github" size={16} />Code</a>
           </div>
         </div>
-      </header>
+      </header>}
       <main>
         <Routes>
           <Route path="/" element={<Home />} />
@@ -83,8 +89,37 @@ export default function App() {
         <div className="container">
           <span>Video → SAM 3.1 → MediaPipe → mink IK → V-JEPA 2 reward → PPO (mjlab) → Unitree G1</span>
           <span>Meta Global AI Developer Hackathon · Push the Frontier</span>
+          <UiSwitch ui={ui} setUi={setUi} />
         </div>
       </footer>
+      </UiCtx.Provider>
     </HealthCtx.Provider>
+  );
+}
+
+/** The aether design's header: a stacked wordmark at the centre, the links either side (after Hermes Agent). */
+function AetherNav() {
+  const { health, error } = useHealth();
+  const status = health?.runners.includes("colab") ? "A100 online" : health ? "Demo runner" : error ? "Offline demo" : "Connecting";
+  return (
+    <header className="nav ae-nav">
+      <div className="container ae-nav-inner">
+        <nav className="ae-links">
+          <NavLink to="/live">Live</NavLink>
+          <NavLink to="/examples">Examples</NavLink>
+          <Link to="/#run">Run</Link>
+        </nav>
+        <Link to="/" className="ae-brand" aria-label="athlete2humanoid, home">
+          <span>Athlete</span><span>2 Humanoid</span>
+        </Link>
+        <nav className="ae-links right">
+          <Link to="/#how">Method</Link>
+          <span className="ae-status mono" title={error && !health ? `The pipeline API isn't reachable (${error}). The examples work without it.` : undefined}>
+            <i className={`dot ${health ? "live" : ""}`} />{status}
+          </span>
+          <a href={REPO_URL} target="_blank" rel="noreferrer" aria-label="Code on GitHub"><Icon name="github" size={15} /></a>
+        </nav>
+      </div>
+    </header>
   );
 }
