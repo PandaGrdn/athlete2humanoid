@@ -63,11 +63,13 @@ def run(checkpoint, motion_file, n, jitter, render=False):
     speed = torch.zeros(n, K, device=device)
     start = torch.zeros(n, K, 3, device=device)
     travel = torch.zeros(n, K, device=device)
-    frames = []
+    frames, joint_err = [], []
     with torch.inference_mode():
         for _ in range(steps):
             obs, _, dones, _ = venv.step(policy(obs))
             fell |= dones.bool()
+            joint_err.append((b.cmd.robot_joint_pos - b.cmd.joint_pos).abs().mean(-1)[~fell].mean().item()
+                             if (~fell).any() else float("nan"))
             k = b.kick.clamp(min=0)
             on = (b.kick >= 0) & ~fell
             rows = torch.arange(n, device=device)
@@ -84,7 +86,7 @@ def run(checkpoint, motion_file, n, jitter, render=False):
                 frames.append(env.render())
     hit = leg_hit.float()
     out = {"policy": how, "n": n, "jitter_m": jitter, "kicks_per_clip": K,
-           "fall_rate": fell.float().mean().item(),
+           "fall_rate": fell.float().mean().item(), "mean_joint_error_rad": float(np.nanmean(joint_err)),
            "leg_hit_rate": hit.mean().item(), "leg_hit_rate_per_kick": hit.mean(0).tolist(),
            "other_hit_rate": (any_hit & ~leg_hit).float().mean().item(),
            "ball_speed_mps": speed[leg_hit].mean().item() if leg_hit.any() else 0.0,
