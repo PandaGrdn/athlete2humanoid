@@ -444,6 +444,10 @@ def mjlab_stage(a, out):
             if p["transfer"]:
                 mf = mirror_motion(motion_file, out / "motion_mirrored.npz") if p["transfer"] == "mirror" else Path(p["transfer"])
             cmd.motion = MotionLoader(str(mf), cmd.body_indexes, device=env.device)
+            # A2H-TrackingVJ's input: this motion's own video latent (<motion>.vjl.npy), else the clip's
+            # (A2H_VIDEO_LATENT), re-timed to this motion's length
+            vjl = Path(mf).with_suffix(".vjl.npy")
+            env.a2h_video_latent = torch.as_tensor(np.load(vjl), dtype=torch.float32, device=env.device) if vjl.exists() else None
             truth = cmd.motion if p["reference"] == "clip" else MotionLoader(str(motion_file), cmd.body_indexes, device=env.device)
             # The task: the clip's spec, or for a new clip one compiled from it (the policies never saw either)
             if p["transfer"]:

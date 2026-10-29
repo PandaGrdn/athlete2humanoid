@@ -40,7 +40,7 @@ OUT = SESSION = None  # set in main()
 
 
 def latent_out(a):
-    kind = "variants" if a.job == "variants" else "latent"
+    kind = a.job if a.job in ("variants", "multiclip") else "latent"
     return f"{REMOTE}/outputs/{kind}_{'smoke' if a.smoke else a.tag or a.target}"
 
 
@@ -65,6 +65,12 @@ def job_spec(a):
         out, inp = latent_out(a), f"{REMOTE}/inputs"
         return ("--with-main", f"python3 experiments/variant_policy.py {inp}/clips/{a.target} --out {out} "
                 f"--iters {a.iters} {a.args}", {"results.tar.gz": f"{out}/results.tar.gz"})
+    if a.job == "multiclip":  # experiments/multiclip_policy.py: one policy over several clips, +/- the V-JEPA input
+        if not a.reuse:
+            raise SystemExit("multiclip needs --reuse <a folder with clips/ (and policy_*/model_*.pt to --init from)>")
+        out, inp = latent_out(a), f"{REMOTE}/inputs"
+        return ("--with-main", f"python3 experiments/multiclip_policy.py {inp}/clips --out {out} --iters {a.iters} {a.args}",
+                {"results.tar.gz": f"{out}/results.tar.gz"})
     out = latent_out(a)
     cmd = f"python3 experiments/latent_policy.py {{clips}} --target {a.target} --out {out} --iters {a.iters} {a.args}"
     if a.init_weights and not a.reuse:  # a new video, its policies built off an earlier run's (pack_weights)
@@ -237,7 +243,7 @@ def sync_checkpoints(a, get=None):
     """Newest checkpoint of every policy still training -> OUT/checkpoints/policy_*/ (a few MB each),
     so a lost VM costs at most the last sync interval of training, not the run. Plain downloads of
     the paths experiments/latent_policy.py lists in checkpoints.json: the kernel is busy (keeper)."""
-    if a.job not in ("latent", "variants"):
+    if a.job not in ("latent", "variants", "multiclip"):
         return
     out = latent_out(a)
     get = get or colab_get
@@ -321,7 +327,7 @@ def run_farmshare(a, fs, found, setup, cmd, fetch, inputs):
         fs.upload(found, inputs)
         fs.submit(cmd.format(clips=" ".join(f"'{REMOTE}/clips/{p.name}'" for p in found)))
         try:
-            state = fs.wait(latent_out(a) if a.job in ("latent", "variants") else None)
+            state = fs.wait(latent_out(a) if a.job in ("latent", "variants", "multiclip") else None)
         except KeyboardInterrupt:
             fs.cancel()
             raise
@@ -406,7 +412,7 @@ def main(a):
 
 def parser():
     ap = argparse.ArgumentParser()
-    ap.add_argument("job", choices=["probe", "latent", "robust", "relevance", "variants"])
+    ap.add_argument("job", choices=["probe", "latent", "robust", "relevance", "variants", "multiclip"])
     ap.add_argument("--min-clips", type=int, default=6)
     ap.add_argument("--max-wait-h", type=float, default=8)
     ap.add_argument("--target", default="squat")

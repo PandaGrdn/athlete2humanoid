@@ -134,16 +134,19 @@ def scale(qpos, alpha, g1, foot0):
 
 
 def make(qpos, g1, mirrored, speed, alpha, warp, keys, foot0, seed=0):
-    """One variant of qpos (FPS) -> (qpos, joint-limit share clipped)."""
+    """One variant of qpos (FPS) -> (qpos, joint-limit share clipped, the source frame of each of its
+    frames: what the video was showing then, for the video's latent)."""
     rng = np.random.default_rng(seed)
     q = mirror(qpos, g1) if mirrored else qpos
     clipped = 0.0
+    src = np.arange(len(qpos), dtype=np.float64)
     if alpha != 1.0:
         q, clipped = scale(q, alpha, g1, foot0)
     if speed != 1.0 or warp:
         air = airborne(g1.bodies(q), foot0)
-        q = resample(q, time_map(len(q), keys, speed, warp, air, rng))
-    return q, clipped
+        src = time_map(len(q), keys, speed, warp, air, rng)
+        q = resample(q, src)
+    return q, clipped, src
 
 
 def name(mirrored, speed, alpha, warp):
@@ -161,10 +164,11 @@ def generate(qpos, fps=FPS, grid=None, seed=0, g1=None, log=print):
     keys = [s["frame"] for s in base["stages"] if s["kind"] == "pose"]
     out = []
     for i, (mirrored, speed, alpha, warp) in enumerate(grid or TRAIN):
-        q, clipped = make(qpos, g1, mirrored, speed, alpha, warp, keys, base["foot0"], seed + i)
+        q, clipped, src = make(qpos, g1, mirrored, speed, alpha, warp, keys, base["foot0"], seed + i)
         v = {"name": name(mirrored, speed, alpha, warp),
              "params": {"mirror": mirrored, "tempo": speed, "amplitude": alpha, "warp": warp, "seed": seed + i},
-             "qpos": q.astype(np.float32), "frames": len(q), "limit_clipped": round(clipped, 4)}
+             "qpos": q.astype(np.float32), "src_frame": src.astype(np.float32), "frames": len(q),
+             "limit_clipped": round(clipped, 4)}
         try:
             p = g1.bodies(q)
             spec = compile_keypose_spec(p, fps, name=v["name"])
@@ -183,7 +187,8 @@ def generate(qpos, fps=FPS, grid=None, seed=0, g1=None, log=print):
 
 
 def write(variants, out_dir):
-    """Each kept variant -> out_dir/<name>/{qpos.npy, task_spec.json}; index.json lists them all."""
+    """Each kept variant -> out_dir/<name>/{qpos.npy, src_frame.npy, motion.csv, task_spec.json}; index.json
+    lists them all."""
     from retarget import export_mjlab_csv
     out_dir = Path(out_dir)
     index = []
@@ -193,6 +198,7 @@ def write(variants, out_dir):
             d = out_dir / v["name"]
             d.mkdir(parents=True, exist_ok=True)
             np.save(d / "qpos.npy", v["qpos"])
+            np.save(d / "src_frame.npy", v["src_frame"])
             export_mjlab_csv(v["qpos"], d / "motion.csv")
             (d / "task_spec.json").write_text(json.dumps(v["spec"], indent=1))
             row["summary"] = v["spec"]["summary"]

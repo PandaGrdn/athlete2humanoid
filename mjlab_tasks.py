@@ -25,6 +25,11 @@ Runs inside mjlab's virtualenv; takes the same flags as mjlab's `train`:
   penalises the latent reward's uncertainty (LatentReward, lambda 4): docs/PIPELINE_IMPROVEMENTS.md.
 
 - A2H-Tracking-Flat-Unitree-G1: mjlab's tracking task, here so that it too can train on variants.
+- A2H-TrackingVJ-Flat-Unitree-G1: tracking whose policy also sees the video's V-JEPA latent, now and
+  0.5 / 1 s ahead (A2H_VIDEO_LATENT, per motion step; latent/video_condition.py), so it is told in
+  V-JEPA's latent space what the video shows. A2H-TrackingFuture-Flat-Unitree-G1 is its control: the
+  retarget's joints and pelvis height 0.5 / 1 s ahead instead, the same look-ahead without V-JEPA
+  (experiments/multiclip_policy.py).
 A2H_VARIANTS=variants.json (experiments/variant_policy.py) makes any of them train on variants of the
 clip (skill/variations.py: mirrored, re-timed, scaled) laid end to end in one motion file: each env
 stays inside its variant (VariantMotionCommand) and the task reward scores it against that variant's
@@ -50,6 +55,7 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from latent import reward_net  # noqa: E402
+from latent import video_condition  # noqa: E402
 from latent.reward_net import BODIES, FPS, WINDOW, load_bundle, window_center_step  # noqa: E402
 from skill import commands as skill_commands  # noqa: E402
 from skill import task as skill_task  # noqa: E402
@@ -414,6 +420,7 @@ class VariantMotionCommand(MotionCommand):
         self.seg_of = torch.repeat_interleave(torch.arange(len(segs), device=self.device), length)
         self.seg_last = torch.zeros(self.motion.time_step_total, dtype=torch.bool, device=self.device)
         self.seg_last[start + length - 1] = True
+        self.seg_end = (start + length - 1)[self.seg_of]  # per step: the last step of its variant
 
     def _update_command(self, env_ids=None):
         ending = self.seg_last[self.time_steps].clone()
@@ -440,6 +447,66 @@ def use_variants(cfg):
     if os.environ.get(VARIANTS_ENV):
         old = cfg.commands["motion"]
         cfg.commands["motion"] = VariantMotionCommandCfg(**{f.name: getattr(old, f.name) for f in fields(old)})
+    return cfg
+
+
+VIDEO_LATENT_ENV = "A2H_VIDEO_LATENT"
+
+
+def _ahead(cmd, steps):
+    """Each env's motion step `steps` ahead, held at the end of its clip (or of its variant)."""
+    T = cmd.motion.time_step_total
+    ts = cmd.time_steps.clamp(max=T - 1)
+    end = cmd.seg_end[ts] if getattr(cmd, "seg_end", None) is not None and len(cmd.seg_end) == T else T - 1
+    return torch.minimum(ts + steps, torch.as_tensor(end, device=ts.device))
+
+
+def video_latent_table(env, T):
+    """(T, K): the video's latent per motion step: env.a2h_video_latent (robustness_eval sets it per
+    condition), else A2H_VIDEO_LATENT's file; re-timed to T steps when the motion was (the video plays
+    along). None when there is none (the observation is being sized)."""
+    lat = getattr(env, "a2h_video_latent", None)
+    if lat is None:
+        path = os.environ.get(VIDEO_LATENT_ENV)
+        if not path:
+            return None
+        lat = env.a2h_video_latent = torch.as_tensor(np.load(path), dtype=torch.float32, device=env.device)
+    if len(lat) != T:
+        idx = torch.linspace(0, len(lat) - 1, T, device=lat.device)
+        i0 = idx.floor().long().clamp(max=len(lat) - 1)
+        i1, w = (i0 + 1).clamp(max=len(lat) - 1), (idx - i0)[:, None]
+        lat = env.a2h_video_latent = lat[i0] * (1 - w) + lat[i1] * w
+    return lat
+
+
+def video_latent(env, command_name="motion", offsets_s=video_condition.OFFSETS_S):
+    """The video's V-JEPA latent (PCA'd) now and offsets_s ahead."""
+    cmd = env.command_manager.get_term(command_name)
+    lat = video_latent_table(env, cmd.motion.time_step_total)
+    if lat is None:
+        return torch.zeros(env.num_envs, video_condition.K * len(offsets_s), device=env.device)
+    return torch.cat([lat[_ahead(cmd, round(o / env.step_dt))] for o in offsets_s], -1)
+
+
+FUTURE_S = (0.5, 1.0)
+
+
+def future_reference(env, command_name="motion", offsets_s=FUTURE_S):
+    """The retarget ahead: its joint positions and pelvis height offsets_s from now (the video
+    latent's control: the same look-ahead, without V-JEPA)."""
+    cmd = env.command_manager.get_term(command_name)
+    out = []
+    for o in offsets_s:
+        i = _ahead(cmd, round(o / env.step_dt))
+        out += [cmd.motion.joint_pos[i], cmd.motion.body_pos_w[i, 0, 2:3]]
+    return torch.cat(out, -1)
+
+
+def conditioned_tracking_cfg(name, term, play=False):
+    """mjlab's tracking task with one more input (last, so tracking weights warm-start it)."""
+    cfg = unitree_g1_flat_tracking_env_cfg(play=play)
+    for group in ("actor", "critic"):
+        cfg.observations[group].terms[name] = ObservationTermCfg(func=term)
     return cfg
 
 
@@ -647,6 +714,11 @@ for task, scale, phase, cmd, weighted in (("A2H-Task-Flat-Unitree-G1", 0.1, Fals
 register_mjlab_task(task_id="A2H-Tracking-Flat-Unitree-G1", env_cfg=use_variants(unitree_g1_flat_tracking_env_cfg()),
                     play_env_cfg=use_variants(unitree_g1_flat_tracking_env_cfg(play=True)),
                     rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
+for task, name, term in (("A2H-TrackingVJ-Flat-Unitree-G1", "video_latent", video_latent),
+                         ("A2H-TrackingFuture-Flat-Unitree-G1", "future_reference", future_reference)):
+    register_mjlab_task(task_id=task, env_cfg=use_variants(conditioned_tracking_cfg(name, term)),
+                        play_env_cfg=use_variants(conditioned_tracking_cfg(name, term, play=True)),
+                        rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
 
 
 if __name__ == "__main__":
