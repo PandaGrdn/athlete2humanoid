@@ -106,10 +106,31 @@ Each cell is task success; brackets give the fall rate where any policy falls.
 - **Nothing here shows a faster-adapting generalist,** with or without the latent.
 - Settling it needs a longer fine-tune (about 1,000 iterations), measured at several points along the way.
 
+## Without future leakage: the causal latent still helps
+
+`outputs/remote_multiclip_vjc1`, about 2.5 h on Modal.
+
+**Why:** `multi_vj` saw ahead. Its windows are centred, and it was also read 0.5 s and 1 s ahead, so it saw up to about 1.5 s of video the robot hadn't reached.
+
+**`multi_vjc` (`A2H-TrackingVJCausal`)** sees only the video up to the robot's current frame: the latents of the ~1 s ending now and of the ~1 s ending 0.5 s ago, from trailing windows. Everything else is the same setup; `multi` and `multi_future` are re-evaluated next to it.
+
+**Trained clips** (averaged over the five; task success, fall rate in brackets):
+
+| Policy | Sees ahead? | The clip | Its held-out variants | Tempo 0.5x / 2x | Pushed 1 m/s |
+|---|---|---|---|---|---|
+| multi | no | 44% (16%) | 38% (17%) | 22% (19%) | 39% (21%) |
+| multi_future | 1 s of the retarget | **80% (0%)** | **62% (6%)** | 30% (19%) | **68% (1%)** |
+| multi_vj (earlier run) | ~1.5 s of video | **80% (0%)** | 61% (3%) | 40% (3%) | 57% (2%) |
+| **multi_vjc** | **no** | 75% (0%) | 61% (5%) | **44% (6%)** | 62% (3%) |
+
+**Per clip** (the clip / its held-out variants): squat jump 100% / 79%, front kick 75% / 42%, squat 100% / 87%, arms 100% / 98%, lunge 0% / 0%. Held-out clips: 0% for all, as before.
+
+**What it says:**
+- **The gain over `multi` is not leakage.** With no future at all, the latent takes the clips from 44% to 75% and falls from 16% to 0%. From what it has seen so far, the policy can tell which motion it is in, which plain tracking can't.
+- **It is the best policy under tempo changes:** 44% success vs 30% for the retarget look-ahead, and 6% vs 19% falls.
+- **It is close to, but below, seeing the retarget ahead:** 75% vs 80% on the clips, 62% vs 68% pushed. The one loss is the front kick (75% vs 100%).
+- **Still no zero-shot generalisation** to jumping jacks or punches.
+
 ## Next
 
-- **Causal latent (running):** `multi_vj` saw ahead. Its windows are centred, and it was also read 0.5 s and 1 s ahead, so it saw up to about 1.5 s of video the robot hadn't reached.
-  - `multi_vjc` (`A2H-TrackingVJCausal`) sees only the video up to the robot's current frame: the latents of the ~1 s ending now and of the ~1 s ending 0.5 s ago, from trailing windows.
-  - It trains in the same setup and is evaluated next to `multi` and `multi_future` (`outputs/remote_multiclip_vjc1`).
-  - If it still beats `multi`, V-JEPA's reading of what has happened so far helps on its own, without seeing ahead.
 - **Scale:** the latent's point is to describe any motion, but it can only help once there are many motions to learn from. The distillation dataset already has 536 robot motions with V-JEPA embeddings (`latent/distill.py`); training the conditioned tracker on those is the real test of "it understands in latent space what is going on".
