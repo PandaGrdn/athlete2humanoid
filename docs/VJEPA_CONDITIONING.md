@@ -83,7 +83,33 @@ Task success, with the fall rate in brackets.
    - Five clips is far too few to learn tracking in general. Tracking an arbitrary new motion zero-shot takes motion libraries of thousands of clips (the AMASS-scale trackers).
 4. **Lunge fails for all three.** It walks, and only 15 of its 36 variants survive the variant filters (`docs/GENERALIZATION.md`).
 
+## Adapting to a new clip: inconclusive at 300 iterations
+
+`outputs/remote_multiclip_adapt_{jacks,punches}`, about $1.
+
+**Setup:**
+- Each of the three policies was fine-tuned for 300 iterations, from its own weights, on the new clip's training variants.
+- `tracking_var` is the comparison: the squat jump's variant tracker, which never saw the other four clips.
+
+**Results:**
+
+| Policy | Jumping jacks: the clip | Jumping jacks: held-out variants | Punches: the clip | Punches: held-out variants |
+|---|---|---|---|---|
+| tracking_var | 0%, all fall | 15% (75% fall) | 0%, 71% of stages | 0%, 48% of stages |
+| multi | 0%, all fall | **16% (66% fall)** | 0%, 29% of stages | 4%, 25% of stages |
+| multi_vj | 0%, 94% fall | 6% (68% fall) | 0%, 42% of stages | 3%, 22% of stages |
+| multi_future | 0%, 70% fall | 0% (49% fall) | 0%, **71%** of stages | **8%**, 45% of stages |
+
+Each cell is task success; brackets give the fall rate where any policy falls.
+
+- **No policy learned either clip in 300 iterations.** Training episodes were still lengthening (from 16 steps to 130–210 of the clip's 400), and the single-clip runs earlier needed 1,500.
+- **Nothing here shows a faster-adapting generalist,** with or without the latent.
+- Settling it needs a longer fine-tune (about 1,000 iterations), measured at several points along the way.
+
 ## Next
 
-- **Adapting to a new clip (running next):** each of the three policies is fine-tuned briefly on jumping jacks, against the plain single-clip start. Does a generalist that sees the video latent adapt faster? That is the practical form of "any video becomes a policy".
+- **Causal latent (running):** `multi_vj` saw ahead. Its windows are centred, and it was also read 0.5 s and 1 s ahead, so it saw up to about 1.5 s of video the robot hadn't reached.
+  - `multi_vjc` (`A2H-TrackingVJCausal`) sees only the video up to the robot's current frame: the latents of the ~1 s ending now and of the ~1 s ending 0.5 s ago, from trailing windows.
+  - It trains in the same setup and is evaluated next to `multi` and `multi_future` (`outputs/remote_multiclip_vjc1`).
+  - If it still beats `multi`, V-JEPA's reading of what has happened so far helps on its own, without seeing ahead.
 - **Scale:** the latent's point is to describe any motion, but it can only help once there are many motions to learn from. The distillation dataset already has 536 robot motions with V-JEPA embeddings (`latent/distill.py`); training the conditioned tracker on those is the real test of "it understands in latent space what is going on".
