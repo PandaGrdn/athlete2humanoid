@@ -130,3 +130,34 @@ Lunge loses the most: it walks, so scaling the root's travel makes the planted f
 - the two variant-trained policies.
 
 Runs: `outputs/remote_variants_var_{sj,kick}`, then `outputs/remote_robust_gen2_{sj,kick}`.
+
+### Results on held-out variants
+
+`outputs/remote_robust_gen2_{sj,kick}/robust_summary.md`. 64 rollouts per condition, run on Modal. The task and taskhybrid rows are the spec-fixed retrains. Each cell gives task success on the 7 held-out variants, with the fall rate in brackets.
+
+| Policy | Squat jump | Front kick | Mirrored (0.6x, 1.6x) | Clean clip | V-JEPA (sj / kick) |
+|---|---|---|---|---|---|
+| tracking | 28% (29%) | 43% (57%) | 0% (100%) | 100% | 0.65 / 0.63 |
+| task | 2% (31%) | 39% (30%) | 0% (100%) | 100% | 0.45 / 0.45 |
+| taskhybrid | 12% (30%) | 18% (53%) | 0% (100%) | 100% | 0.50 / 0.53 |
+| **tracking_var** | **78% (0%)** | **100% (0%)** | **86% (0%)** | 100% | 0.66 / 0.66 |
+| taskhybrid_var | 64% (0%) | 68% (15%) | 62% (12%) | 100% | 0.49 / 0.38 |
+
+- **Training on variants generalises to variants it never saw.**
+  - `tracking_var` never falls on a held-out variant and completes the spec 78% (squat jump) and 100% (kick) of the time.
+  - Every single-clip policy falls on every mirrored variant.
+  - On the original clip it matches single-clip tracking (V-JEPA 0.66 vs 0.65, joint error 0.11 vs 0.10 rad), so following many versions costs nothing on the one it came from.
+- **Tempo** is where single-clip tracking broke worst:
+  - tracking succeeds 0% at 0.5x, 1.5x and 2x on the squat jump;
+  - `taskhybrid_var` succeeds 100%, 100% and 92%;
+  - `tracking_var` reaches 100% at 0.5x but still 0% at 2x, because it follows a reference it can't keep up with.
+- **`taskhybrid_var` is the most robust to shoves**, at 95% success under pushes. But it isn't uniformly better:
+  - squat jump at 0.8x speed: 14% success;
+  - kick with a frozen reference: falls 91% of the time;
+  - kick V-JEPA: 0.38, the lowest.
+- **Remaining failures:**
+  - squat jump, `tracking_var` at 1.6x mirrored: 45%; at 2x: 3%;
+  - kick, `taskhybrid_var` at amplitude 1.25: 0%.
+  Both are outside the training range in the direction that is harder for the body. A wider grid is the next step.
+
+**So:** a policy trained on automatically made variants learns the action rather than the recording, and nothing in the process knows what the action is. For a new video, the default is `tracking_var`; use `taskhybrid_var` where shoves matter more than looking like the video.
