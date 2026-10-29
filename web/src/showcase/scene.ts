@@ -242,12 +242,14 @@ export class ShowcasePlayer {
     c.maxPolarAngle = Math.PI / 2 - 0.04;
     c.rotateSpeed = 0.7;
     c.zoomSpeed = 0.8;
-    c.enableZoom = false; // the wheel scrolls the page until the visitor grabs the stage
     c.update();
 
     canvas.addEventListener("pointerdown", this.onDown);
     canvas.addEventListener("pointerup", this.onUp);
-    canvas.addEventListener("pointerleave", this.onLeave);
+    // A plain wheel / two-finger swipe scrolls the page; only a pinch (a trackpad pinch is a ctrl+wheel) or
+    // ctrl/cmd+wheel zooms. Caught on the way down, before OrbitControls sees it.
+    this.wheelRoot = canvas.parentElement ?? canvas;
+    this.wheelRoot.addEventListener("wheel", this.onWheel, { capture: true });
     canvas.addEventListener("pointermove", this.onMove);
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(canvas.parentElement ?? canvas);
@@ -295,7 +297,7 @@ export class ShowcasePlayer {
     this.io.disconnect();
     this.canvas.removeEventListener("pointerdown", this.onDown);
     this.canvas.removeEventListener("pointerup", this.onUp);
-    this.canvas.removeEventListener("pointerleave", this.onLeave);
+    this.wheelRoot.removeEventListener("wheel", this.onWheel, { capture: true });
     this.canvas.removeEventListener("pointermove", this.onMove);
     this.controls.dispose();
     this.scene.traverse((o) => {
@@ -311,7 +313,6 @@ export class ShowcasePlayer {
   private onDown = (e: PointerEvent) => {
     this.down = { x: e.clientX, y: e.clientY, t: performance.now() };
     this.data.pushes.prefetch(Math.floor(this.f) + MIN_LEAD);
-    this.controls.enableZoom = true;
   };
   private lastPrefetch = 0;
   private onMove = () => {
@@ -320,7 +321,8 @@ export class ShowcasePlayer {
     this.lastPrefetch = now;
     this.data.pushes.prefetch(Math.floor(this.f) + MIN_LEAD);
   };
-  private onLeave = (e: PointerEvent) => { if (e.pointerType === "mouse") this.controls.enableZoom = false; };
+  private wheelRoot: HTMLElement;
+  private onWheel = (e: WheelEvent) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation(); };
   private onUp = (e: PointerEvent) => {
     const d = this.down;
     this.down = null;

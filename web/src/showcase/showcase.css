@@ -93,7 +93,7 @@
 }
 @media (max-width: 640px) {
   .sc { --sc-gutter: 16px; }
-  .sc-stage { height: 74svh; min-height: 460px; }
+  .sc-stage { height: 66svh; min-height: 440px; }
   .sc-head { top: 20px; right: 16px; }
   .sc-head h1 { font-size: 44px; margin-top: 12px; }
   .sc-lede { display: none; }
