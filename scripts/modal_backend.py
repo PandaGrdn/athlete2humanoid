@@ -61,15 +61,27 @@ class ModalRun:
         self.log(f"{self.session} running on Modal (call {self.call.object_id})")
 
     def state(self):
-        """done | failed | running, from the function call (the job's own status.json says why)."""
+        """done | failed | running | unknown, from the function call (the job's own status.json says
+        why). unknown: this machine couldn't reach Modal (asleep, offline); the job itself runs on."""
         try:
             rc = self.call.get(timeout=0)
         except TimeoutError:
             return "running"
         except Exception as e:  # noqa: BLE001  (the container died, was cancelled, timed out)
+            if isinstance(e, (ConnectionError, OSError)) or "Connection" in type(e).__name__ or "Deadline" in str(e):
+                self.log(f"can't reach Modal ({type(e).__name__}: {str(e)[-120:]}); the job runs on, polling again")
+                return "unknown"
             self.log(f"Modal call ended with {type(e).__name__}: {str(e)[-300:]}")
             return "failed"
         return "done" if rc == 0 else "failed"
+
+    def job_status(self):
+        """The job's own state (scripts/job.py's status.json on the Volume), or None if unreadable."""
+        try:
+            raw = b"".join(self.vol.read_file(f"{self.rel}/jobs/{self.session}/status.json"))
+            return json.loads(raw)["state"]
+        except Exception:  # noqa: BLE001
+            return None
 
     def download(self, remote, local, timeout=None):
         """remote: a path as the job sees it (/vol/runs/...) -> local file."""
@@ -86,6 +98,9 @@ class ModalRun:
             self.log("Modal call cancelled")
 
     def cleanup(self):
+        if self.job_status() == "running":  # never delete a live job's files (a misread call state)
+            self.log(f"kept {self.rel} on the Volume: its job still says running")
+            return
         try:
             self.vol.remove_file(self.rel, recursive=True)
             self.log(f"removed {self.rel} from the Volume")
@@ -97,7 +112,8 @@ def wait(run, sync, poll_s=120):
     """Poll until the call ends, syncing checkpoints between polls. -> final state."""
     while True:
         st = run.state()
-        if st != "running":
+        if st not in ("running", "unknown"):
             return st
-        sync()
+        if st == "running":
+            sync()
         time.sleep(poll_s)
