@@ -87,13 +87,42 @@ The retarget has two defects that no policy can follow:
    - The squat jump's fastest joint moves at 8 rad/s.
 2. **The glide floats.**
    - For about 1.2 s around the throw, both feet are 4–9 cm off the floor while the body travels sideways, with no rise of the pelvis.
-   - A real flight that long would need a jump of over a metre. The 1900 film was probably shot faster than it plays, so a hop of a fraction of a second becomes a slow float.
+   - A real flight that long would need a jump of over a metre.
 
-**Fixes for the pipeline, not yet built:**
-- Keep the IK continuous: penalise joint velocity, or reject a solution that jumps across a joint's range.
-- Check flights against gravity: airtime vs pelvis rise. That detects slowed footage and re-times it, or lets the spec drop the phantom flight.
+**Correction to the first diagnosis (slowed film):** the film shows McCracken on one foot through the glide, not in the air. The "float" is a pivoting stance foot that the pose estimate lifted off the floor. `stance_mask` only pins a foot slower than 0.6 m/s, so nothing held it down.
 
-**The discus works because it never leaves the ground,** so its playback speed doesn't matter.
+### Rerun after fixing the retarget
+
+The fixes are in commit 42f3d64, with tests:
+- **A joint-speed cap in the IK:** `MAX_JOINT_SPEED`, 20 rad/s of video time, through a mink `VelocityLimit`.
+- **A gravity check on flights** (`ground_phantom_flights`): a stretch with neither foot planted counts as a flight only if the pelvis rises at least a quarter of the g T²/8 its airtime needs. Otherwise the body is lowered until its lowest foot is on the floor.
+
+On the shot put:
+
+| | Before | After |
+|---|---|---|
+| Fastest joint | 173 rad/s | 20 rad/s |
+| Frames floating | 36 | 4 |
+
+The cost is that the arms lag their target by up to 15 cm for a few frames.
+
+**Effect on other clips:**
+- Squat jump, squat, arms and lunge retarget identically.
+- Jumping jacks loses the same overhead-arm flips (76 rad/s) and keeps its real hops.
+
+Rerun (`outputs/remote_multiclip_pro_shot_put2`), same three policies and suite:
+
+| Policy | The clip | Pushes | Start noise | Tempo 0.5–2x | Held-out variants | Joint error (rad) |
+|---|---|---|---|---|---|---|
+| `tracking_var` | 0% (0% fall) | 2% (6%) | 33% (26%) | 5% (31%) | 2% (0%) | **0.175** |
+| `multi` | 0% (0% fall) | 4% (4%) | **43%** (22%) | **19%** (20%) | **17%** (4%) | 0.189 |
+| `multi_vjc` | 0% (0% fall) | 4% (2%) | 41% (19%) | 4% (21%) | 2% (1%) | 0.180 |
+
+- **The fix worked:** training episodes run the whole clip (357–412 steps, up from about 25), and the falls are gone (100% → about 0%).
+- **The robot now tracks the throw's joints more closely than the discus's:** 0.18 vs 0.23 rad.
+- **Task success is still about 0%. The policies don't learn the glide:** the reference travels about 1.1 m sideways, and the robot stays near where it started (0.4–0.5 m torso error). So it never reaches the first key moment, "step left, turn left", which includes that travel.
+- **What's left is a learning problem, not a broken reference.** Moves that travel far (a glide, a run-up) need more than 1,500 iterations from a start trained on clips that stay in place, or a stronger root-tracking weight.
+- `multi` again does best of the three on the new clip.
 
 ## Hurdles: not trained
 
@@ -113,9 +142,11 @@ The discus first failed the variant filter: its own reference "completed 1/2 key
 |---|---|---|
 | Processing, shot put and hurdles (`pro_v1`) | about 1 h 20 min on an L40S | about $2.60 |
 | Discus | about 1 h 20 min | about $2.60 |
+| Shot put rerun | about 1 h 20 min | about $2.60 |
 
 ## What it says about the stack
 
 - **Video → SAM 3.1 → retarget → variant-trained tracker works on elite athletes' footage** when the retarget is physically sound (discus).
 - **For a new clip, start from the multi-clip generalist,** not the single-clip specialist. Adding the causal V-JEPA input to that generalist didn't help further on this clip.
-- **The weak link on archive footage is the retarget,** not the policy: joint-limit flips and slowed-down flights. Both can be detected automatically before any GPU time is spent.
+- **On archive footage the retarget was the weak link:** joint-limit flips, and stance feet the pose lifts off the floor. Both are now fixed in the retarget itself (commit 42f3d64).
+- **After that, the limit is motions that travel:** the shot put's 1 m glide isn't learned in 1,500 iterations.
