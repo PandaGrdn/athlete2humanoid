@@ -4,22 +4,24 @@ The 5-clip generalist (`multi`, experiments/multiclip_policy.py) completes 0% of
 the discus, none of which it saw. This trains the same tracker on more and more motions, level by level,
 and measures whether that changes (docs/FRONTIER_GENERALIST.md):
 
-    real7       the 7 real clips that aren't test clips (squat jump, front kick, squat, arms, lunge, shot
-                put, hurdles), each re-retargeted from its human.npy with today's retarget.py
-    real7_bank  + the procedural bank (latent/bank.py), minus its jumping jacks and punches: the test
+    real        the real clips that aren't test clips and pass trackable() (squat jump, front kick, squat,
+                arms, lunge, shot put; the hurdles film ends in mid-air), each re-retargeted from its
+                human.npy with today's retarget.py
+    real_bank   + the procedural bank (latent/bank.py), minus its jumping jacks and punches: the test
                 clips' procedural twins
     all         + recombinations of all of those (latent/distill.py variation()), as the latent policy's
                 distillation set builds them
 
 Every motion is checked trackable before it is trained on (trackable(): joint limits and speed, upright,
-on the floor or in a flight gravity explains, no sliding stance foot), then expanded into its automatic
-variants (skill/variations.py, which drops any variant whose own reference fails its keypose spec).
+on the floor, starting and ending on it, flights gravity explains, no sliding stance foot), then expanded
+into its automatic variants (skill/variations.py, which drops any variant whose own reference fails its
+keypose spec).
 
 1. Locally, on the CPU: the pool, as clip folders and motion CSVs (no mjlab needed)
        python experiments/generalist_policy.py pool --out outputs/gen_inputs --clips <clip folders>
 2. On the GPU, through the multiclip job (multiclip_policy.py hands --level runs to this file):
-       python3 scripts/remote_run.py multiclip --tag gen_real7 --reuse outputs/gen_inputs --with-weights \\
-           --backend modal --branch <branch> --iters 3000 --args "--level real7 --baselines multi multi_future"
+       python3 scripts/remote_run.py multiclip --tag gen_real --reuse outputs/gen_inputs --with-weights \\
+           --backend modal --branch <branch> --iters 2000 --args "--level real --baselines multi multi_future"
    - every CSV of the level and of the eval sets -> mjlab motion.npz, all in one process (convert());
    - the policies train side by side: gen_multi from the 5-clip multi, gen_future from the 5-clip
      multi_future (mjlab's inputs plus the retarget 0.5 / 1 s ahead), the _l ones (a bigger network)
@@ -51,10 +53,10 @@ def log(msg):  # as experiments/latent_policy.py's, which this can't import in m
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
-REAL_TRAIN = ("squat_jump", "front_kick", "squat", "arms", "lunge", "shot_put", "hurdles")
+REAL_TRAIN = ("squat_jump", "front_kick", "squat", "arms", "lunge", "shot_put", "hurdles")  # candidates
 ZERO_SHOT = ("jumping_jacks", "punches", "discus")  # shared by the four frontier directions
 BANK_EXCLUDE = ("jumping_jacks", "punch")  # the bank's procedural twins of two zero-shot clips
-LEVELS = {"real7": ("real",), "real7_bank": ("real", "bank"), "all": ("real", "bank", "recombo")}
+LEVELS = {"real": ("real",), "real_bank": ("real", "bank"), "all": ("real", "bank", "recombo")}
 # Variant grids (mirror, tempo, amplitude, warp): real clips get skill/variations.py's full TRAIN grid; the
 # bank is already parametric (no warps); recombinations are random already (mirror only).
 BANK_GRID = [(m, s, a, 0.0) for m in (False, True) for s in (0.75, 1.0, 1.33) for a in (0.85, 1.0, 1.1)]
@@ -110,10 +112,12 @@ def stand_foot_height(g1):
     return float(g1.bodies(q)[0, L_ANKLE, 2])
 
 
-def trackable(q, g1, foot0, fps=30.0):
+def trackable(q, g1, foot0, fps=30.0, slide=True):
     """Can the G1 track this reference at all? -> (qpos with joints clipped to their limits, reasons it can't:
     [] if it can). The rules a real retarget obeys (retarget.py's joint-speed cap and gravity check), plus
-    the things latent/distill.py's random recombinations break: upright, on the floor, feet not sliding."""
+    the things latent/distill.py's random recombinations break: upright, on the floor, feet not sliding.
+    slide=False skips the last for real clips: retarget.py pins their stance feet, and the moves that travel
+    (lunge, glide, spin) read as sliding at this resolution though trackers learn them (docs/PRO_CLIPS.md)."""
     import retarget
     from skill import task as T
     from skill.variations import L_ANKLE, MAX_LIMIT_FRAC, R_ANKLE
@@ -138,6 +142,10 @@ def trackable(q, g1, foot0, fps=30.0):
     low = feet[:, :, 2].min(1) - foot0
     if low.min() < -MAX_SINK:
         why.append(f"a foot {-low.min() * 100:.0f} cm into the floor")
+    if max(low[0], low[-1]) > T.DOWN:
+        # an episode started there begins in mid-air: the hurdles film ends in flight, and its last
+        # frames took a third of all of mjlab's adaptive resets while failing every one
+        why.append("starts or ends in the air")
     for a, b in _runs(low > T.AIR):  # both feet up: only if the pelvis rises as a real flight must
         ends = q[[max(a - 1, 0), min(b, len(q) - 1)], 2].mean()
         if q[a:b, 2].max() - ends < retarget.FLIGHT_RISE_FRAC * retarget.GRAVITY * ((b - a) / fps) ** 2 / 8:
@@ -146,9 +154,18 @@ def trackable(q, g1, foot0, fps=30.0):
     planted = feet[:, :, 2] - foot0 < T.DOWN
     both = planted[1:] & planted[:-1]
     v = np.linalg.norm(np.diff(feet[:, :, :2], axis=0), axis=-1) * fps
-    if both.any() and np.percentile(v[both], 95) > MAX_SLIDE:
+    if slide and both.any() and np.percentile(v[both], 95) > MAX_SLIDE:
         why.append(f"a planted foot slides at {np.percentile(v[both], 95):.1f} m/s")
     return q, why
+
+
+def grounded_span(q, g1, foot0):
+    """(first, last + 1): q's frames from the first to the last with a foot on the floor."""
+    from skill import task as T
+    from skill.variations import L_ANKLE, R_ANKLE
+    pos = g1.bodies(q)
+    on = np.flatnonzero(np.minimum(pos[:, L_ANKLE, 2], pos[:, R_ANKLE, 2]) - foot0 <= T.DOWN)
+    return (int(on[0]), int(on[-1]) + 1) if len(on) else (0, 0)
 
 
 def bank_motions():
@@ -195,8 +212,16 @@ def pool(a):
         report["retarget"][c] = re_retarget(src, clips_out / c)
         log(f"{c}: re-retargeted {report['retarget'][c]}")
         real[c] = np.load(clips_out / c / "qpos.npy")
+    train = []
+    for c in REAL_TRAIN:
+        why = trackable(real[c], g1, foot0, slide=False)[1]
+        report["trackable"][f"clip/{c}"] = why
+        if why:
+            log(f"{c}: not trained on ({'; '.join(why)})")
+        else:
+            train.append(c)
 
-    groups = {"real": {c: (real[c], V.TRAIN) for c in REAL_TRAIN}}
+    groups = {"real": {c: (real[c], V.TRAIN) for c in train}}
     bank = bank_motions()
     if a.smoke:
         bank = dict(list(bank.items())[:3])
@@ -209,7 +234,7 @@ def pool(a):
         else:
             kept_bank[f"bank_{k}"] = q
     groups["bank"] = {k: (q, BANK_GRID) for k, q in kept_bank.items()}
-    base = {f"bank/{k[5:]}": q for k, q in kept_bank.items()} | {f"clip/{c}": real[c] for c in REAL_TRAIN}
+    base = {f"bank/{k[5:]}": q for k, q in kept_bank.items()} | {f"clip/{c}": real[c] for c in train}
     rc, rep = recombinations(base, 4 if a.smoke else a.recombinations, g1, foot0, a.seed)
     report["recombinations"] = rep
     log(f"recombinations: {rep}")
@@ -233,7 +258,7 @@ def pool(a):
     (P / "levels.json").write_text(json.dumps(levels, indent=1))
 
     evals = {}  # what every policy is tested on, clip by clip, as multiclip_policy.py builds it
-    for c in (*REAL_TRAIN, *ZERO_SHOT):
+    for c in (*train, *ZERO_SHOT):
         e = P / "evals" / c
         e.mkdir(parents=True, exist_ok=True)
         spec = compile_keypose_spec(T.body_positions_from_qpos(real[c]), 30.0, name=c)
@@ -250,6 +275,7 @@ def pool(a):
         if ck:
             (out / f"policy_{name}").mkdir(exist_ok=True)
             shutil.copy(ck, out / f"policy_{name}" / Path(ck).name)
+    report["real_train"] = train
     report["levels"] = {lv: {"segments": len(s), "seconds": round(sum(x["frames"] for x in s) / 30)} for lv, s in levels.items()}
     (P / "pool.json").write_text(json.dumps(report, indent=1))
     log(f"pool in {out}: " + ", ".join(f"{lv} {v['segments']} variants / {v['seconds']} s" for lv, v in report["levels"].items()))
@@ -513,6 +539,8 @@ def run(a):
     out.mkdir(parents=True, exist_ok=True)
     P = Path(a.pool).resolve() if a.pool else clips_dir / "_pool"
     a.init_dir = a.init_dir or str(clips_dir.parent)
+    if a.eval_train is None:  # the real clips that passed trackable()
+        a.eval_train = json.loads((P / "pool.json").read_text())["real_train"]
     if a.smoke:
         a.eval_train, a.zero_shot = a.eval_train[:1], a.zero_shot[:1]
         a.iters, a.iters_scratch, a.num_envs = min(a.iters, 3), None, 64
@@ -557,7 +585,7 @@ def run_parser():
     ap.add_argument("--policies", nargs="*", default=["gen_multi", "gen_future"], choices=list(POLICIES))
     ap.add_argument("--baselines", nargs="*", default=[], choices=["multi", "multi_future"],
                     help="also evaluate these from --init-dir, untrained here")
-    ap.add_argument("--eval-train", nargs="*", default=list(REAL_TRAIN), help="trained clips to evaluate (clean + variants)")
+    ap.add_argument("--eval-train", nargs="*", help="trained clips to evaluate (clean + variants); default: the pool's")
     ap.add_argument("--zero-shot", nargs="*", default=list(ZERO_SHOT))
     ap.add_argument("--short-eval", action="store_true", help="zero-shot clips on the clean clip + variants only")
     ap.add_argument("--iters", type=int, default=3000)

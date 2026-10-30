@@ -91,7 +91,7 @@ def test_runs():
 
 
 def test_levels_nest_and_test_clips_held_out():
-    assert set(G.LEVELS["real7"]) < set(G.LEVELS["real7_bank"]) < set(G.LEVELS["all"])
+    assert set(G.LEVELS["real"]) < set(G.LEVELS["real_bank"]) < set(G.LEVELS["all"])
     assert not set(G.REAL_TRAIN) & set(G.ZERO_SHOT)
     assert len(G.REAL_TRAIN) == 7
 
@@ -111,3 +111,14 @@ def test_policies_start_from_5clip_or_scratch():
         assert task.startswith("A2H-Tracking")
         assert start in (None, "multi", "multi_future")
         assert (start is None) == (name.endswith(("_s", "_l")))
+
+
+def test_ending_in_the_air_rejected(g1, foot0, kick):
+    """The hurdles film ends mid-flight: an episode started at its end can only fail."""
+    q = kick.copy()
+    rise = np.clip(np.arange(len(q)) - (len(q) - 10), 0, None) * 0.03  # last 10 frames lifted, up to 0.3 m
+    q[:, 2] += rise
+    _, why = G.trackable(q, g1, foot0)
+    assert "starts or ends in the air" in why
+    a, b = G.grounded_span(q, g1, foot0)
+    assert a == 0 and b < len(q)
