@@ -6,7 +6,8 @@ import { useEffect, useState } from "react";
  *  is remembered per browser. Classic stays the fallback: anything a design doesn't restyle looks as it always
  *  did. VITE_DEFAULT_UI=aether or classic builds with that one as the default instead. */
 export type Ui = "classic" | "aether" | "aurora";
-const KEY = "a2h-ui";
+// v2: a choice saved before aurora existed (aether was the default then) no longer overrides it
+const KEY = "a2h-ui-v2";
 const isUi = (v: unknown): v is Ui => v === "classic" || v === "aether" || v === "aurora";
 const DEFAULT: Ui = isUi(import.meta.env.VITE_DEFAULT_UI) ? import.meta.env.VITE_DEFAULT_UI : "aurora";
 const THEME_COLOR: Record<Ui, string> = { classic: "#0a0c0f", aether: "#000000", aurora: "#02070A" };
