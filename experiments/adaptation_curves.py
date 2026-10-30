@@ -287,7 +287,8 @@ def summarise(out, clip, starts, at, build_s):
     timing = json.loads((out / "timing.json").read_text()) if (out / "timing.json").exists() else {}
     short = json.loads((e / "short" / "robust.json").read_text())["conditions"] if (e / "short" / "robust.json").exists() else []
     full = json.loads((e / "full" / "robust.json").read_text())["conditions"] if (e / "full" / "robust.json").exists() else []
-    res = {"clip": clip, "at": list(at), "build_s": build_s, "starts": {}}
+    gpu = (out / "gpu.txt").read_text().strip() if (out / "gpu.txt").exists() else None
+    res = {"clip": clip, "at": list(at), "build_s": build_s, "gpu": gpu, "starts": {}}
     for name, s in starts.items():
         d = out / f"policy_{name}"
         el = elapsed_by_iter((d / "train.log").read_text(errors="ignore")) if (d / "train.log").exists() else {}
@@ -310,7 +311,7 @@ def summarise(out, clip, starts, at, build_s):
 
 def pack(out):
     with tarfile.open(out / "results.tar.gz", "w:gz") as tar:
-        for f in ("curves.json", "curves.md", "timing.json", "variants/variants.json", "eval/task_spec.json"):
+        for f in ("curves.json", "curves.md", "timing.json", "gpu.txt", "variants/variants.json", "eval/task_spec.json"):
             if (out / f).exists():
                 tar.add(out / f, f)
         for kind in ("short", "full"):
@@ -342,6 +343,9 @@ def run(a):
         (out / "build_s.txt").write_text(f"{time.time() - t0:.1f}")
     build_s = float((out / "build_s.txt").read_text()) if (out / "build_s.txt").exists() else 0.0
     log(f"variants built in {build_s:.0f} s")
+    if not (out / "gpu.txt").exists():  # the minutes are this GPU's
+        q = subprocess.run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], capture_output=True, text=True)
+        (out / "gpu.txt").write_text(q.stdout.strip().splitlines()[0] if q.returncode == 0 and q.stdout.strip() else "unknown")
     train(a, out, clip_dir, inp, starts, fps)
     evaluate(a, out, starts)
     summarise(out, a.clip, starts, a.at, build_s)
@@ -472,6 +476,7 @@ def launch(a):
     outputs/remote_<tag>_<clip>/. --attach: follow jobs already submitted with this tag."""
     sys.path.insert(0, str(ROOT / "scripts"))
     import modal
+    from modal_app import APP
     from modal_backend import ModalRun
     if not a.tag.startswith("adapt_"):
         raise SystemExit("tags start with adapt_")
@@ -494,7 +499,7 @@ def launch(a):
             print(f"[{out.name}] {line}", flush=True)
             with open(out / "runner.log", "a") as f:
                 f.write(line + "\n")
-        mr = ModalRun(session, out, say, a.modal_gpu)
+        mr = ModalRun(session, out, say)
         jobs[clip] = mr
         if a.attach:
             mr.call = modal.FunctionCall.from_id(json.loads((out / "modal_call.json").read_text())["call_id"])
@@ -508,8 +513,13 @@ def launch(a):
         if clip == clips[0]:
             mr.deploy()
         mr.upload([], tar_f, ROOT / "no-secrets-needed")  # no HF token: nothing here downloads gated weights
-        mr.submit(f"python3 experiments/adaptation_curves.py run {mr.run_dir}/inputs --clip {clip} "
-                  f"--out {mr.run_dir}/outputs/adapt {a.args}", a.branch)
+        cmd = f"python3 experiments/adaptation_curves.py run {mr.run_dir}/inputs --clip {clip} --out {mr.run_dir}/outputs/adapt {a.args}"
+        if a.gpu:  # this call only; the deployed app (shared with other jobs) keeps its GPU
+            mr.call = modal.Function.from_name(APP, "run_job").with_options(gpu=a.gpu).spawn(session, cmd, a.branch)
+            (out / "modal_call.json").write_text(json.dumps({"call_id": mr.call.object_id, "session": session, "gpu": a.gpu}))
+            mr.log(f"{session} running on Modal, {a.gpu} (call {mr.call.object_id})")
+        else:
+            mr.submit(cmd, a.branch)
     try:
         while jobs:
             time.sleep(a.poll_s)
@@ -566,7 +576,7 @@ def parser():
     p.add_argument("--branch", required=True, help="the pushed branch the jobs run")
     p.add_argument("--clips", nargs="*", help="default: every clip in the inputs")
     p.add_argument("--args", default="", help="extra flags for run (e.g. '--at 50 100 300')")
-    p.add_argument("--modal-gpu", default=os.environ.get("A2H_MODAL_GPU"))
+    p.add_argument("--gpu", help="GPU for these calls only (e.g. A100-40GB when L40S has no capacity); default: the app's")
     p.add_argument("--poll-s", type=int, default=120)
     p.add_argument("--attach", action="store_true", help="follow already-submitted jobs (modal_call.json)")
     p = sub.add_parser("report", help="runs' curves.json -> tables, minutes-to-X, chart")
