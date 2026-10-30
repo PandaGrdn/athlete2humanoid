@@ -1,0 +1,1783 @@
+{
+ "retarget": {
+  "squat_jump": {
+   "frames": 271,
+   "max_joint_speed": 8.0,
+   "old_max_joint_speed": 8.0,
+   "max_change_rad": 0.0
+  },
+  "front_kick": {
+   "frames": 167,
+   "max_joint_speed": 19.9,
+   "old_max_joint_speed": 21.7,
+   "max_change_rad": 0.328
+  },
+  "squat": {
+   "frames": 306,
+   "max_joint_speed": 5.3,
+   "old_max_joint_speed": 5.3,
+   "max_change_rad": 0.0
+  },
+  "arms": {
+   "frames": 102,
+   "max_joint_speed": 8.7,
+   "old_max_joint_speed": 8.7,
+   "max_change_rad": 0.0
+  },
+  "lunge": {
+   "frames": 297,
+   "max_joint_speed": 11.6,
+   "old_max_joint_speed": 11.6,
+   "max_change_rad": 0.0
+  },
+  "jumping_jacks": {
+   "frames": 159,
+   "max_joint_speed": 20.0,
+   "old_max_joint_speed": 75.9,
+   "max_change_rad": 2.994
+  },
+  "punches": {
+   "frames": 168,
+   "max_joint_speed": 10.1,
+   "old_max_joint_speed": 10.1,
+   "max_change_rad": 0.245
+  },
+  "discus": {
+   "frames": 102,
+   "max_joint_speed": 20.0,
+   "old_max_joint_speed": 65.2,
+   "max_change_rad": 3.126
+  },
+  "shot_put": {
+   "frames": 128,
+   "max_joint_speed": 20.0,
+   "old_max_joint_speed": 20.0,
+   "max_change_rad": 0.0
+  },
+  "hurdles": {
+   "frames": 89,
+   "max_joint_speed": 20.0,
+   "old_max_joint_speed": 78.0,
+   "max_change_rad": 2.794
+  }
+ },
+ "sources": {
+  "squat_jump": {
+   "group": "real",
+   "variants": 36,
+   "kept": 36
+  },
+  "front_kick": {
+   "group": "real",
+   "variants": 36,
+   "kept": 36
+  },
+  "squat": {
+   "group": "real",
+   "variants": 36,
+   "kept": 36
+  },
+  "arms": {
+   "group": "real",
+   "variants": 36,
+   "kept": 36
+  },
+  "lunge": {
+   "group": "real",
+   "variants": 36,
+   "kept": 15
+  },
+  "shot_put": {
+   "group": "real",
+   "variants": 36,
+   "kept": 24
+  },
+  "bank_squat_d10_r1": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 18
+  },
+  "bank_squat_d10_r2": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 18
+  },
+  "bank_squat_d10_r3": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 18
+  },
+  "bank_squat_d20_r1": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 18
+  },
+  "bank_squat_d20_r2": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 18
+  },
+  "bank_squat_d20_r3": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 18
+  },
+  "bank_squat_d30_r1": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 12
+  },
+  "bank_squat_d30_r2": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 12
+  },
+  "bank_squat_d30_r3": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 12
+  },
+  "bank_lunge_left": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 12
+  },
+  "bank_lunge_right": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 12
+  },
+  "bank_march": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 18
+  },
+  "bank_kick_left": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 18
+  },
+  "bank_kick_right_high": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 18
+  },
+  "bank_side_shuffle": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 14
+  },
+  "bank_vertical_jump": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 18
+  },
+  "bank_arms_raise_front": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 18
+  },
+  "bank_arms_raise_side": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 18
+  },
+  "bank_wave": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 12
+  },
+  "bank_bend": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 18
+  },
+  "bank_twist": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 18
+  },
+  "bank_sway": {
+   "group": "bank",
+   "variants": 18,
+   "kept": 18
+  },
+  "rc000": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc001": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc002": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc003": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc004": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc005": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc006": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc007": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc008": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc009": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc010": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc011": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc012": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc013": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc014": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc015": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc016": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc017": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc018": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc019": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc020": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc021": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc022": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc023": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc024": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc025": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc026": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc027": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc028": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc029": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc030": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc031": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc032": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc033": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc034": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc035": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc036": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc037": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc038": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc039": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc040": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc041": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc042": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc043": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc044": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc045": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc046": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc047": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc048": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc049": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc050": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc051": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc052": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc053": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc054": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc055": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc056": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc057": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc058": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc059": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc060": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc061": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc062": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc063": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc064": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc065": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc066": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc067": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc068": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc069": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc070": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc071": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc072": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc073": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc074": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc075": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc076": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc077": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc078": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc079": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc080": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc081": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc082": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc083": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc084": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc085": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc086": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc087": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc088": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc089": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc090": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc091": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc092": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc093": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc094": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc095": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc096": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc097": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc098": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc099": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc100": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc101": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc102": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc103": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc104": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc105": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc106": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc107": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc108": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc109": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc110": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc111": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc112": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc113": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc114": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc115": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc116": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc117": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc118": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc119": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc120": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc121": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc122": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc123": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc124": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc125": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc126": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc127": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc128": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc129": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc130": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc131": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc132": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc133": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc134": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc135": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc136": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc137": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc138": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc139": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc140": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc141": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc142": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc143": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc144": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc145": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc146": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc147": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc148": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 0
+  },
+  "rc149": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc150": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc151": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc152": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc153": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc154": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc155": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc156": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc157": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc158": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc159": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc160": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc161": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc162": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc163": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc164": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc165": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc166": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc167": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc168": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc169": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc170": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc171": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc172": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc173": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc174": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc175": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc176": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc177": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc178": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc179": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc180": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc181": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc182": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc183": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc184": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc185": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc186": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc187": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc188": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc189": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc190": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc191": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc192": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc193": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc194": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc195": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc196": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc197": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc198": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 0
+  },
+  "rc199": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc200": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc201": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc202": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc203": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc204": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc205": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc206": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc207": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc208": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc209": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc210": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc211": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc212": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc213": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc214": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc215": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc216": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc217": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc218": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc219": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc220": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc221": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc222": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc223": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc224": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc225": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc226": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc227": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc228": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc229": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc230": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc231": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc232": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc233": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc234": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc235": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc236": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc237": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc238": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc239": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc240": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 0
+  },
+  "rc241": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc242": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc243": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc244": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc245": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc246": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc247": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc248": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc249": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc250": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc251": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc252": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc253": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc254": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc255": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc256": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc257": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc258": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc259": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc260": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc261": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc262": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc263": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc264": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc265": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc266": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc267": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc268": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc269": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc270": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc271": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc272": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc273": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc274": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc275": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc276": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc277": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc278": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc279": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc280": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc281": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc282": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc283": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc284": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc285": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc286": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc287": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc288": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc289": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc290": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc291": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc292": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc293": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc294": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc295": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc296": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc297": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc298": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  },
+  "rc299": {
+   "group": "recombo",
+   "variants": 2,
+   "kept": 2
+  }
+ },
+ "trackable": {
+  "clip/squat_jump": [],
+  "clip/front_kick": [],
+  "clip/squat": [],
+  "clip/arms": [],
+  "clip/lunge": [],
+  "clip/shot_put": [],
+  "clip/hurdles": [
+   "starts or ends in the air",
+   "floats for 0.13 s"
+  ],
+  "bank/squat_d10_r1": [],
+  "bank/squat_d10_r2": [],
+  "bank/squat_d10_r3": [],
+  "bank/squat_d20_r1": [],
+  "bank/squat_d20_r2": [],
+  "bank/squat_d20_r3": [],
+  "bank/squat_d30_r1": [],
+  "bank/squat_d30_r2": [],
+  "bank/squat_d30_r3": [],
+  "bank/lunge_left": [],
+  "bank/lunge_right": [],
+  "bank/march": [],
+  "bank/high_knees": [
+   "a planted foot slides at 2.2 m/s"
+  ],
+  "bank/kick_left": [],
+  "bank/kick_right_high": [],
+  "bank/side_shuffle": [],
+  "bank/vertical_jump": [],
+  "bank/arms_raise_front": [],
+  "bank/arms_raise_side": [],
+  "bank/wave": [],
+  "bank/bend": [],
+  "bank/twist": [],
+  "bank/sway": [],
+  "bank/stand": [
+   "a frozen pose"
+  ]
+ },
+ "recombinations": {
+  "tries": 2023,
+  "kept": 300,
+  "rejected": {
+   "#% of joint samples past their limits": 822,
+   "tilts # rad": 392,
+   "torso down to # m": 318,
+   "a foot # cm into the floor": 1051,
+   "starts or ends in the air": 923,
+   "floats for # s": 1138,
+   "a planted foot slides at # m/s": 1369,
+   "a frozen pose": 225,
+   "a joint at # rad/s": 74
+  }
+ },
+ "real_train": [
+  "squat_jump",
+  "front_kick",
+  "squat",
+  "arms",
+  "lunge",
+  "shot_put"
+ ],
+ "levels": {
+  "real": {
+   "segments": 183,
+   "seconds": 1323
+  },
+  "real_bank": {
+   "segments": 539,
+   "seconds": 2796
+  },
+  "all": {
+   "segments": 1133,
+   "seconds": 5048
+  }
+ }
+}

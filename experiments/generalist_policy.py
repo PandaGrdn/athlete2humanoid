@@ -481,7 +481,7 @@ def evaluate(a, out, clips_dir):
             log(f"{c}: robustness_eval failed")
 
 
-METRICS = ("task_success", "fall_rate", "stages_frac", "survival", "joint_err_rad", "dtw_joint_rad")
+METRICS = ("task_success", "fall_rate", "stages_frac", "dtw_joint_rad", "vjepa_aligned")  # robustness_eval summary keys
 
 
 def summarise(a, out, policies):
@@ -505,14 +505,14 @@ def summarise(a, out, policies):
     pct = lambda x: "-" if x is None else f"{x:.0%}"  # noqa: E731
     f3 = lambda x: "-" if x is None else f"{x:.3f}"  # noqa: E731
     lines = [f"# Generalist, level {a.level}", "", f"Zero-shot: {', '.join(a.zero_shot)}. Trained real clips: "
-             f"{', '.join(a.eval_train)}. Task success (fall rate), stages done, joint error (rad).", ""]
+             f"{', '.join(a.eval_train)}. Task success (fall rate), stages done, joint DTW to the clip (rad).", ""]
     for g, cs in groups.items():
         lines += [f"## {g.capitalize()} ({', '.join(cs)})", "",
-                  "| Policy | The clip | Stages | Joint err | Held-out variants | Stages | Joint err |", "|---|---|---|---|---|---|---|"]
+                  "| Policy | The clip | Stages | Joint DTW | Held-out variants | Stages | Joint DTW |", "|---|---|---|---|---|---|---|"]
         for p in policies:
             t = table[g][p]
             lines.append(f"| {p} | " + " | ".join(f"{pct(t[s]['task_success'])} ({pct(t[s]['fall_rate'])}) | "
-                                                f"{pct(t[s]['stages_frac'])} | {f3(t[s]['joint_err_rad'])}"
+                                                f"{pct(t[s]['stages_frac'])} | {f3(t[s]['dtw_joint_rad'])}"
                                                 for s in ("clean", "transfer")) + " |")
         lines.append("")
     lines += ["## Per clip (the clip / its held-out variants: task success, fall rate)", "",
@@ -593,6 +593,9 @@ def compare(a):
     os.environ["A2H_GEN_TASKS"] = json.dumps(tasks)
     evaluate(a, out, Path(a.clips).resolve())
     summarise(a, out, a.baselines)
+    (out / "variants").mkdir(exist_ok=True)
+    (out / "variants" / "variants.json").write_text("{}")  # pack() expects one
+    pack(out)
 
 
 def parser():
