@@ -70,9 +70,18 @@ def run_job(session: str, cmd: str, branch: str = "main") -> int:
     """cmd (from remote_run.job_spec) under scripts/job.py, with runs/<session>/ as its data folder;
     the code is `branch` of the repo (remote_run.py --branch), main by default."""
     remote = f"{MOUNT}/runs/{session}"
-    # Modal reuses warm containers: an earlier job's checkout would make the clone fail (exit 128)
-    shutil.rmtree(R, ignore_errors=True)
-    subprocess.run(["git", "clone", "-q", "--depth", "1", "--branch", branch, REPO_URL, R], check=True)
+    # Modal reuses warm containers: start from a clean checkout. Retry: concurrent jobs' clones can fail
+    # transiently (exit 128); git's own message is printed so a real failure says why.
+    for attempt in range(4):
+        shutil.rmtree(R, ignore_errors=True)
+        r = subprocess.run(["git", "clone", "-q", "--depth", "1", "--branch", branch, REPO_URL, R],
+                           capture_output=True, text=True)
+        if r.returncode == 0:
+            break
+        print(f"git clone failed ({r.returncode}): {r.stderr.strip()[-500:]}", flush=True)
+        time.sleep(10 * (attempt + 1))
+    else:
+        raise RuntimeError(f"git clone of {branch} failed 4 times: {r.stderr.strip()[-500:]}")
     if os.path.lexists(f"{R}/assets"):
         os.remove(f"{R}/assets") if os.path.islink(f"{R}/assets") else shutil.rmtree(f"{R}/assets")
     os.symlink("/opt/a2h/assets", f"{R}/assets")

@@ -12,7 +12,8 @@ export type Moment = { step: number; file: string; pushes: PushRow[] };
 export type Showcase = {
   id: string; example: string; policy: string; fps: number; frames: number;
   nominal: string; reference: string; push_stride: number;
-  video: { src: string; poster: string; size: [number, number]; crop: [number, number]; offset_s: number };
+  video: { src: string; poster: string; size: [number, number]; crop: [number, number]; offset_s: number; label?: string };
+  stages?: { kind: string; label: string; start_s: number; end_s: number }[] | null;
   clean: { falls: number; joint_err_rad: number; torso_err_m: number };
   pushes: {
     kind: string; strengths_mps: number[]; directions: number; fall_rate: Record<string, number>; rejoined: number;
@@ -47,6 +48,13 @@ async function get(url: string, kind: "json" | "bin") {
   if (!r.ok || type.includes("text/html")) throw new Error(`${url} is missing: run scripts/build_showcase.py`);
   return kind === "json" ? r.json() : r.arrayBuffer();
 }
+
+/** The showcased clips (public/showcase/index.json): the switcher's tabs and each one's words. */
+export type ClipEntry = {
+  id: string; tab: string; title: [string, string]; kicker: string; lede: string; video: string; policy: string;
+  facts: { v: string; l: string }[]; research?: string | null; fallback?: string; caveat?: string;
+};
+export const loadIndex = () => get(`${BASE}showcase/index.json`, "json") as Promise<{ clips: ClipEntry[] }>;
 
 export async function loadShowcase(id: string) {
   const d = dir(id);
