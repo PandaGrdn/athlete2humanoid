@@ -509,7 +509,7 @@ def run(a):
     P = Path(a.pool).resolve() if a.pool else clips_dir / "_pool"
     a.init_dir = a.init_dir or str(clips_dir.parent)
     if a.smoke:
-        a.eval_train, a.zero_shot, a.policies = a.eval_train[:1], a.zero_shot[:1], a.policies[:1]
+        a.eval_train, a.zero_shot = a.eval_train[:1], a.zero_shot[:1]
         a.iters, a.iters_scratch, a.num_envs = min(a.iters, 3), None, 64
     py = Path(os.environ.get("A2H_MJLAB_PYTHON", "/content/mjlab_env/bin/python"))
     env = dict(os.environ, MUJOCO_GL=os.environ.get("MUJOCO_GL", "egl"), WANDB_MODE="disabled")
@@ -560,7 +560,7 @@ def run_parser():
     ap.add_argument("--num-envs", type=int, default=4096)
     ap.add_argument("--reps", type=int, default=64)
     ap.add_argument("--build-only", action="store_true")
-    ap.add_argument("--smoke", action="store_true", help="6 variants, one eval clip each, 3 iterations")
+    ap.add_argument("--smoke", action="store_true", help="6 variants, one eval clip of each kind, 3 iterations")
     return ap
 
 
