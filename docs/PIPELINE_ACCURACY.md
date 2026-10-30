@@ -976,3 +976,42 @@ reproduce the GPU eval's (punches clean 0%, joint error 0.079 / 0.099 / 0.104 ra
   left, instead of stopping. The ten clips' own specs are unchanged by it (they pass their self-check first time).
 - What was not done: no Colab or GPU was used (mjlab 1.6.0 on CPU is the same version the Colab VMs install, at 16
   instead of 64 envs per policy); no V-JEPA scoring; no policy was retrained.
+
+### Combined re-audit: all fixes, one retarget version (2026-10-30)
+
+This audit covers main plus fixes 1, 2, 4, 5, 6 and 7, and the two follow-ups the combination needed (`spec-trust-followup`, `variant-physics-followup`):
+
+- Each clip's `human.npy` was re-retargeted with the combined code (`retarget_audit.py --save-qpos`). The fresh qpos was installed as that clip's `qpos.npy` in a scratch copy of the clip folders.
+- The spec and variant audits were then re-run on those clips.
+- The JSON is in `docs/results/pipeline_audit/combined/`.
+
+Retarget numbers are identical to the fixes 1, 5, 7 table above. The camera stage is a no-op on all ten stored clips.
+
+| clip | keypose spec on its own reference, 0.7x / 1x / 1.4x | TRAIN variants kept (of 36) | main drops |
+|---|---|---|---|
+| squat_jump | 12/12 at each tempo | 36 | - |
+| squat | 9/9 | 36 | - |
+| lunge | 15/15 | 36 | - |
+| arms | 3/3 | 36 | - |
+| front_kick | 6/6 | 36 | - |
+| jumping_jacks | 12/12 | 11 | lost flight 13, speed 12 (the 3 cm hop vanishes at amplitude 0.85; the base is at the cap in the air) |
+| punches | 6/6 | 36 | - |
+| shot_put | 4/4 | 24 | joint limits 12 |
+| discus | 2/2 | 36 | - |
+| hurdles | 2/2 | **0** | ballistic 36, speed 12 |
+
+Before the fixes, on the same scripts:
+- lunge passed 3 of 16 stages at 1.4x, and shot put 2 of 4;
+- jumping jacks, shot put and discus kept 0 variants on their stored, uncapped retargets;
+- jumping jacks kept 14 variants that had lost their hop.
+
+**Hurdles: what remains.**
+- The last 1.77 s of the 1900 film has no detectable touch-down, with the legs tucked throughout. The retarget keeps that stretch as an open flight, and every variant fails the ballistic check.
+- Grounding the stretch in `retarget.py` was tried and rejected: grounded, it is a crouch on the toes with the ankles 8-14 cm up, so it would fabricate motion.
+- Trimming the clip at the hurdle-clearance touch-down (1.47 s), tested on a scratch copy:
+  - 36/36 variants kept;
+  - keypose spec 3/3 at every tempo;
+  - the clearance kept as a flight.
+- Trimming at the last ground contact (1.20 s) loses the clearance: 24/36 variants, no flight.
+- Re-cutting the stored clip is a data decision left for review.
+- The older stand/squat/jump spec (`skill/task.py compile_spec`) still fails on hurdles, because its stand stage needs both feet down for 0.3 s and a run-up never has that.
