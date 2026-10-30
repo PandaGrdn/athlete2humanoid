@@ -1,37 +1,59 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { Icon } from "../components/ui";
-import { examples, exUrl, type Example, type Stage } from "../examples";
-import { BASE, loadShowcase, type Loaded } from "../showcase/data";
+import { examples, type Example, type Stage } from "../examples";
+import { BASE, loadIndex, loadShowcase, type ClipEntry, type Loaded } from "../showcase/data";
 import { ShowcasePlayer, type PlayerState, type PushState } from "../showcase/scene";
 import "../showcase/showcase.css";
 
-// One example, in 3D: the squat jump's trained policy (tracking_var), next to the phone video it came
-// from. A click on the robot plays the policy's recorded response to a push there (scripts/build_showcase.py).
+// Trained policies in 3D, one clip at a time (public/showcase/index.json; /showcase/<id>), each next to the
+// video it came from. A click on the robot plays the policy's recorded response to a push there
+// (scripts/build_showcase.py).
 
-const SHOWCASE = "squat-jump";
 const STRENGTHS = [{ mps: 0.5, label: "Nudge" }, { mps: 1, label: "Shove" }];
 const COMPASS = ["front", "front-left", "left", "back-left", "back", "back-right", "right", "front-right"];
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
-function useShowcase() {
+function useShowcase(id: string | null) {
   const [data, setData] = useState<Loaded | null>(null);
   const [ex, setEx] = useState<Example | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
+    if (!id) return;
     let live = true;
-    loadShowcase(SHOWCASE).then((d) => {
+    setData(null);
+    setEx(null);
+    setErr(null);
+    loadShowcase(id).then((d) => {
       if (!live) return;
       setData(d);
-      examples.get(d.show.example).then((e) => live && setEx(e)).catch(() => undefined);
+      if (!d.show.stages) examples.get(d.show.example).then((e) => live && setEx(e)).catch(() => undefined);
     }).catch((e) => live && setErr(String(e.message ?? e)));
     return () => { live = false; };
-  }, []);
+  }, [id]);
   return { data, ex, err };
 }
 
+function useClips() {
+  const [clips, setClips] = useState<ClipEntry[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { loadIndex().then((i) => setClips(i.clips)).catch((e) => setErr(String(e.message ?? e))); }, []);
+  return { clips, err };
+}
+
 export default function Showcase() {
-  const { data, ex, err } = useShowcase();
+  const { clip } = useParams();
+  const nav = useNavigate();
+  const { clips, err: idxErr } = useClips();
+  const entry = clips?.find((c) => c.id === clip) ?? clips?.[0] ?? null;
+  const { data, ex, err: loadErr } = useShowcase(entry?.id ?? null);
+  const err = idxErr ?? loadErr;
+  const switcher = useRef<HTMLElement>(null);
+  useEffect(() => {  // on a phone the tab row scrolls: keep the open clip's tab in view
+    const tab = switcher.current?.querySelector<HTMLElement>(".on");
+    const row = switcher.current;
+    if (tab && row) row.scrollTo({ left: tab.offsetLeft - (row.clientWidth - tab.clientWidth) / 2 });
+  }, [entry?.id]);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [player, setPlayer] = useState<ShowcasePlayer | null>(null);
   const [glErr, setGlErr] = useState(false);
@@ -56,27 +78,36 @@ export default function Showcase() {
   const show = data?.show;
   const fellRate = show ? show.pushes.fall_rate : null;
   const nPushes = show ? show.pushes.moments.reduce((n, m) => n + m.pushes.length, 0) : 0;
-  const metric = (label: string) => ex?.policies?.find((p) => p.key === "tracking_var")?.values[label]?.display;
+  const stages = show?.stages ?? ex?.stages ?? [];
 
   return (
     <div className="sc">
       <section className="sc-stage" aria-label="The trained G1 policy in 3D">
         <div className="sc-glow" aria-hidden="true" />
-        {!glErr && <canvas ref={canvas} className="sc-canvas" aria-label="The Unitree G1 performing the squat jump. Drag to orbit, pinch or ctrl-scroll to zoom, click the robot to push it." />}
-        {glErr && data && (
-          <video className="sc-fallback" src={exUrl(`${data.show.example}/policy_tracking_var.mp4`)} autoPlay muted loop playsInline />
+        {!glErr && <canvas ref={canvas} className="sc-canvas" aria-label={`The Unitree G1 performing the ${entry?.tab.toLowerCase() ?? "clip"}. Drag to orbit, pinch or ctrl-scroll to zoom, click the robot to push it.`} />}
+        {glErr && entry?.fallback && (
+          <video className="sc-fallback" src={`${BASE}${entry.fallback}`} autoPlay muted loop playsInline />
         )}
+        {glErr && !entry?.fallback && <div className="sc-loading"><div className="notice">This view needs WebGL, which this browser has turned off.</div></div>}
         {!data && !err && <div className="sc-loading mono"><span className="dot live" />Loading the G1 and its recordings</div>}
         {err && <div className="sc-loading"><div className="error-box">Couldn't load the showcase: {err}</div></div>}
 
-        <div className="sc-head">
-          <div className="sc-kicker mono">Showcase · one phone video → one policy</div>
-          <h1>The squat jump,<br />learned.</h1>
-          <p className="sc-lede">
-            A person squat-jumping on a phone video became this simulated Unitree G1, controlled by a policy trained with
-            reinforcement learning. It's the policy, not an animation of the video. Push it.
-          </p>
-        </div>
+        {entry && (
+          <div className="sc-head" key={entry.id}>
+            <div className="sc-kicker mono">Showcase · {entry.kicker}</div>
+            <h1>{entry.title[0]}<br />{entry.title[1]}</h1>
+            {entry.caveat && <div className="sc-caveat mono">{entry.caveat}</div>}
+            <p className="sc-lede">{entry.lede}</p>
+          </div>
+        )}
+        {clips && clips.length > 1 && (
+          <nav ref={switcher} className="sc-switch" aria-label="Showcased clips">
+            {clips.map((c) => (
+              <button key={c.id} className={c.id === entry?.id ? "on" : ""} aria-current={c.id === entry?.id ? "page" : undefined}
+                onClick={() => nav(`/showcase/${c.id}`)}>{c.tab}</button>
+            ))}
+          </nav>
+        )}
 
         {player && <PushChip player={player} />}
         {player && <Hint />}
@@ -84,7 +115,7 @@ export default function Showcase() {
       </section>
 
       {player && data && (
-        <Controls player={player} stages={ex?.stages ?? []} duration={data.show.frames / data.show.fps} mps={mps} setMps={setMps} />
+        <Controls player={player} stages={stages} duration={data.show.frames / data.show.fps} mps={mps} setMps={setMps} />
       )}
 
       <div className="container">
@@ -92,7 +123,7 @@ export default function Showcase() {
           <div className="sc-step">
             <span className="sc-n mono">01</span>
             <h3>Video</h3>
-            <p>One clip from a phone: a person squat-jumping, twice. SAM 3.1 segments them, MediaPipe lifts their pose to 3D.</p>
+            <p>{entry?.video}</p>
           </div>
           <div className="sc-step">
             <span className="sc-n mono">02</span>
@@ -103,13 +134,12 @@ export default function Showcase() {
           <div className="sc-step">
             <span className="sc-n mono">03</span>
             <h3>Policy</h3>
-            <p>PPO in mjlab across thousands of simulated G1s, on 36 automatic variants of the clip, with pushes during
-              training. What you see is that network's own run in MuJoCo, recorded.</p>
+            <p>{entry?.policy}</p>
           </div>
         </section>
 
         <section className="sc-facts">
-          <div className="sc-fact"><span className="v">{metric("task_success") ?? "78%"}</span><span className="l">of held-out variants completed</span></div>
+          {entry?.facts.map((f) => <div className="sc-fact" key={f.l}><span className="v">{f.v}</span><span className="l">{f.l}</span></div>)}
           <div className="sc-fact"><span className="v">{show ? show.clean.falls : 0}</span><span className="l">falls on the clip</span></div>
           {fellRate && Object.entries(fellRate).map(([v, r]) => (
             <div className="sc-fact" key={v}><span className="v">{pct(1 - r)}</span><span className="l">stay up after a {v} m/s push</span></div>
@@ -148,7 +178,7 @@ export default function Showcase() {
             );
           })()}
           <div className="sc-links">
-            <Link className="btn sm" to="/research/squat-jump-variants">The numbers behind it <Icon name="arrow" size={14} /></Link>
+            {entry?.research && <Link className="btn sm" to={entry.research}>The numbers behind it <Icon name="arrow" size={14} /></Link>}
             <Link className="btn sm ghost" to="/research">More results <Icon name="arrow" size={14} /></Link>
           </div>
         </section>
@@ -180,9 +210,9 @@ function SourceVideo({ data, player }: { data: Loaded; player: ShowcasePlayer })
     <figure className="sc-source">
       <div className="sc-crop" style={{ aspectRatio: `${(c1 - c0) * v.size[0]} / ${v.size[1]}` }}>
         <video ref={ref} src={`${BASE}${v.src}`} poster={`${BASE}${v.poster}`} muted playsInline preload="auto"
-          style={{ width: `${100 / (c1 - c0)}%`, marginLeft: `${(-c0 / (c1 - c0)) * 100}%` }} aria-label="The source phone video" />
+          style={{ width: `${100 / (c1 - c0)}%`, marginLeft: `${(-c0 / (c1 - c0)) * 100}%` }} aria-label={`The source: ${v.label ?? "phone video"}`} />
       </div>
-      <figcaption><span className="mono">Source</span> Phone video, in sync</figcaption>
+      <figcaption><span className="mono">Source</span> {v.label ?? "Phone video"}, in sync</figcaption>
     </figure>
   );
 }

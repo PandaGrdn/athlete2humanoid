@@ -4,6 +4,9 @@ policy's recorded responses to pushes (experiments/push_showcase.py, run as `rem
 
     python scripts/build_showcase.py                      # squat jump, tracking_var (needs numpy, mujoco, fast-simplification)
     python scripts/build_showcase.py --robot-only         # just the meshes
+    python scripts/build_showcase.py --id discus --run remote_multiclip_pro_discus --policy multi --pushes remote_pushes_sc_discus \
+        --video <the clip's video> --video-label "1900 Olympic film, silhouette" --task-spec <its task_spec.json>
+                                                          # another clip: its own video, the stages from its spec
 
 Outputs (all static; the site reads nothing else):
     g1.json / g1.bin   bodies (parent, pose in the parent, hinge joint), and per body its visual meshes,
@@ -143,6 +146,28 @@ def rejoin_frame(rec, nominal, s, k, a, fps):
     return None
 
 
+def source_video(out, src, offset_s, label, height=480):
+    """src -> out/source.mp4 (H.264, `height` px, no audio) and out/source.jpg; the showcase.json "video" entry."""
+    import subprocess
+    import imageio_ffmpeg
+    ff = imageio_ffmpeg.get_ffmpeg_exe()
+    subprocess.run([ff, "-y", "-loglevel", "error", "-i", str(src), "-vf", f"scale=-2:{height}", "-an", "-c:v", "libx264",
+                    "-pix_fmt", "yuv420p", "-crf", "26", "-movflags", "+faststart", str(out / "source.mp4")], check=True)
+    subprocess.run([ff, "-y", "-loglevel", "error", "-ss", f"{offset_s:.3f}", "-i", str(out / "source.mp4"), "-frames:v", "1",
+                    "-q:v", "4", str(out / "source.jpg")], check=True)
+    w, h = next(imageio_ffmpeg.read_frames(str(out / "source.mp4")))["size"]
+    return {"src": f"showcase/{out.name}/source.mp4", "poster": f"showcase/{out.name}/source.jpg", "label": label,
+            "size": [w, h], "crop": [0.0, 1.0], "offset_s": offset_s}
+
+
+def stages(task_spec):
+    """The task spec's key moments and flights, for the timeline: [{kind, label, start_s, end_s}]."""
+    spec = json.loads(Path(task_spec).read_text())
+    name = lambda st: st.get("name") or st["kind"]  # keypose specs name their moments; the older stage specs don't
+    return [{"kind": st["kind"], "label": name(st)[:1].upper() + name(st)[1:], "start_s": st["start_s"], "end_s": st["end_s"]}
+            for st in spec["stages"] if st["kind"] != "settle" and st["end_s"] > st["start_s"]]
+
+
 def build_motion(out, a):
     run = outputs(a.run)
     pol = run / f"policy_{a.policy}"
@@ -183,16 +208,19 @@ def build_motion(out, a):
              for v in sorted(set(mps.tolist()))}
     rejoined = float(np.mean([r["rejoin"] is not None for mo in moments for r in mo["pushes"] if r["fall"] is None]))
     meta = json.loads((outputs(a.pushes) / "push_showcase.json").read_text())
-    # the source video: the example's side-by-side, cropped to its person panel
-    prim = json.loads((REPO / "web/public/examples" / a.example / "example.json").read_text())["primary"]
-    person = next(p for p in prim["panels"] if p["label"] == "Athlete")
+    if a.video:  # the clip's own video (or its silhouette), re-encoded next to the showcase
+        video = source_video(out, Path(a.video), s0 / fps, a.video_label)
+    else:  # the example's side-by-side, cropped to its person panel
+        prim = json.loads((REPO / "web/public/examples" / a.example / "example.json").read_text())["primary"]
+        person = next(p for p in prim["panels"] if p["label"] == "Athlete")
+        video = {"src": f"examples/{prim['src']}", "poster": f"examples/{prim['poster']}", "label": a.video_label,
+                 "size": [prim["width"], prim["height"]], "crop": [person["from"], person["to"]], "offset_s": s0 / fps}
     pm = json.loads((pol / "policy_metrics.json").read_text())
     show = {
         "id": a.id, "example": a.example, "policy": a.policy, "fps": fps, "frames": len(nominal),
         "format": "int16 x 36 per frame: root pos (mm), root quat wxyz (x32767), 29 joints (x1e4 rad), model order",
         "nominal": "nominal.bin", "reference": "reference.bin", "push_stride": a.stride,
-        "video": {"src": f"examples/{prim['src']}", "poster": f"examples/{prim['poster']}",
-                  "size": [prim["width"], prim["height"]], "crop": [person["from"], person["to"]], "offset_s": s0 / fps},
+        "video": video, "stages": stages(a.task_spec) if a.task_spec else None,
         "clean": {"falls": pm["falls"], "joint_err_rad": round(pm["mean_joint_error_rad"], 3),
                   "torso_err_m": round(pm["mean_torso_position_error_m"], 3)},
         "pushes": {"kind": "root velocity kick (as robustness_eval.py and training)", "strengths_mps": sorted(set(mps.tolist())),
@@ -219,6 +247,9 @@ if __name__ == "__main__":
     ap.add_argument("--rejoin-m", type=float, default=0.05)
     ap.add_argument("--rejoin-rad", type=float, default=0.15)
     ap.add_argument("--after-fall-s", type=float, default=1.5)
+    ap.add_argument("--video", help="the clip's own video (or silhouette) instead of --example's side-by-side")
+    ap.add_argument("--video-label", default="Phone video", help="what the source is, as the page names it")
+    ap.add_argument("--task-spec", help="task_spec.json: the timeline's key moments (else the example's stages)")
     ap.add_argument("--robot-only", action="store_true")
     a = ap.parse_args()
     out = REPO / "web/public/showcase" / a.id
