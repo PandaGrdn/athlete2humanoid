@@ -25,6 +25,18 @@ def test_elapsed_by_iter():
     assert AC.elapsed_by_iter(LOG) == {0: 2, 99: 178, 1499: 86400 + 3723}
 
 
+def test_elapsed_stitches_a_resumed_log():
+    resumed = LOG.split("##")[0] + """Learning iteration 50/1500
+                           Time elapsed: 0:01:00
+Learning iteration 40/1500
+                           Time elapsed: 0:00:05
+Learning iteration 41/1500
+                           Time elapsed: 0:00:10
+"""
+    e = AC.elapsed_by_iter(resumed)
+    assert e[50] == 60 and e[40] == 2 + 5 and e[41] == 2 + 10  # resumed after iteration 39: none logged, so from 0's 2 s
+
+
 def test_pick_is_closest_to_n_updates():
     ck = {k: None for k in (0, 50, 100, 150, 1499)}
     assert AC.pick(ck, 100, 25) == 100  # model_99 isn't saved; model_100 is one update more

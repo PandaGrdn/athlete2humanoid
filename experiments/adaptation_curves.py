@@ -160,13 +160,18 @@ ELAPSED_RE = re.compile(r"Time elapsed: (?:(\d+) days?, )?(\d+):(\d\d):(\d\d)")
 
 
 def elapsed_by_iter(text):
-    """rsl_rl's train log -> {iteration: seconds of PPO (collection + learning) since iteration 0}."""
-    out, it = {}, None
+    """rsl_rl's train log -> {iteration: seconds of PPO (collection + learning) since iteration 0}. A log
+    that goes on after a restart (a preempted container; train_motion.py resumes from the newest checkpoint,
+    its clock from 0) is stitched: the resumed part counts from the elapsed time at its first iteration."""
+    out, it, offset = {}, None, 0
     for line in re.sub(r"\x1b\[[0-9;]*m", "", text).splitlines():
         if m := ITER_RE.search(line):
-            it = int(m[1])
+            k = int(m[1])
+            if it is not None and k <= it:  # resumed
+                offset = out.get(k - 1, max((v for i, v in out.items() if i < k), default=0))
+            it = k
         elif (m := ELAPSED_RE.search(line)) and it is not None:
-            out[it] = int(m[1] or 0) * 86400 + int(m[2]) * 3600 + int(m[3]) * 60 + int(m[4])
+            out[it] = offset + int(m[1] or 0) * 86400 + int(m[2]) * 3600 + int(m[3]) * 60 + int(m[4])
     return out
 
 
@@ -200,7 +205,8 @@ def train(a, out, clip_dir, inp, starts, fps):
                    "--variants", out / "variants" / "variants.json", "--train-motion", out / "motion_variants.npz"]
             if s["checkpoint"]:
                 cmd += ["--init", inp / s["checkpoint"]]
-            p = subprocess.Popen(list(map(str, cmd)), stdout=open(d / "train.log", "w"), stderr=subprocess.STDOUT)
+            # appended: a restarted job's log keeps the first attempt's clock (elapsed_by_iter)
+            p = subprocess.Popen(list(map(str, cmd)), stdout=open(d / "train.log", "a"), stderr=subprocess.STDOUT)
             running[name] = (p, time.time(), None)
             log(f"training {name} from {s['checkpoint'] or 'scratch'} ({s['task']}); log {d / 'train.log'}")
         time.sleep(1 if a.smoke else 5)
@@ -331,7 +337,7 @@ def run(a):
     py = Path(os.environ.get("A2H_MJLAB_PYTHON", "/content/mjlab_env/bin/python"))
     env = dict(os.environ, MUJOCO_GL=os.environ.get("MUJOCO_GL", "egl"), WANDB_MODE="disabled")
     t0 = time.time()
-    if not (out / "motion_variants.npz").exists():
+    if not (out / "build_s.txt").exists():  # written last: a build cut short is redone
         build(clip_dir, out, py, env, a.seed, a.smoke)
         (out / "build_s.txt").write_text(f"{time.time() - t0:.1f}")
     build_s = float((out / "build_s.txt").read_text()) if (out / "build_s.txt").exists() else 0.0
