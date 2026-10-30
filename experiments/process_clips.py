@@ -7,6 +7,7 @@ Needs the SAM env (scripts/setup_colab.sh --with-sam), so it runs on Colab (scri
 """
 
 import argparse
+import json
 import sys
 import tarfile
 from pathlib import Path
@@ -20,6 +21,16 @@ KEEP = ["video_latent.npz", "qpos.npy", "meta.json", "motion.csv", "retarget_rep
         "side_by_side.mp4", "human.npy"]  # as latent_policy.pack's clips/<name>/
 
 
+def record_source(video, d):
+    """Add the source video's own frame timing to d/meta.json (_processed resamples it to 30 fps
+    before the pipeline, whose "fps" is then the resampled file's)."""
+    import pipeline
+    path = Path(d) / "meta.json"
+    meta = json.loads(path.read_text())
+    meta["source_video"] = {"name": Path(video).name, **pipeline.video_fps(video)}
+    path.write_text(json.dumps(meta, indent=1))
+
+
 def main(a):
     from latent.video_latent import video_latent
     from latent.vjepa import VJepa
@@ -29,6 +40,8 @@ def main(a):
     for v in a.videos:
         try:
             d = _processed(v)
+            if Path(v).suffix.lower() in (".mp4", ".mov", ".avi", ".mkv"):
+                record_source(v, d)
             video_latent(d, vj)
             done[d.name] = d
             log(f"{d.name}: processed")

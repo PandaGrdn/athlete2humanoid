@@ -10,6 +10,7 @@ import warnings
 import mink
 import mujoco
 import numpy as np
+from scipy.ndimage import minimum_filter1d, uniform_filter1d
 
 import config
 import render
@@ -50,18 +51,38 @@ PELVIS_LEAN = 0.5
 # lift by the excess, plus this margin. (MediaPipe's heel and toe landmarks are too noisy to use:
 # a still stance can read 35 degrees.)
 ANKLE_MARGIN = np.radians(5.0)
+# Ankle roll past its +-15 degree range less this margin rolls the foot target instead.
+ANKLE_ROLL_MARGIN = np.radians(4.0)
+# A flat foot points along its leg's bending plane (leg_heading), at most this far from the pelvis
+# yaw; a planted foot whose leg turns more than PIVOT_YAW during the contact pivots with it.
+LEG_YAW_MAX = np.radians(60.0)
+PIVOT_YAW = np.radians(90.0)
 POSTURE_COST = 0.1
 TORSO_COST = 1.0
+# The arms are solved continuously: each frame's shoulder, elbow and wrist joints are pulled
+# toward the previous frame's (per rad). An arm straight overhead or out to the side is a gimbal
+# point of the shoulder's pitch-roll-yaw chain, where the hand targets barely constrain how the
+# turn is split, and the solve otherwise swung the shoulder to the speed cap below in 1-11 frames
+# per clip while the hand lagged its target by up to 18 cm (docs/PIPELINE_ACCURACY.md).
+ARM_CONTINUITY_COST = 0.2
+ARM_BIDIRECTIONAL = True
+ARM_RESEED_ERR = 0.05  # m, elbow + hand
 # Fastest a joint may turn between video frames (rad per second of video). Without it, one frame's
 # solve can sweep a joint across its whole range: an arm straight overhead pins the shoulder at one
 # limit and then flips it to the other (shot put: 5.8 rad in one frame), and the reference hand
 # teleports. Our clips peak at ~8 rad/s.
 MAX_JOINT_SPEED = 20.0
-# A stretch with neither foot planted is a flight only if the pelvis rises at least this share of
-# what gravity needs for that airtime (g T^2 / 8); otherwise it's a stance the pose estimate lifted
-# off the floor (a pivoting or sliding foot), and the body is lowered until its lowest foot is down.
-FLIGHT_RISE_FRAC = 0.25
+# A take-off is a flight only if the pelvis rises at least this share of what gravity needs for
+# its airtime (g T^2 / 8); otherwise it's a stance the pose estimate lifted off the floor (a
+# pivoting or sliding foot). Real flights in our pose data measure 0.5-0.8 (the rise is under-read
+# and hovering feet count as airborne early); a shot-put glide measures 0.02 (docs/PIPELINE_ACCURACY.md).
+FLIGHT_RISE_FRAC = 0.4
 GRAVITY = 9.81
+# No contact for longer than this, and no flight: not a lifted stance but missed contacts (a run)
+# or a lost foot; the floor is interpolated through the foot's touch-downs instead of grounding it.
+LONG_AIRBORNE_S = 0.5
+# stance_mask's speed threshold grows by this share of the root's horizontal speed.
+CONTACT_ROOT_SPEED_FRAC = 0.5
 
 
 def bent_knee_pose(model, knee=0.5):
@@ -129,6 +150,11 @@ class G1Retargeter:
         for task in self.tasks.values():
             task.set_target_from_configuration(self.config)
         self.limits = [mink.ConfigurationLimit(self.model)]
+        arm = np.zeros(self.model.nv)
+        for j in range(self.model.njnt):
+            if any(k in self.model.joint(j).name for k in ("shoulder", "elbow", "wrist")):
+                arm[self.model.jnt_dofadr[j]] = ARM_CONTINUITY_COST
+        self.continuity = mink.PostureTask(self.model, cost=arm)
 
     def _measure_robot(self):
         """Robot proportions at the straight-leg stand pose, used to scale the human."""
@@ -224,10 +250,12 @@ class G1Retargeter:
                 out.setdefault(k, []).append(v.copy())
         return {k: np.array(v) for k, v in out.items()}
 
-    def solve(self, targets: dict, rotations: dict | None = None, iters=50, dt=0.02, max_step=None):
+    def solve(self, targets: dict, rotations: dict | None = None, iters=50, dt=0.02, max_step=None, continuous=False):
         """targets: {name: xyz}; rotations: {name or "torso": 3x3 world rotation}. Only frames
         named in targets are driven this call. Warm-starts from the previous frame's solution,
-        so call in time order. max_step: the most any joint may move this call (rad)."""
+        so call in time order. max_step: the most any joint may move this call (rad). continuous:
+        True holds the arm joints near the previous solution (ARM_CONTINUITY_COST); a qpos pulls
+        them toward that instead."""
         rotations = rotations or {}
         hips = targets.get("hip_centre")
         targets = {("pelvis" if n == "hip_centre" else n): p for n, p in targets.items()}
@@ -243,6 +271,9 @@ class G1Retargeter:
             self.torso.set_target(mink.SE3.from_rotation_and_translation(
                 mink.SO3.from_matrix(rotations["torso"]), np.zeros(3)))
         tasks = [*(self.tasks[n] for n in targets), self.posture, self.torso]
+        if continuous is not False and ARM_CONTINUITY_COST > 0:
+            self.continuity.set_target(self.config.q if continuous is True else continuous)
+            tasks.append(self.continuity)
         limits = self.limits if max_step is None else [*self.limits, self._step_limit(max_step / (iters * dt))]
         pelvis = self.tasks["pelvis"]
         pelvis.set_orientation_cost(HIP_CENTRE_ORIENTATION_COST if hips is not None else ORIENTATION_COST["pelvis"])
@@ -264,12 +295,99 @@ class G1Retargeter:
 
     def retarget_sequence(self, targets_seq, rotations_seq=None, fps=30.0):
         """-> (frames, nq) qpos array. The first frame gets extra iterations to converge from
-        the start pose; after it, no joint moves faster than MAX_JOINT_SPEED of video time."""
+        the start pose; after it, no joint moves faster than MAX_JOINT_SPEED of video time, and the
+        arms are solved continuously (ARM_CONTINUITY_COST).
+
+        An arm passing straight out to the side or overhead can leave the warm-started solve on the
+        wrong pitch-roll-yaw branch of its shoulder, stuck at a joint limit with the hand far from
+        its target (jumping jacks: 13 cm for 9 frames), or switching branches at the speed cap. So
+        the clip is also solved backwards in time, and each run of frames where an arm still misses
+        its targets by over ARM_RESEED_ERR is solved again from the arm pose of the best-tracked
+        frame with the most similar target, outwards until it rejoins (_reseed). Wherever these
+        solves put an arm on different branches, it takes the one that follows its elbow and hand
+        targets better, spliced in where they agree (_splice_arms)."""
         rotations_seq = rotations_seq or [None] * len(targets_seq)
-        out = []
-        for i, (t, r) in enumerate(zip(targets_seq, rotations_seq)):
-            out.append(self.solve(t, r, iters=300 if i == 0 else 50, max_step=None if i == 0 else MAX_JOINT_SPEED / fps))
-        return np.stack(out)
+        n = len(targets_seq)
+        cap = MAX_JOINT_SPEED / fps
+
+        def run(order, q0):
+            self.config.update(q0)
+            out = {}
+            for k, i in enumerate(order):
+                out[i] = self.solve(targets_seq[i], rotations_seq[i], iters=300 if k == 0 else 50,
+                                    max_step=None if k == 0 else cap, continuous=k > 0)
+            return np.stack([out[i] for i in range(len(order))])
+
+        qpos = run(range(n), self.config.q.copy())
+        if ARM_BIDIRECTIONAL and n > 2:
+            qpos = self._splice_arms(qpos, [run(range(n - 1, -1, -1), qpos[-1])], targets_seq)
+            for side in ("left", "right"):
+                err = self._arm_error(qpos, targets_seq, side)
+                bad = [(a, b) for a, b in _runs(err > ARM_RESEED_ERR) if b - a >= 2][:5]
+                cands = [self._reseed(qpos, targets_seq, rotations_seq, cap, side, err, a, b) for a, b in bad]
+                qpos = self._splice_arms(qpos, [c for c in cands if c is not None], targets_seq, sides=(side,))
+        self.config.update(qpos[-1])
+        return qpos
+
+    def _arm_joints(self, side):
+        return [self.model.jnt_qposadr[j] for j in range(self.model.njnt)
+                if self.model.joint(j).name.startswith(f"{side}_")
+                and any(k in self.model.joint(j).name for k in ("shoulder", "elbow", "wrist"))]
+
+    def _arm_error(self, qpos, targets_seq, side):
+        """(T,) one arm's elbow + hand error (m) against its torso-relative targets."""
+        err = []
+        for q, t in zip(qpos, targets_seq):
+            self.config.update(q)
+            err.append(sum(np.linalg.norm(self.frame_position(k) - t[k]) for k in (f"{side}_elbow_torso", f"{side}_hand_torso") if k in t))
+        return np.array(err)
+
+    def _reseed(self, qpos, targets_seq, rotations_seq, cap, side, err, a, b, agree=0.3):
+        """The clip solved again around a badly tracked run [a, b) of one arm: its worst frame from
+        the arm joints of the frame whose targets are most alike among those tracked within
+        ARM_RESEED_ERR / 2, then frame by frame outwards (speed-capped) until the arm is back
+        within `agree` rad of qpos for 3 frames. -> (T, nq), or None without a donor frame."""
+        keys = [f"{side}_elbow_torso", f"{side}_hand_torso"]
+        if not all(k in targets_seq[0] for k in keys):
+            return None
+        tgt = np.array([np.concatenate([t[k] for k in keys]) for t in targets_seq])
+        mid = a + int(np.argmax(err[a:b]))
+        ok = np.flatnonzero(err < ARM_RESEED_ERR / 2)
+        if not ok.size:
+            return None
+        donor = ok[np.argmin(np.linalg.norm(tgt[ok] - tgt[mid], axis=-1))]
+        adr = self._arm_joints(side)
+        out = qpos.copy()
+        seed = qpos[mid].copy()
+        seed[adr] = qpos[donor, adr]
+        self.config.update(seed)
+        out[mid] = self.solve(targets_seq[mid], rotations_seq[mid], iters=300)
+        for step in (1, -1):
+            self.config.update(out[mid])
+            t, same = mid + step, 0
+            while 0 <= t < len(qpos) and same < 3:
+                out[t] = self.solve(targets_seq[t], rotations_seq[t], max_step=cap, continuous=True)
+                same = same + 1 if np.abs(out[t, adr] - qpos[t, adr]).max() < agree else 0
+                t += step
+        return out
+
+    def _splice_arms(self, qpos, candidates, targets_seq, sides=("left", "right"), agree=0.3):
+        """Per arm, for each candidate solve in turn: frames where it differs from the current one by
+        more than `agree` rad in some arm joint form runs, and each run takes whichever has the
+        smaller summed elbow + hand error. At a run's edges the two agree, so the splice is a small
+        step."""
+        out = qpos.copy()
+        for side in sides:
+            adr = self._arm_joints(side)
+            for cand in candidates:
+                differ = (np.abs(out[:, adr] - cand[:, adr]) > agree).any(1)
+                if not differ.any():
+                    continue
+                cur, new = self._arm_error(out, targets_seq, side), self._arm_error(cand, targets_seq, side)
+                for a, b in _runs(differ):
+                    if new[a:b].sum() < cur[a:b].sum():
+                        out[a:b, adr] = cand[a:b, adr]
+        return out
 
 
 def _frame_from(left, up):
@@ -280,17 +398,21 @@ def _frame_from(left, up):
     return np.column_stack([np.cross(left, up), left, up])
 
 
-def human_to_targets(P, rt: G1Retargeter, proportional=True, fps=30.0):
+def human_to_targets(P, rt: G1Retargeter, proportional=True, fps=30.0, report=None):
     """P: (T, 33, 3) human trajectory from pose.human_trajectory (metres, z-up, facing +x).
     Returns (targets_seq, rotations_seq) for G1Retargeter.retarget_sequence, with the start
     under the robot and the feet on the floor.
 
     proportional (default): the human's pose on the G1's skeleton, feet planted during
     contacts (proportional_motion). proportional=False: the original retarget, the whole human
-    scaled uniformly by leg length, kept for comparison."""
+    scaled uniformly by leg length, kept for comparison. report: an optional dict, filled with
+    the contact decisions ("airborne", "warnings", "stance_frac") for meta.json."""
     if not proportional:
         return _uniform_targets(P, rt)
     m = proportional_motion(P, rt, fps)
+    if report is not None:
+        report.update(airborne=m["airborne"], warnings=m["warnings"],
+                      stance_frac=[round(float(x), 3) for x in m["stance"].mean(0)])
     J = m["joints"]
     targets_seq, rotations_seq = [], []
     mirror = np.array([1.0, -1.0, 1.0])
@@ -389,24 +511,51 @@ def _runs(mask):
     return list(zip(edges[::2], edges[1::2]))
 
 
-def stance_mask(ankles, fps=30.0, height=0.1, speed=0.6, min_frames=4, max_gap=6):
-    """ankles: (T, 2, 3) left/right ankle paths (metres, z-up). -> (T, 2) bool, foot planted:
-    within `height` of its floor level and slower than `speed` m/s. Monocular pose is too noisy
-    for tight thresholds: a planted ankle wanders by ~10 cm in height and ~0.3 m/s. Each foot's
-    floor is its own lowest level (5th percentile; MediaPipe often sits one foot a few cm higher),
-    capped at `height` above the other's. Lifts shorter than max_gap frames between two contacts
-    are filled, then contacts shorter than min_frames dropped."""
+def _frames(n, fps):
+    """A frame count given at 30 fps, at `fps`."""
+    return max(1, int(round(n * fps / 30.0)))
+
+
+def stance_mask(ankles, fps=30.0, height=0.1, speed=0.6, min_frames=4, max_gap=6, root=None, brief_frames=2):
+    """ankles: (T, 2, 3) left/right ankle paths (metres, z-up); root: (T, 3) hip path, optional.
+    -> (T, 2) bool, foot planted. Frame counts are at 30 fps and scale with `fps`.
+
+    Two signals per foot. A dwell: within `height` of its floor level and slower than the speed
+    threshold, for at least min_frames. A touch-down: the ankle's lowest point within +-0.1 s
+    (vertical velocity crossing from down to up) within `height` of its floor and under the same
+    threshold; it and its lower neighbour are a contact of brief_frames, the 2-3 frames a running
+    foot is down. The threshold is `speed` plus CONTACT_ROOT_SPEED_FRAC of the root's speed: a
+    planted ankle reads ~0.3 m/s of jitter, more when the body moves (the root is a 2D hip track
+    scaled by a drifting ruler), while a swinging foot moves at about twice the body's speed.
+    Monocular pose is too noisy for tight thresholds: a planted ankle wanders by ~10 cm in height.
+    Each foot's floor is its own lowest level (5th percentile; MediaPipe often sits one foot a few
+    cm higher), capped at `height` above the other's. Lifts shorter than max_gap frames between two
+    contacts are filled, then contacts shorter than min_frames dropped unless they hold a touch-down."""
+    min_frames, max_gap, brief_frames = (_frames(n, fps) for n in (min_frames, max_gap, brief_frames))
     floor = np.percentile(ankles[..., 2], 5, axis=0)
     floor = np.minimum(floor, floor.min() + height)
     v = np.linalg.norm(np.gradient(ankles, axis=0), axis=-1) * fps
-    stance = (ankles[..., 2] - floor < height) & (v < speed)
+    threshold = np.full(len(ankles), float(speed))
+    if root is not None:
+        root_speed = np.linalg.norm(np.gradient(root[:, :2], axis=0), axis=-1) * fps
+        threshold = threshold + CONTACT_ROOT_SPEED_FRAC * uniform_filter1d(root_speed, _frames(6, fps), mode="nearest")
+    near, slow = ankles[..., 2] - floor < height, v < threshold[:, None]
+    z = ankles[..., 2]
+    bottom = z <= minimum_filter1d(z, 2 * _frames(3, fps) + 1, axis=0, mode="nearest")
+    touch = near & slow & bottom
+    stance = near & slow
     for f in range(2):
-        m = stance[:, f]
+        m, brief = stance[:, f], np.zeros(len(stance), bool)
+        for t in np.flatnonzero(touch[:, f]):
+            lo, hi = max(t - brief_frames + 1, 0), min(t + brief_frames, len(m))
+            nb = np.arange(lo, hi)
+            brief[nb[np.argsort(z[nb, f], kind="stable")[:brief_frames]]] = True  # the lowest frames around it
+        m |= brief
         for a, b in _runs(~m):  # fill short lifts between two contacts
             if 0 < a and b < len(m) and b - a < max_gap:
                 m[a:b] = True
         for a, b in _runs(m):
-            if b - a < min_frames:
+            if b - a < min_frames and not (touch[a:b, f].any() and b - a >= brief_frames):
                 m[a:b] = False
     return stance
 
@@ -491,31 +640,152 @@ def _pitch_rot(pitch):
     return np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
 
 
-def ground_phantom_flights(root, feet, stance, floor, fps=30.0, clear=0.01):
-    """Stretches with neither foot planted and both above the floor (by `clear` m) that gravity
-    can't explain: the pelvis rises less than FLIGHT_RISE_FRAC of the g T^2 / 8 a T-second flight
-    needs. There the body is lowered until its lowest foot is on the floor. -> (root, feet)."""
+def _take_off(root_z, s0, s1, fps):
+    """A candidate flight from take-off frame s0 to landing frame s1 (-1 / len: the clip starts /
+    ends in the air). -> (is a flight, pelvis rise m, rise gravity needs m)."""
+    T, n = (s1 - s0) / fps, len(root_z)
+    need = FLIGHT_RISE_FRAC * GRAVITY * T ** 2 / 8
+    inner = root_z[max(s0 + 1, 0):min(s1, n)]
+    ends = [root_z[s] for s in (s0, s1) if 0 <= s < n]
+    if not ends or not inner.size:
+        return False, 0.0, need
+    rise = float(inner.max() - np.mean(ends))
+    if s1 >= n and root_z[-1] >= root_z[s0]:
+        return True, rise, need  # still above its take-off when the clip ends: never lowered
+    if s0 < 0 and root_z[0] >= root_z[s1]:
+        return True, rise, need
+    return rise >= need, rise, need
+
+
+def ground_phantom_flights(root, feet, stance, floor, fps=30.0, clear=0.01, height=0.1, report=None):
+    """Stretches with neither foot planted and both above the floor (by `clear` m), tested take-off
+    by take-off. Inside a stretch the lowest foot may come back near the floor (a local minimum
+    within `height`, the lowest within +-0.1 s): a touch-down the contact estimator missed, which
+    ends one candidate flight and starts the next. A candidate is a flight if the pelvis rises at
+    least FLIGHT_RISE_FRAC of the g T^2 / 8 its airtime T needs, or if the clip ends while the pelvis
+    is still above its take-off height. Flights are kept as they are. Otherwise:
+      - a stretch of at most LONG_AIRBORNE_S: a stance the pose estimate lifted off the floor (a
+        pivoting or sliding foot); the body is lowered until its lowest foot is down;
+      - a longer one (a run whose contacts were all missed, or a lost foot): lowering the body to
+        the floor everywhere would flatten every stride and any jump in it, so instead the floor is
+        interpolated through the lowest foot's touch-downs (the body lowered by the foot's height
+        there, linearly in between), and a warning is added to `report`.
+    report: an optional list; each stretch appends a dict (start_s, dur_s, touch_downs, flights:
+    [{take_off_s, dur_s, rise_cm, need_cm, ends_clip}], decision: "flight" / "lowered" /
+    "interpolated", lowered_cm, and a "warning" where one applies). -> (root, feet)."""
+    floor = np.broadcast_to(floor, stance.shape)
     above = (feet[..., 2] - floor).min(1)  # the lowest foot's height off the floor
     up = ~stance.any(1) & (above > clear)
-    root, feet = root.copy(), feet.copy()
+    n = len(root)
+    touch = (above < height) & (above <= minimum_filter1d(above, 2 * _frames(3, fps) + 1, mode="nearest"))
+    lower = np.zeros(n)
     for a, b in _runs(up):
-        T = (b - a + 1) / fps
-        ends = root[[max(a - 1, 0), min(b, len(root) - 1)], 2].mean()
-        if root[a:b, 2].max() - ends < FLIGHT_RISE_FRAC * GRAVITY * T ** 2 / 8:
-            root[a:b, 2] -= above[a:b]
-            feet[a:b, :, 2] -= above[a:b, None]
+        knots = [a - 1, *np.flatnonzero(touch[a:b]) + a, b]
+        value = lambda s: above[s] if a <= s < b else 0.0  # a contact either side: nothing to lower
+        long = (b - a) / fps > LONG_AIRBORNE_S
+        decisions = []
+        for s0, s1 in zip(knots[:-1], knots[1:]):
+            if s0 >= a:
+                lower[s0] = value(s0)
+            if s1 - s0 < 2:
+                continue
+            flight, rise, need = _take_off(root[:, 2], s0, s1, fps)
+            t = np.arange(s0 + 1, min(s1, n))
+            if flight:  # hold the touch-downs (or contacts) either side, linear in between
+                xs = [s for s in (s0, s1) if 0 <= s < n]
+                lower[t] = np.interp(t, xs, [value(s) for s in xs]) if xs else 0.0
+            elif long:  # the floor through the foot's height at the touch-downs (or the stretch's ends)
+                xs = [max(s0, a), min(s1, b - 1)]
+                lower[t] = np.interp(t, xs, above[xs])
+            else:
+                lower[t] = above[t]
+            decisions.append((s0, s1, flight, rise, need))
+        flights = [d for d in decisions if d[2]]
+        row = dict(start_s=round(a / fps, 2), dur_s=round((b - a + 1) / fps, 2), touch_downs=len(knots) - 2,
+                   flights=[dict(take_off_s=round(max(s0, 0) / fps, 2), dur_s=round((s1 - s0) / fps, 2),
+                                 rise_cm=round(100 * r, 1), need_cm=round(100 * q, 1), ends_clip=bool(s1 >= n))
+                            for s0, s1, _, r, q in flights],
+                   decision="flight" if len(flights) == len(decisions) else "interpolated" if long else "lowered",
+                   lowered_cm=round(100 * float(lower[a:b].max()), 1))
+        warn = []
+        if long and row["decision"] != "flight":
+            warn.append(f"no foot contact for {row['dur_s']:.2f} s from {row['start_s']:.2f} s: floor interpolated through "
+                        f"{row['touch_downs']} touch-downs of the lowest foot (body lowered up to {row['lowered_cm']:.0f} cm) "
+                        "instead of grounding the stretch")
+        for s0, s1, _, rise, _ in flights:
+            ballistic = np.sqrt(8 * max(rise, 1e-3) / GRAVITY)  # the airtime of a flight with this rise
+            if s1 >= n and (s1 - s0) / fps > 1.5 * ballistic:
+                warn.append(f"ends in the air {(s1 - s0) / fps:.2f} s after its last take-off with the pelvis {100 * rise:.0f} cm "
+                            f"up, longer than a ballistic flight of that rise ({ballistic:.2f} s): kept, but the root may be drifting")
+        if warn:
+            row["warning"] = "; ".join(warn)
+        if report is not None:
+            report.append(row)
+    root, feet = root.copy(), feet.copy()
+    root[:, 2] -= lower
+    feet[..., 2] -= lower[:, None]
     return root, feet
+
+
+def _roll_rot(roll):
+    c, s = np.cos(roll), np.sin(roll)
+    return np.array([[1, 0, 0], [0, c, -s], [0, s, c]])
+
+
+def leg_heading(hip, knee, ankle, yaw, thigh, shin):
+    """(T,) yaw of the plane the human's leg bends in (hip, knee, ankle: (T, 3)), as a flat G1 foot
+    under that leg must point: the G1's knee and ankle pitch axes are parallel, so the foot's
+    forward axis lies in the leg's plane. A straight leg has no plane: there it is the pelvis
+    `yaw`, blended in by the knee's bend. Held within LEG_YAW_MAX of the pelvis."""
+    n = np.cross(hip - ankle, knee - ankle) / (thigh * shin)  # the knee axis, pointing left; ~sin(knee bend)
+    fwd = np.cross(n, [0.0, 0, 1])
+    heading = np.arctan2(fwd[:, 1], fwd[:, 0])
+    w = np.clip((np.linalg.norm(fwd, axis=-1) - 0.1) / 0.3, 0, 1)  # ~6 degrees of bend: none, ~24: all
+    off = np.clip(np.angle(np.exp(1j * (heading - yaw))), -LEG_YAW_MAX, LEG_YAW_MAX)
+    return yaw + w * off
+
+
+def ankle_roll(hip, ankle, foot_rot):
+    """(...,) the ankle roll a G1 leg needs to reach `hip` from a foot at (ankle, foot_rot): the hip-
+    ankle line's lean out of the foot's sagittal plane (the knee and ankle pitch axes are parallel,
+    and the ankle pitches before it rolls)."""
+    u = np.einsum("...ji,...j->...i", foot_rot, hip - ankle)
+    return np.arctan2(u[..., 1], u[..., 2])
+
+
+def knee_in_leg_plane(hip, ankle, foot_rot, knee):
+    """(T, 3) the knee target's part a G1 leg can follow: `knee` projected onto the plane through
+    the hip-ankle line normal to the knee axis that this hip, ankle and foot rotation leave (the
+    G1's knee and ankle pitch axes are parallel and the ankle rolls by ankle_roll, so with the hip
+    and foot set the knee has no freedom out of that plane). The out-of-plane part is mostly depth
+    noise; the in-plane flexion is kept for the IK to weigh against the hip and foot."""
+    r = ankle_roll(hip, ankle, foot_rot)
+    axis = np.einsum("tij,tj->ti", foot_rot, np.stack([np.zeros_like(r), np.cos(r), -np.sin(r)], -1))
+    return knee - axis * ((knee - ankle) * axis).sum(-1, keepdims=True)
+
+
+def _foot_rotations(foot_yaw, shin, lo, hi):
+    """(T, 2, 3, 3) foot targets: yaw `foot_yaw` (T, 2), flat unless the shin (T, 2, 3, ankle minus
+    knee) leans past what the ankle pitch range [lo, hi] can absorb, less ANKLE_MARGIN: then the heel
+    (or toes) lift by the excess."""
+    fwd = np.stack([np.cos(foot_yaw), np.sin(foot_yaw)], -1)
+    lean = np.arctan2(-(shin[..., :2] * fwd).sum(-1), -shin[..., 2])  # knee ahead of ankle > 0
+    pitch = np.clip(0.0, lean + lo + ANKLE_MARGIN, lean + hi - ANKLE_MARGIN)  # toe down > 0
+    return np.stack([[_yaw_rot(y) @ _pitch_rot(p) for y, p in zip(ys, ps)] for ys, ps in zip(foot_yaw, pitch)])
 
 
 def proportional_motion(P, rt: G1Retargeter, fps=30.0):
     """The human's motion on a G1-proportioned skeleton, in world coordinates on the G1's floor.
     -> {"joints": {joint: (T, 3)}, "stance": (T, 2), "pelvis_rot", "torso_rot": (T, 3, 3),
-    "foot_rot": (T, 2, 3, 3), "scale": root scale}.
+    "foot_rot": (T, 2, 3, 3), "scale": root scale, "root_pose" / "root_planted": (T, 3) the hip
+    midpoint from the pose estimate and after planting the feet (for measuring the shift), "airborne":
+    ground_phantom_flights' report, "warnings": [str] for meta.json}.
 
     Bones take the G1's lengths and keep the human's directions (rescale_bones), so joint
     angles carry over and the hands and feet land where the G1 can reach. Root translation is
     scaled by the leg-length ratio, so squat depth and jump height scale with the legs. Feet in
-    contact (stance_mask) are pinned on the floor (plant_feet), their yaw held."""
+    contact (stance_mask) are pinned on the floor (plant_feet), their yaw held. Knees go where the
+    G1's leg can put them with that foot (knee_in_leg_plane)."""
     seg = lambda a, b: np.linalg.norm(P[:, a] - P[:, b], axis=-1)
     human_leg = np.median(np.concatenate([seg(23, 25) + seg(25, 27), seg(24, 26) + seg(26, 28)]))
     scale = (rt.bones["thigh"] + rt.bones["shin"]) / human_leg
@@ -524,7 +794,7 @@ def proportional_motion(P, rt: G1Retargeter, fps=30.0):
     ankles = np.stack([J["left_ankle"], J["right_ankle"]], 1)
     # Floor first (also the fallback if nothing is ever planted): lowest ankles on the floor.
     root[:, 2] += rt.sole_height - np.percentile((root[:, None] + ankles)[..., 2].min(1), 5)
-    stance = stance_mask(root[:, None] + ankles, fps)
+    stance = stance_mask(root[:, None] + ankles, fps, root=root)
     J = level_feet(J, stance)
     ankles = np.stack([J["left_ankle"], J["right_ankle"]], 1)
 
@@ -532,36 +802,85 @@ def proportional_motion(P, rt: G1Retargeter, fps=30.0):
                            zip(J["left_hip"], J["right_hip"], J["shoulder_mid"])])
     torso_rot = np.stack([_frame_from(l - r, s) for l, r, s in
                           zip(J["left_shoulder"], J["right_shoulder"], J["shoulder_mid"])])
-    # Foot yaw follows the pelvis, except a planted foot keeps its contact's mean yaw. Foot pitch
-    # comes from the ankle's range (a lunge's rear heel lifts); the ankle rises to match.
+    # Foot yaw follows the leg's plane (leg_heading), except a planted foot keeps its contact's mean
+    # yaw, or turns with the leg if the contact is a pivot. Foot pitch comes from the ankle's range
+    # (a lunge's rear heel lifts); the ankle rises to match.
     yaw = np.unwrap(np.arctan2(pelvis_rot[:, 1, 0], pelvis_rot[:, 0, 0]))
+    leg_yaw = np.stack([leg_heading(J[f"{s}_hip"], J[f"{s}_knee"], J[f"{s}_ankle"], yaw, rt.bones["thigh"], rt.bones["shin"])
+                        for s in ("left", "right")], 1)
     foot_yaw = np.full((len(P), 2), np.nan)
     for f in range(2):
+        smooth = uniform_filter1d(leg_yaw[:, f], _frames(9, fps), mode="nearest")
         for a, b in _runs(stance[:, f]):
-            foot_yaw[a:b, f] = yaw[a:b].mean() - yaw[a:b]
-    foot_yaw = yaw[:, None] + _bridge(foot_yaw)
-    shin = ankles - np.stack([J["left_knee"], J["right_knee"]], 1)
-    fwd = np.stack([np.cos(foot_yaw), np.sin(foot_yaw)], -1)
-    lean = np.arctan2(-(shin[..., :2] * fwd).sum(-1), -shin[..., 2])  # knee ahead of ankle > 0
+            pivot = abs(smooth[b - 1] - smooth[a]) > PIVOT_YAW  # the leg turned, not just jittered
+            foot_yaw[a:b, f] = (smooth[a:b] if pivot else leg_yaw[a:b, f].mean()) - leg_yaw[a:b, f]
+    foot_yaw = leg_yaw + _bridge(foot_yaw)
     lo, hi = rt.model.jnt_range[rt.model.joint("left_ankle_pitch_joint").id]
-    pitch = np.clip(0.0, lean + lo + ANKLE_MARGIN, lean + hi - ANKLE_MARGIN)  # toe down > 0
-    foot_rot = np.stack([[_yaw_rot(y) @ _pitch_rot(p) for y, p in zip(ys, ps)]
-                         for ys, ps in zip(foot_yaw, pitch)])
+    foot_rot = _foot_rotations(foot_yaw, ankles - np.stack([J["left_knee"], J["right_knee"]], 1), lo, hi)
 
     floor = rt.ankle_clearance(foot_rot)
+    root_pose = root
     root, feet, foot_fix = plant_feet(root, ankles, stance, floor)
-    root, feet = ground_phantom_flights(root, feet, stance, floor, fps)
+    root_planted, airborne = root, []
+    root, feet = ground_phantom_flights(root, feet, stance, floor, fps, report=airborne)
     start = np.r_[root[0, :2], 0.0]  # hips start over the origin
     root, feet = root - start, feet - start
     joints = {k: root + v for k, v in J.items()}
-    joints["left_ankle"], joints["right_ankle"] = feet[:, 0], feet[:, 1]
-    # A pinned foot moved off the skeleton's (double support, or lifted off the floor): move the
-    # knee half as far, the small-correction answer for a two-bone leg. (Re-solving the knee
+    # Ankle roll: what the hip-ankle line leans out of the foot's plane beyond the joint's range
+    # rolls the foot target (onto its edge, raised to clear the floor), rather than leaving the IK a
+    # flat foot it can't reach, which pinned the ankle roll at its limit and gave up the knee.
+    # Knees: only the part of the human's knee the G1 can follow (knee_in_leg_plane). The foot
+    # pitch is then redone for the knee's new shin, and the roll and knee once more for that pitch.
+    roll_lim = rt.model.jnt_range[rt.model.joint("left_ankle_roll_joint").id][1] - ANKLE_ROLL_MARGIN
+    # A pinned foot moved off the skeleton's (double support, or lifted off the floor): the knee
+    # moves half as far, the small-correction answer for a two-bone leg. (Re-solving the knee
     # exactly overreacts near a straight leg, where 1 cm of foot is 10 degrees of knee.)
-    joints["left_knee"] = joints["left_knee"] + foot_fix[:, 0] / 2
-    joints["right_knee"] = joints["right_knee"] + foot_fix[:, 1] / 2
+    human_knees = [joints[f"{s}_knee"] + foot_fix[:, f] / 2 for f, s in enumerate(("left", "right"))]
+    on_floor = feet.copy()
+    for last in (False, True):
+        for f, s in enumerate(("left", "right")):
+            r = ankle_roll(joints[f"{s}_hip"], feet[:, f], foot_rot[:, f])
+            foot_rot[:, f] = foot_rot[:, f] @ np.stack([_roll_rot(e) for e in np.clip(r, -roll_lim, roll_lim) - r])
+        feet[..., 2] = np.maximum(on_floor[..., 2], rt.ankle_clearance(foot_rot))
+        knees = np.stack([knee_in_leg_plane(joints[f"{s}_hip"], feet[:, f], foot_rot[:, f], human_knees[f])
+                          for f, s in enumerate(("left", "right"))], 1)
+        if not last:
+            foot_rot = _foot_rotations(foot_yaw, feet - knees, lo, hi)
+    joints["left_ankle"], joints["right_ankle"] = feet[:, 0], feet[:, 1]
+    joints["left_knee"], joints["right_knee"] = knees[:, 0], knees[:, 1]
     return {"joints": joints, "stance": stance, "pelvis_rot": pelvis_rot, "torso_rot": torso_rot,
-            "foot_rot": foot_rot, "scale": scale}
+            "foot_rot": foot_rot, "scale": scale, "root_pose": root_pose - start,
+            "root_planted": root_planted - start, "airborne": airborne,
+            "warnings": [r["warning"] for r in airborne if "warning" in r]}
+
+
+# Bump with any change to what the retarget produces; code_version() records it with the commit.
+RETARGET_VERSION = "2026-10-31 contacts (touch-downs, per-take-off flights) + leg-plane knees and feet + arm reseeding"
+
+
+def code_version():
+    """What produced a retarget, for meta.json: RETARGET_VERSION, the git commit of this checkout
+    (and whether retarget.py differs from it), and the parameters that shape the motion."""
+    import subprocess
+    from pathlib import Path
+
+    def git(*args):
+        try:
+            out = subprocess.run(["git", *args], cwd=Path(__file__).resolve().parent, capture_output=True, text=True, timeout=10)
+            return out.stdout.strip() if out.returncode == 0 else None
+        except (OSError, subprocess.SubprocessError):
+            return None
+
+    commit = git("rev-parse", "--short=12", "HEAD")
+    deg = lambda x: round(float(np.degrees(x)), 2)
+    return {"version": RETARGET_VERSION, "git": commit,
+            "retarget_py_modified": None if commit is None else bool(git("status", "--porcelain", "--", "retarget.py")),
+            "params": {"max_joint_speed": MAX_JOINT_SPEED, "flight_rise_frac": FLIGHT_RISE_FRAC, "long_airborne_s": LONG_AIRBORNE_S,
+                       "contact_root_speed_frac": CONTACT_ROOT_SPEED_FRAC, "ankle_margin_deg": deg(ANKLE_MARGIN),
+                       "ankle_roll_margin_deg": deg(ANKLE_ROLL_MARGIN), "leg_yaw_max_deg": deg(LEG_YAW_MAX),
+                       "pivot_yaw_deg": deg(PIVOT_YAW), "pelvis_lean": PELVIS_LEAN, "arm_continuity_cost": ARM_CONTINUITY_COST,
+                       "arm_bidirectional": ARM_BIDIRECTIONAL, "arm_reseed_err": ARM_RESEED_ERR,
+                       "position_cost": POSITION_COST, "orientation_cost": ORIENTATION_COST}}
 
 
 def tracking_report(rt: G1Retargeter, qpos, targets_seq):

@@ -475,3 +475,170 @@ Cost: about 1 GPU hour for inference on three short clips; the time is in the lo
 - The right-knee asymmetry is reported without a settled cause.
 - Pixel height of the SAM crop itself (masks are not kept in `outputs/`), so the "distance" threshold is an
   estimate from the whole-frame heights.
+
+## Fixes applied: 1 (contacts and flights), 5 (retarget IK), 7 (fps and version) (2026-10-31)
+
+Implemented in `retarget.py` (plus the `meta.json` writer in `pipeline.py` and `experiments/process_clips.py`).
+Measured with `experiments/pipeline_audit/retarget_audit.py` on the same ten `human.npy` files, before (main at
+6c38beb) and after, with the same script for both (it now reads `proportional_motion`'s own intermediates, and
+uses the lifted-heel floor where the original audit used a flat one, so the "before" column differs from the
+Stage 2 table above by a few tenths). JSON: `docs/results/pipeline_audit/retarget_fixes_{before,after}.json`.
+The stored `qpos.npy` files in `outputs/` were not overwritten (other sessions train from them).
+
+What changed:
+
+- **Contacts (`stance_mask`).** Two signals per foot. A *dwell* is the old window (within 10 cm of the
+  foot's floor, slow, at least 4 frames), but the speed threshold is now 0.6 m/s plus half the root's
+  horizontal speed. A *touch-down* is the ankle's lowest point within +-0.1 s (vertical velocity crossing from
+  down to up) near the floor and under the same threshold; it and its lower neighbour count as a 2-frame
+  contact. Frame counts scale with fps.
+- **Phantom flights (`ground_phantom_flights`), per take-off.** Inside a no-contact stretch the lowest
+  foot's near-floor minima are missed touch-downs and split it into candidate flights. Each one is a flight
+  if the pelvis rises at least 0.4 (was 0.25) of g T^2 / 8 for its airtime, or if the clip ends with the
+  pelvis still above its take-off height (never lowered). Non-flights up to 0.5 s are lowered as before. A
+  longer stretch with no flight is not grounded: the floor is interpolated through the touch-downs, and a
+  warning goes to `meta.json`.
+- **Leg IK.** The G1's knee and ankle-pitch axes are parallel, so with the hip and foot pose fixed its knee
+  has *no* freedom. It lies in the plane of the hip-ankle line and the knee axis, and the ankle roll is the
+  hip-ankle line's lean out of the foot's sagittal plane (`ankle_roll`). The old targets asked for a flat foot
+  under the pelvis yaw plus the human's knee, which no G1 leg can do at once, so the IK gave up the knee (5-10 cm)
+  and parked the ankle roll at its limit. Now:
+  - the foot's yaw follows the plane the human's leg bends in (`leg_heading`; a planted foot keeps its
+    contact's mean, or turns with the leg if the contact turns more than 90 degrees, as in the discus spin);
+  - the knee target keeps only its in-plane part (`knee_in_leg_plane`);
+  - roll beyond the ankle's range less 4 degrees rolls the foot target onto its edge, raised to clear the
+    floor.
+
+  The audit asked for the pelvis roll to absorb the excess. On a wide stance a pelvis roll moves the hip a few
+  cm and cannot remove a 25-40 degree hip-ankle lean, so the foot takes it instead.
+- **Arm IK.** Arm joints are pulled toward the previous frame's (cost 0.2), and the clip is also solved
+  backwards. Each run of frames where an arm misses its elbow + hand targets by over 5 cm is re-solved from the
+  arm pose of the best-tracked frame with the most similar target, and each arm keeps the candidate that tracks
+  better, spliced where they agree. The worst case was a local minimum, not the speed cap. In the first jumping
+  jack the forward solve took the roll branch of the shoulder, pinned roll at its 2.25 rad limit, and left the
+  hand 13 cm off for 9 frames, while the same frames solve to 1.7 cm from a later rep's arm pose. The cap frames
+  that remain are the arm passing the shoulder's gimbal point (straight out to the side), with the hand within
+  2 cm.
+- **Hygiene.** `pipeline.video_fps` reads the frame rate from the decoded frames' timestamps. `meta.json` now
+  has `video_timing` (real fps, header fps, frame gaps), `retarget_version` (`retarget.code_version()`: the
+  version string, git commit, whether `retarget.py` was modified, and the parameters), `retarget_warnings` and
+  `stance_frac`. `process_clips.py` adds `source_video` with the source file's own timing before the 30 fps
+  resample.
+
+Contacts and flights:
+
+| clip | no-contact frames | phantom lowering max (cm) | root shift mean (time-varying part) (cm) | pelvis rise kept / in the pose (cm) | root travel (cm) |
+|---|---|---|---|---|---|
+| squat_jump | 14% → **13%** | 0 | 9.4 (5.4) → **9.5 (5.4)** | 58/57 → **57/57** | 19 |
+| squat | 0% | 0 | 9.7 (4.9) | 20/24 | 20 |
+| lunge | 4% → **0%** | 0 | 8.5 (5.7) → **9.6 (6.5)** | 36/34 → **37/34** | 42 → **37** |
+| arms | 0% | 0 | 1.7 (0.9) | 1/1 | 5 |
+| front_kick | 0% | 0 | 6.0 (3.9) → **6.1 (3.9)** | 5/2 | 18 → **19** |
+| jumping_jacks | 49% → **41%** | 0 | 6.3 (4.6) → **5.5 (3.6)** | 16/16 | 20 → **11** |
+| punches | 0% | 0 | 4.3 (2.7) | 6/4 | 29 |
+| shot_put | 58% | 9 → **5** | 13.6 (5.7) → **14.4 (5.5)** | 20/26 → **23/26** | 123 |
+| discus | 2% | 0 | 10.2 (6.6) | 7/16 → **8/16** | 98 → **91** |
+| hurdles | 88% → **65%** | 62 → **0** | 4.5 (3.3) → **6.8 (5.5)** | 26/51 → **51/51** | 319 → **316** |
+
+IK:
+
+| clip | knee IK error L/R (cm) | ankle roll at limit | any joint at limit | frames at 20 rad/s (worst hand error there, cm) | hand IK error max (cm) | knee angle error (deg) | hip angle error (deg) |
+|---|---|---|---|---|---|---|---|
+| squat_jump | 1.1/5.5 → **0.5/1.6** | 4% → **0%** | 5% → **1%** | 0 (0) | 0.2 | 2.3 → **2.0** | 4.9 → **5.2** |
+| squat | 1.1/5.0 → **0.6/1.8** | 5% → **0%** | 5% → **0%** | 0 (0) | 0.2 | 4.2 → **3.3** | 4.2 → **5.0** |
+| lunge | 2.4/3.5 → **1.7/1.2** | 23% → **4%** | 36% → **21%** | 0 (0) | 0.2 | 3.0 → **2.9** | 4.9 → **5.7** |
+| arms | 1.7/1.6 → **0.7/0.7** | 0% | 0% | 0 (0) | 0.1 | 0.8 → **0.6** | 2.1 → **1.9** |
+| front_kick | 1.8/6.1 → **0.4/1.9** | 22% → **0%** | 26% → **5%** | 1 (0) | 0.2 → **0.3** | 4.0 → **1.4** | 6.1 → **5.4** |
+| jumping_jacks | 1.5/1.8 → **0.6/0.8** | 13% → **0%** | 13% → **0%** | 9 (6) → **9 (2)** | 13.2 → **1.8** | 1.7 → **1.4** | 3.0 → **2.4** |
+| punches | 3.2/3.8 → **1.9/1.4** | 0% | 0% → **1%** | 0 (0) | 0.1 | 5.3 → **4.4** | 5.3 → **6.3** |
+| shot_put | 2.3/3.8 → **0.9/1.0** | 89% → **0%** | 94% → **44%** | 7 (18) → **3 (13)** | 18.3 → **13.4** | 5.4 → **4.2** | 7.1 → **4.5** |
+| discus | 6.2/9.8 → **0.9/1.3** | 48% → **0%** | 76% → **10%** | 11 (10) → **4 (1)** | 10.8 → **1.3** | 12.8 → **2.1** | 6.7 → **3.7** |
+| hurdles | 2.5/3.8 → **0.8/1.6** | 64% → **0%** | 66% → **11%** | 4 (3) → **3 (1)** | 3.0 → **1.4** | 1.7 → **1.0** | 2.2 → **5.2** |
+
+Feet:
+
+| clip | foot penetration max (cm) | planted-foot slide (cm/s) | planted-foot tilt p95 (deg) | planted-foot twist (deg/s) |
+|---|---|---|---|---|
+| squat_jump | 0.3 → **0.1** | 0.13 → **0.05** | 0 → **2** | 4 → **0** |
+| squat | 0.1 | 0.07 → **0.04** | 0 → **2** | 1 → **0** |
+| lunge | 0.9 → **0.8** | 0.18 → **0.10** | 28 → **31** | 6 → **0** |
+| arms | 0.0 | 0.02 → **0.01** | 0 | 0 |
+| front_kick | 0.1 | 0.28 → **0.04** | 1 → **2** | 1 → **0** |
+| jumping_jacks | 0.1 | 0.16 → **0.09** | 1 → **2** | 14 → **0** |
+| punches | 0.3 → **0.2** | 0.24 → **0.21** | 0 → **5** | 1 → **0** |
+| shot_put | 1.8 → **0.5** | 0.45 → **0.13** | 16 → **28** | 8 → **0** |
+| discus | 1.0 → **0.3** | 0.64 → **0.14** | 2 → **8** | 24 → **102** |
+| hurdles | 0.8 → **0.0** | 0.10 → **0.04** | 6 | 16 → **0** |
+
+Root shift = mean distance `plant_feet` moved the hip midpoint from the pose estimate; the bracket removes its
+clip-constant part (a floor / start reference with no effect on the output). Pelvis rise = max minus 5th
+percentile, in G1 metres (the hurdler's +60 cm human rise is 51 cm at the 0.85 leg scale). Tilt and twist are the
+IK result's planted feet (degrees off flat, and yaw rate).
+
+Flight decisions after the fix:
+
+| clip | stretch | decision |
+|---|---|---|
+| squat_jump | 2.77 s and 6.90 s, 0.63 s each | flights (rise 39.6, 37.9 cm vs 19.7 needed), unchanged |
+| jumping_jacks | 7 hops, 0.20-0.40 s | all 7 kept as flights (rise 4.5-14.9 cm vs 2.0-7.8 needed) |
+| lunge | the 0.17 s "flight" | gone: the shuffle is now a contact |
+| shot_put | 1.10 s, 0.33 s | lowered 4.7 cm: rise 5.8 cm is under 0.4 of ballistic, the doubtful hop rejected as predicted |
+| shot_put | 2.20 s, 1.60 s | interpolated through 3 touch-downs (lowered up to 4.6 cm, was 9.4), warning in `meta.json` |
+| hurdles | 1.23 s to the end, 1.77 s | kept as a flight that ends the clip: the pelvis keeps its full rise (was lowered up to 62 cm). Warning: 1.77 s airborne is 3x what a 37 cm rise allows, so the root is probably drifting (camera tilt, see Stage 1) |
+
+Against the targets:
+
+- **Hurdles clearance survives** (pelvis rise 51 of 51 cm kept, was 26). No-contact frames fall from 88% to 65%:
+  the run-up now has contacts, and what is left is the clip's airborne end.
+- **Phantom lowering:** 0 on every clip except the shot put (5 cm, was 9).
+- **Ankle roll at its limit:** 0% on nine clips, 4% on the lunge (was 4-89%). Any-joint-at-limit drops on
+  every clip that had hits (punches goes from 0 to 1%); what remains is ankle pitch (the lunge's rear heel), the shot-putter's right shoulder pitch (40%,
+  unchanged: the hand at the neck is past the G1's range), and knee flexion.
+- **Knee IK error:** 0.4-1.9 cm (the worse knee was 3.5-9.8 cm on eight clips). Knee *angle* error against the
+  human improves on all ten, and the discus goes from 12.8 to 2.1 degrees.
+- **20 rad/s cap:** 32 frames over the ten clips become 19. More importantly, the hand while capped is within
+  2 cm everywhere except one shot-put frame (13 cm, the elbow at its full-flexion limit: the target is out of
+  reach). Worst hand error: jumping jacks 13.2 to 1.8 cm, discus 10.8 to 1.3, shot put 18.3 to 13.4.
+- **Root shift is not "well below 4-14 cm".** It is essentially unchanged on clips whose contacts were already
+  right (squat 9.7 cm with 0% no-contact before and after). About half of it is the constant reference offset;
+  the time-varying part (2.7-6.6 cm) is the pose estimate's own planted-foot drift: the 2D-track root and the
+  3D skeleton disagree about where a still foot is (Stage 1's ruler drift and depth error). More contacts move
+  it up slightly where frames were previously unpinned (hurdles 3.3 to 5.5, lunge 5.7 to 6.5). Fixing it needs a
+  better root (fix 3 or the camera model), not better contacts.
+- **Shot-put glide travel:** 123 cm before and after (the pose estimate's 119). The pivoting foot is still
+  found only 19-32% of the time: it slides at about 1 m/s during the glide, too fast for either signal.
+- **Squat jump, squat, arms, lunge:** better on every metric except the **hip angle error, +0.3 to +0.8
+  degrees** (squat 4.2 to 5.0, lunge 4.9 to 5.7, squat jump 4.9 to 5.2), and +2 degrees of planted-foot tilt
+  (95th percentile). The lunge's hip change comes mostly from fix 1 (its new contacts). The squats' comes from the
+  feet: the old IK let the knee follow the human out of the G1 leg's plane by straining a flat foot at the
+  ankle-roll limit (5% of frames) with 5 cm of knee error, whereas a G1 knee cannot track "knees out" with a
+  planted, non-twisting foot. Keeping part of the out-of-plane knee (tested at 30% and 60%) did not change the hip
+  angle, only the knee error.
+- **Feet:** penetration and sliding go down everywhere. Planted feet no longer twist (squat 1, jacks 14, hurdles
+  16 deg/s to 0); the discus pivots by design (102 deg/s, the spin). Tilt rises where a wide stance needs more
+  roll than the ankle has: shot put p95 28 degrees (was 16, with the ankle at its limit in 89% of frames instead),
+  punches 5, discus 8. That is the foot rolling onto its edge explicitly instead of the IK leaving it there
+  unasked.
+- **Jumping jacks keep their hops** (all 7), and `tests/test_retarget.py` has the original phantom-flight test
+  plus tests for running touch-downs, a missed-contact run-up ending in a jump, a clip ending mid-air, a short
+  lifted stance, a hop, the roll formula against the G1's joint, the leg heading, a wide stance, the version
+  record and the fps reader.
+
+Fix 7 corrects a claim in this audit: **the stored `meta.json` fps (30.0) was right.** Every `human.npy` has
+exactly 30 frames per second of video. The phone files' frames are 1/30 s apart by their timestamps, and their
+header's 27.7-29.6 fps (what mediapy reports, and what Stage 1's table lists as "true fps") is a nominal rate. The
+films were resampled to 30 fps by `_processed` (shot put 107 frames at 25.03 fps becomes 128). The real hazard is
+the opposite: `pipeline.py` run directly on a phone file used mediapy's header rate, 1-8% slow. It now
+measures the rate from the timestamps. The hurdles file also has one dropped frame (an 80 ms gap), now
+counted in `video_timing.irregular_gaps`.
+
+Costs and side effects:
+
+- The retarget takes about 2.2x as long (30 s for the ten clips on a laptop, about 0.5 s per second of video):
+  the backward solve and the re-seeds.
+- `FLIGHT_RISE_FRAC` 0.25 to 0.4 is also read by `experiments/generalist_policy.py`'s "floats" check on
+  retargeted clips, which becomes stricter in the same way.
+- The stored clips in `outputs/` still hold the old retarget, so tables made from them are pre-fix. Re-running
+  `retarget_audit.py --save-qpos <dir>` writes the new ones.
+- Not done: training the hurdles and shot put on the new references (both Colab A100 slots were taken by other
+  sessions' jobs).
