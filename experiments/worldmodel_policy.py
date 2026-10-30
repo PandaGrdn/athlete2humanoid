@@ -13,15 +13,16 @@ Then how good the imagined future is (wm_quality.json / .md): V-JEPA's predictor
 learned from the training clips' latents (cross-fitted, so a training clip is predicted by a model that
 never saw it), and copying the present, against the true future latent.
 
-Stage "train": the latents from stage 1 (--latents). One new policy, multi_vjp (A2H-TrackingVJPred),
-on the same five clips' variants, from the same warm start and for as long as multi / multi_vj / multi_vjc
-(experiments/multiclip_policy.py); its input is multi_vjc's (the causal latent now and 0.5 s ago) plus the
-predicted latent ~0.5 s and 1 s ahead, made at each step from frames up to it only. Then every clip,
-trained on or not, is evaluated as multiclip_policy.py does with all four policies. Each policy reads a
-different latent, and robustness_eval holds one latent table per run, so a clip is evaluated in three
-groups: {multi_vjp, multi} on the predicted table, {multi_vjc} on the causal one, {multi_vj} on the
-non-causal one, each with its own run's PCA. The groups share the motions, the held-out variants, the
-conditions and their seeds.
+Stage "train": the latents from stage 1 (--latents). One new policy per predictor (multi_vjp: V-JEPA 2's,
+multi_vjl: the learned one; A2H-TrackingVJPred), on the same five clips' variants, from the same warm start and
+for as long as multi / multi_vj / multi_vjc (experiments/multiclip_policy.py); its input is multi_vjc's (the
+causal latent now and 0.5 s ago) plus the predicted latent ~0.5 s and 1 s ahead, made at each step from frames
+up to it only. Then every clip, trained on or not, is evaluated as multiclip_policy.py does with all five
+policies. Each policy reads a different latent, and robustness_eval holds one latent table per run, so a clip is
+evaluated in four groups: {multi_vjp, multi} on V-JEPA's predicted table, {multi_vjl} on the learned one,
+{multi_vjc} on the causal one, {multi_vj} on the non-causal one, each with its own run's PCA. The groups share
+the motions, the held-out variants, the conditions and their seeds. Rerun on a stopped run's out dir, it skips
+the build, the trained policies and the clips already evaluated.
 """
 
 import argparse
