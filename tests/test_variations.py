@@ -143,6 +143,34 @@ def test_amplitude_retimes_flights_to_their_new_rise(g1, stand):
     assert np.all(np.diff(src) > 0) and src[0] == 0 and src[-1] > len(q) - 2
 
 
+def test_open_flights_need_only_the_lower_bound():
+    """A flight the clip ends in has a censored airtime: a ballistic one caught mid-air reads >= 1 (no upper
+    bound applies); one that floats (hurdles' tail: the pelvis held up long after take-off) reads far below."""
+    from latent.reward_net import BODIES
+    from skill import variations as V
+    body = np.zeros((len(BODIES), 3))
+    body[0, 2] = 0.7
+    for n in (38, 40, 43):  # the clip ends on the way up, near the apex, on the way down
+        (f,) = V.flights(hop(body, n=n, apex=0.3), 0.0, 30.0)
+        assert f["open"] and f["ratio"] >= 0.95 and V.ballistic(f)
+    float_ = hop(body, n=60)
+    float_[36:, :, 2] = float_[36, :, 2]  # rises, then stays up until the clip ends
+    (f,) = V.flights(float_, 0.0, 30.0)
+    assert f["open"] and f["ratio"] < 0.3 and not V.ballistic(f)
+    (landed,) = V.flights(hop(body), 0.0, 30.0)
+    assert not landed["open"]
+
+
+def test_amplitude_leaves_unballistic_flights_untimed(g1, stand):
+    """Re-timing squeezes a flight into the airtime its rise allows; done to one that was never ballistic it
+    only speeds its joints up, so it is left as it is (and the filter reports it)."""
+    from skill import variations as V
+    q = hop_qpos(stand, slow=2.0)
+    foot0 = float(np.percentile(g1.bodies(q)[:, [3, 6], 2].min(1), 5))
+    v, _, src = V.make(q, g1, False, 1.0, 1.25, 0.0, [], foot0, fps=30.0)
+    assert len(v) == len(q) and np.allclose(src, np.arange(len(q)))
+
+
 def test_filter_drops_unphysical_variants(g1, stand):
     """The filter's physical rules, each on the variant that breaks it."""
     from skill import variations as V

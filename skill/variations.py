@@ -22,8 +22,9 @@ action, so a squat jump, a kick and a lunge get the same treatment:
 Each variant gets its own keypose spec, compiled by the same rule as any clip (skill/keypose.py), and
 is kept only if its own reference completes that spec (self-check), stays within the joint limits,
 and is physical: no joint faster than the cap, every flight ballistic (pelvis rise within
-[0.6, 1.5] x g T^2 / 8 of its airtime T), every flight of the clip still there, and the feet no more
-than PENETRATION into the floor. A dropped variant's "why" says which rule it broke.
+[0.6, 1.5] x g T^2 / 8 of its airtime T; a flight the clip ends or starts in has an unknown airtime and
+only the lower bound applies), every flight of the clip still there, and the feet no more than
+PENETRATION into the floor. A dropped variant's "why" says which rule it broke.
 TRAIN and HELD_OUT are disjoint: a policy is trained on TRAIN and evaluated on HELD_OUT, which has
 tempos and amplitudes outside the training range, so success there is generalisation, not recall.
 """
@@ -127,7 +128,10 @@ def flights(pos, foot0, fps, air=FLIGHT_AIR):
     end exclusive), air_s, rise (pelvis peak above its height where the feet cross `air`), ratio (rise /
     g T^2 / 8)}]. Rise and airtime are both measured from where the feet cross `air`: for a body that holds
     its shape in the air, the time spent above any level and the rise above it obey the same g T^2 / 8.
-    The crossings are interpolated between frames: a 5-frame hop counted in whole frames is +-20% in T."""
+    The crossings are interpolated between frames: a 5-frame hop counted in whole frames is +-20% in T.
+    open: the clip starts or ends in it (retarget.ground_phantom_flights keeps such a stretch as a flight
+    when the clip ends with the pelvis up). Its airtime is censored, so only rise / ballistic >= 1 follows
+    from gravity: a ballistic body still in the air after T has risen at least g T^2 / 8 by then."""
     from retarget import GRAVITY
     lo = np.minimum(pos[:, L_ANKLE, 2], pos[:, R_ANKLE, 2]) - foot0
     edges = np.flatnonzero(np.diff(np.r_[0, (lo > air).astype(int), 0]))
@@ -141,10 +145,18 @@ def flights(pos, foot0, fps, air=FLIGHT_AIR):
             continue
         (t0, z0), (t1, z1) = cross(max(a - 1, 0), a), cross(min(b, len(z) - 1), b - 1)
         t_air = max(t1 - t0, 1.0) / fps
-        rise = float(z[a:b].max() - (z0 + z1) / 2)
+        # an open end has no crossing: its last (first) frame is still in the air, so rise is from the other one
+        base = z1 if a == 0 and b < len(z) else z0 if b == len(z) and a > 0 else (z0 + z1) / 2
+        rise = float(z[a:b].max() - base)
         out.append({"start": int(a), "end": int(b), "air_s": round(t_air, 4), "rise": round(rise, 4),
-                    "ratio": round(rise / (GRAVITY * t_air ** 2 / 8), 2)})
+                    "ratio": round(rise / (GRAVITY * t_air ** 2 / 8), 2), "open": bool(a == 0 or b == len(z))})
     return out
+
+
+def ballistic(f):
+    """Is flight f (from flights()) one gravity allows? An open one only has to rise enough for its airtime."""
+    lo, hi = BALLISTIC
+    return lo <= f["ratio"] and (f["open"] or f["ratio"] <= hi)
 
 
 def _src_times(seg_speed):
@@ -172,15 +184,19 @@ def time_map(n, keys, speed, warp, air, rng, joint_speed=None, cap=None, floor=1
     return _src_times(seg_speed)
 
 
-def ballistic_retime(q, g1, foot0, fps):
+def ballistic_retime(q, g1, foot0, fps, ref):
     """Each flight of q re-timed to the airtime its pelvis rise needs, sqrt(8 rise / g) -> source frame of
     each output frame. The stretch is uniform over the flight's frames and one either side, which hold
-    both crossings of the air threshold, so the crossing-to-crossing time scales exactly."""
+    both crossings of the air threshold, so the crossing-to-crossing time scales exactly.
+    ref: the source clip's flights (as `flights()`); a flight is re-timed only if its source flight was
+    ballistic and lands in the clip. Squeezing a non-ballistic one into the airtime its rise allows (hurdles'
+    1.65 s, 15 cm float into 0.35 s) only multiplies its joint speeds; the filter reports it as it is."""
     from retarget import GRAVITY
     seg_speed = np.ones(len(q) - 1)
     for f in flights(g1.bodies(q), foot0, fps):
-        if f["rise"] <= 0:
-            continue  # not a jump at all; the filter reports it
+        src = [r for r in ref if r["start"] < f["end"] and f["start"] < r["end"]]
+        if f["rise"] <= 0 or f["open"] or not src or not all(ballistic(r) and not r["open"] for r in src):
+            continue
         need = np.sqrt(8 * f["rise"] / GRAVITY)
         seg_speed[max(f["start"] - 1, 0):f["end"]] = f["air_s"] / need
     return _src_times(seg_speed)
@@ -229,7 +245,7 @@ def make(qpos, g1, mirrored, speed, alpha, warp, keys, foot0, seed=0, fps=FPS):
     keys = np.asarray(keys, np.float64)
     if alpha != 1.0:
         q, clipped = scale(q, alpha, g1, foot0)
-        t = ballistic_retime(q, g1, foot0, fps)
+        t = ballistic_retime(q, g1, foot0, fps, flights(g1.bodies(qpos), foot0, fps))
         if len(t) != len(q) or np.abs(t - src).max() > 1e-9:
             q, src, keys = regrounded(q, t, g1), t, np.interp(keys, t, np.arange(len(t)))
     joint_speed = np.abs(np.diff(q[:, 7:], axis=0)).max(1) * fps
@@ -249,9 +265,12 @@ def physics(q, g1, foot0, fps, ref_flights):
     if speed > MAX_JOINT_SPEED * SPEED_SLACK:
         why.append(("speed", f"a joint at {speed:.1f} rad/s (cap {MAX_JOINT_SPEED:g})"))
     fl = flights(g1.bodies(q), foot0, fps)
-    bad = [f["ratio"] for f in fl if not lo <= f["ratio"] <= hi]
+    bad = [f for f in fl if not ballistic(f)]
     if bad:
-        why.append(("ballistic", f"flight rise / ballistic {', '.join(f'{r:g}' for r in bad)} outside [{lo:g}, {hi:g}]"))
+        why.append(("ballistic", "; ".join(
+            f"a flight the clip {'starts' if f['start'] == 0 else 'ends'} in: {f['air_s']:.2f} s in the air with a "
+            f"{100 * f['rise']:.0f} cm rise, which needs at least {lo:g} x ballistic (it is {f['ratio']:g})" if f["open"] else
+            f"flight rise / ballistic {f['ratio']:g} outside [{lo:g}, {hi:g}]" for f in bad)))
     if len(fl) < len(ref_flights):
         why.append(("lost flight", f"{len(fl)} of the clip's {len(ref_flights)} flights left"))
     depth = -float(g1.soles(q).min())

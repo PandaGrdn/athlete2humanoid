@@ -18,8 +18,6 @@ from experiments.pipeline_audit import RESULTS, clip_dirs, dump  # noqa: E402
 from retarget import MAX_JOINT_SPEED  # noqa: E402
 from skill import variations as V  # noqa: E402
 
-LO, HI = V.BALLISTIC
-
 
 def audit(qpos, fps, g1, grid=V.TRAIN, seed=0):
     vs = V.generate(qpos, fps, grid, seed, g1, log=lambda *a: None)
@@ -37,13 +35,13 @@ def audit(qpos, fps, g1, grid=V.TRAIN, seed=0):
         fl = V.flights(g1.bodies(q), foot0, fps)
         speed = np.abs(np.diff(q[:, 7:], axis=0)) * fps
         phys.append(dict(name=v["name"], frames=v["frames"], flights=len(fl), flight_ratios=[f["ratio"] for f in fl],
-                         flights_unballistic=sum(1 for f in fl if not LO <= f["ratio"] <= HI),
+                         flights_unballistic=sum(1 for f in fl if not V.ballistic(f)),
                          max_joint_speed=round(float(speed.max()), 1), limit_clipped=v["limit_clipped"],
                          penetration_cm=round(-100 * float(min(g1.soles(q).min(), 0)), 1),
                          poses=sum(s["kind"] == "pose" for s in v["spec"]["stages"])))
     ratios = sorted(r for p in phys for r in p["flight_ratios"])
     return dict(kept=len(phys), dropped=len(vs) - len(phys), drop_reasons=why,
-                base_flights=[{k: f[k] for k in ("air_s", "rise", "ratio")} for f in base_fl],
+                base_flights=[{k: f[k] for k in ("air_s", "rise", "ratio", "open")} for f in base_fl],
                 base_max_joint_speed=round(float(np.abs(np.diff(qpos[:, 7:], axis=0)).max() * fps), 1),
                 kept_flights=len(ratios), kept_flight_ratio_range=[ratios[0], ratios[-1]] if ratios else None,
                 kept_flights_unballistic=sum(p["flights_unballistic"] for p in phys),
