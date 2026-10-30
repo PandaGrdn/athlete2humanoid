@@ -40,6 +40,7 @@ BALL_R, BALL_M = 0.11, 0.43  # a size-5 soccer ball
 KICK_BODY = "right_ankle_roll_link"
 TOE = (0.13, 0.0, -0.025)  # the front of the G1's foot capsules, in the ankle roll link's frame
 LEG_BODIES = ("right_ankle_roll_link", "right_knee_link")  # a hit by these counts as a kick
+LEG_REACH = 0.1  # ...when the toe or one of their origins is this close to the ball's surface
 PARK = (-2.0, 2.0, BALL_R)  # where the ball waits between kicks, in the env's frame, out of reach
 HOLD_AFTER_S = 0.15  # an untouched ball is let go this long after the reference strike
 SPAWN_GAP_S = 1.0  # a kick's ball appears this long after the previous strike (at t = 0 for the first)
@@ -164,10 +165,11 @@ class BallKick:
         v = self.ball.data.root_link_lin_vel_w
         moved = self.held & (v.norm(dim=-1) > HIT_SPEED)
         if moved.any():
-            p = self.ball.data.root_link_pos_w[:, None]
-            bodies = self.cmd.robot.data.body_link_pos_w
-            near = (bodies - p).norm(dim=-1)
-            leg = near[:, self.leg_ids].min(-1).values <= near.min(-1).values + 1e-6
+            p = self.ball.data.root_link_pos_w
+            robot = self.cmd.robot.data
+            toe = toe_track(robot.body_link_pos_w[:, self.kick_body], robot.body_link_quat_w[:, self.kick_body])
+            pts = torch.cat([toe[:, None], robot.body_link_pos_w[:, self.leg_ids]], 1)
+            leg = (pts - p[:, None]).norm(dim=-1).min(-1).values < BALL_R + LEG_REACH
             self.hit |= moved
             self.leg_hit |= moved & leg
             self.hit_t = torch.where(moved, t, self.hit_t)
