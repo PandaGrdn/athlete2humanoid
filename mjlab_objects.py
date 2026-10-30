@@ -216,7 +216,7 @@ def ball_speed(env):
 def ball_reach(env, std=0.1, before_s=0.1):
     """Guides the toe to a waiting ball: exp(-|toe - ball|^2 / std^2), from before_s before the
     reference strike until the ball is let go. The tracker alone kicks late and low (kp_front_kick:
-    zero-shot it grazes the first ball and misses the second)."""
+    zero-shot it brushes about half the balls, at 0.4 m/s)."""
     b = env.a2h_ball
     k = b.kick.clamp(min=0)
     on = b.held & (b.cmd.time_steps >= b.strike[k] - round(before_s / env.step_dt))
