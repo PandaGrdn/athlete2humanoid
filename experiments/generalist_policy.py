@@ -365,13 +365,8 @@ def build_level(a, out, P, py, env):
     evals = json.loads((P / "evals.json").read_text())
     if a.smoke:
         segs = segs[:6]
-    clips = eval_clips(a)
     jobs = [(P / s["csv"], 30.0, out / "npz" / f"{s['name']}.npz") for s in segs]
-    for c in clips:
-        ev = evals[c]
-        jobs.append((P / ev["csv"], 30.0, out / "evals" / c / "motion.npz"))
-        jobs += [(P / f, 30.0, out / "evals" / c / "transfer" / f"{v}.npz") for v, f in ev["held_out"].items()]
-    to_npz(jobs, py, env, out)
+    to_npz(jobs + eval_jobs(out, P, evals, eval_clips(a)), py, env, out)
     parts, rows, start = [], [], 0
     for s in segs:
         m = dict(np.load(out / "npz" / f"{s['name']}.npz"))
@@ -386,9 +381,21 @@ def build_level(a, out, P, py, env):
     (out / "variants" / "variants.json").write_text(json.dumps(
         {"clips": sorted({s["clip"] for s in segs}), "segments": rows}, indent=1))
     shutil.rmtree(out / "npz")
+    copy_specs(out, P, evals, eval_clips(a))
+    log(f"level {a.level}: {len(rows)} variants of {len({s['clip'] for s in segs})} motions ({start / 50:.0f} s)")
+
+
+def eval_jobs(out, P, evals, clips):
+    jobs = []
+    for c in clips:
+        jobs.append((P / evals[c]["csv"], 30.0, out / "evals" / c / "motion.npz"))
+        jobs += [(P / f, 30.0, out / "evals" / c / "transfer" / f"{v}.npz") for v, f in evals[c]["held_out"].items()]
+    return jobs
+
+
+def copy_specs(out, P, evals, clips):
     for c in clips:
         shutil.copy(P / evals[c]["spec"], out / "evals" / c / "task_spec.json")
-    log(f"level {a.level}: {len(rows)} variants of {len({s['clip'] for s in segs})} motions ({start / 50:.0f} s)")
 
 
 def eval_clips(a):
@@ -430,7 +437,8 @@ def newest(d, flat=False):
 def robust(args, env):
     """experiments/robustness_eval.py, knowing this file's policy names (latent_policy.TASKS doesn't)."""
     code = ("import sys; sys.path.insert(0, %r); from experiments import latent_policy as L, generalist_policy as G; "
-            "L.TASKS.update({k: v[0] for k, v in G.POLICIES.items()}); from experiments import robustness_eval as R; "
+            "L.TASKS.update({k: v[0] for k, v in G.POLICIES.items()}); import os, json; "
+            "L.TASKS.update(json.loads(os.environ.get('A2H_GEN_TASKS', '{}'))); from experiments import robustness_eval as R; "
             "sys.argv = [R.__file__, *sys.argv[1:]]; R.main(R.parse())") % str(ROOT)
     return subprocess.run([sys.executable, "-c", code, *map(str, args)], env=env).returncode
 
@@ -460,6 +468,9 @@ def evaluate(a, out, clips_dir):
             (run / "clips").mkdir(exist_ok=True)
             if not (run / "clips" / c).exists():
                 (run / "clips" / c).symlink_to(clips_dir / c)
+        elif c in a.zero_shot and a.cpu:  # no V-JEPA, no dynamics: the suites a CPU gets through
+            cmd += ["--no-vjepa", "--push", 0.5, 1.0, "--init", 1, 2, "--dynamics", 0, "--speed", "--phase-push",
+                    "--starts", "--no-noref", "--tempo", 0.5, 2.0]
         else:
             cmd += ["--no-vjepa", "--push", "--init", "--dynamics", 0, "--speed", "--phase-push", "--starts",
                     "--no-noref", "--tempo"]
@@ -557,6 +568,33 @@ def run(a):
     pack(out)
 
 
+def compare(a):
+    """Checkpoints from several runs (NAME=BASE:model.pt; BASE, a POLICIES name or multi / multi_future, gives
+    the task), evaluated side by side on the eval clips, e.g. on a CPU when the GPU job stopped before its eval."""
+    from experiments.latent_policy import TASKS
+    P, out = Path(a.clips).resolve() / "_pool", Path(a.out).resolve()
+    out.mkdir(parents=True, exist_ok=True)
+    a.eval_train = json.loads((P / "pool.json").read_text())["real_train"] if a.eval_train is None else a.eval_train
+    a.level, a.smoke, a.short_eval, a.policies, a.baselines = a.label, False, False, [], []
+    a.init_dir, tasks = str(out / "checkpoints"), {}
+    for spec in a.policy:
+        name, rest = spec.split("=", 1)
+        base, ck = rest.split(":", 1)
+        tasks[name] = POLICIES[base][0] if base in POLICIES else TASKS[base]
+        d = out / "checkpoints" / f"policy_{name}"
+        d.mkdir(parents=True, exist_ok=True)
+        if not (d / Path(ck).name).exists():
+            shutil.copy(ck, d / Path(ck).name)
+        a.baselines.append(name)
+    evals = json.loads((P / "evals.json").read_text())
+    py = Path(os.environ.get("A2H_MJLAB_PYTHON", "/content/mjlab_env/bin/python"))
+    to_npz(eval_jobs(out, P, evals, eval_clips(a)), py, dict(os.environ, WANDB_MODE="disabled"), out)
+    copy_specs(out, P, evals, eval_clips(a))
+    os.environ["A2H_GEN_TASKS"] = json.dumps(tasks)
+    evaluate(a, out, Path(a.clips).resolve())
+    summarise(a, out, a.baselines)
+
+
 def parser():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd")
@@ -569,6 +607,16 @@ def parser():
     p.add_argument("--multi-future", help="... and multi_future")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--smoke", action="store_true", help="3 bank motions, 4 recombinations, 2 variants each")
+    e = sub.add_parser("compare", help="checkpoints of several runs, evaluated side by side (compare())")
+    e.add_argument("clips", help="the pool's clips/ folder")
+    e.add_argument("--out", required=True)
+    e.add_argument("--policy", nargs="+", required=True, help="NAME=BASE:path/to/model_*.pt")
+    e.add_argument("--label", "--level", default="compare")
+    e.add_argument("--iters", type=int, help=argparse.SUPPRESS)  # the multiclip job's, unused
+    e.add_argument("--eval-train", nargs="*", help="default: the pool's real training clips")
+    e.add_argument("--zero-shot", nargs="*", default=list(ZERO_SHOT))
+    e.add_argument("--reps", type=int, default=64)
+    e.add_argument("--cpu", action="store_true", help="the zero-shot clips without V-JEPA or dynamics suites")
     c = sub.add_parser("convert", help=argparse.SUPPRESS)
     c.add_argument("jobs")
     return ap
@@ -592,6 +640,7 @@ def run_parser():
     ap.add_argument("--iters-scratch", type=int, help="iterations for the policies trained from scratch (default --iters)")
     ap.add_argument("--num-envs", type=int, default=4096)
     ap.add_argument("--reps", type=int, default=64)
+    ap.add_argument("--cpu", action="store_true", help="the zero-shot clips without V-JEPA or dynamics suites")
     ap.add_argument("--build-only", action="store_true")
     ap.add_argument("--smoke", action="store_true", help="6 variants, one eval clip of each kind, 3 iterations")
     return ap
@@ -599,9 +648,11 @@ def run_parser():
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
-    if argv and argv[0] in ("pool", "convert"):
+    if "--compare" in argv:  # through the multiclip job: <clips> --out --iters --level ... --compare --policy ...
+        argv = ["compare", *[x for x in argv if x != "--compare"]]
+    if argv and argv[0] in ("pool", "convert", "compare"):
         a = parser().parse_args(argv)
-        return pool(a) if a.cmd == "pool" else convert(a.jobs)
+        return {"pool": pool, "compare": compare}[a.cmd](a) if a.cmd != "convert" else convert(a.jobs)
     return run(run_parser().parse_args(argv))
 
 
