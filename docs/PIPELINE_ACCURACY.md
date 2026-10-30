@@ -1015,3 +1015,54 @@ Before the fixes, on the same scripts:
 - Trimming at the last ground contact (1.20 s) loses the clearance: 24/36 variants, no flight.
 - Re-cutting the stored clip is a data decision left for review.
 - The older stand/squat/jump spec (`skill/task.py compile_spec`) still fails on hurdles, because its stand stage needs both feet down for 0.3 s and a run-up never has that.
+
+### Open-flight trim: one rule for clips that start or end in an impossible flight (2026-10-30)
+
+This replaces any hand trim of hurdles. It lives in `retarget.py`, so `pipeline.py`, `process_clips.py` (through the pipeline), the live worker and every experiment that re-retargets a `human.npy` all get the same cut.
+
+**The rule** (`ground_phantom_flights` marks the stretch as `open_flight`, `open_flight_trim` cuts it, and `proportional_motion` redoes the motion on the frames it keeps):
+
+1. A no-contact stretch counts only if it touches the clip's first or last frame, and its flight candidate is kept as a flight only because the clip cuts it off: the pelvis is still above its take-off height.
+2. If even the seen part fails the closed-flight test, it can't be a flight. The test is the one `ground_phantom_flights` already applies to closed flights: the pelvis rise must be at least `FLIGHT_RISE_FRAC` × g T²/8.
+   - The clip shows only part of the real airtime, so the real flight would need an even larger rise.
+   - A real jump that the clip ends in passes, because the seen airtime is short for its rise.
+3. The clip is cut at the take-off before that stretch (the last contact), or at the landing after it (the first contact) when it is at the start.
+   - It is not cut if that would leave under `MIN_KEPT_S` (0.5 s). That case is reported in `meta.json` as "not trimmed" with the reason.
+4. The cut is recorded in `meta.json` under `"trim"`, together with the reason, and also in `retarget_warnings`. The fields are:
+   - `start_frame`, `stop_frame`: the video frames the motion is;
+   - `frames_cut`, `seconds_cut`;
+   - `reason`;
+   - `of_frames`.
+5. `pipeline.py` applies the same cut to `masks.npz` and to the side-by-side video, so the silhouette latent matches the motion. `human.npy` stays whole: it is the pose, and re-retargeting it gives the same cut.
+6. The live worker puts the record in `live.json` as `retarget_trim`.
+7. The old warning ("ends in the air ... longer than a ballistic flight") is gone, replaced by the cut. Running the rule a second time on a cut clip changes nothing (tested).
+
+**Before and after on all ten clips.** Before is origin/main at a65acfe; after is this branch. The audits used are `retarget_audit.py --save-qpos`, then `variants_audit.py --qpos-dir`, then `spec_tempo.py` with the fresh qpos installed in a scratch copy of the clip folders. The JSON is in `docs/results/pipeline_audit/open_tail_trim/`.
+
+The rule touches **hurdles only**. On the other nine clips the qpos is bit-identical (max difference 0.0 rad) and every audit row is unchanged.
+- Shot put and discus start or end with a few no-contact frames, but their lowest foot is within 1 cm of the floor there, so `ground_phantom_flights` does not see a stretch.
+- Squat jump's two flights are closed: 0.63 s with a 38-40 cm rise, against a need of 20 cm.
+
+| hurdles | before | after |
+|---|---|---|
+| frames kept | 89 (2.97 s) | 37 (1.23 s): cut 1.73 s at the take-off at 1.20 s |
+| reason | warning only | 1.77 s in the air at the clip's end with the pelvis 37 cm up; the flight test asks 153 cm for that airtime |
+| no-contact share | 65% | 16% |
+| pelvis rise (max - p5) | 51 cm | 14 cm (the clearance is gone) |
+| knee IK error mean, left/right | 0.8 / 1.6 cm | 0.9 / 0.6 cm |
+| frames at a joint limit | 11% | 3% |
+| frames at the joint-speed cap | 3 | 0 |
+| lowest sole > 2 cm off the floor | 61% of frames | 5% |
+| TRAIN variants kept | **0/36** (ballistic 36, speed 12) | **24/36** (joint limits 12) |
+| keypose spec on its own reference, 0.7x / 1x / 1.4x | 2/2 each | 3/3 each |
+| old stand/squat/jump spec (`compile_spec`) | 1/3 FAIL | 1/2 FAIL (a run-up has no 0.3 s two-foot stand; unchanged cause) |
+
+**What this costs.**
+- Hurdles loses its hurdle clearance: what remains is the 1.2 s run-up. That is the honest result of a rule that is the same for every upload.
+- The cut at 1.47 s (the clearance's touch-down) kept 36/36 and the flight on a scratch copy. That cut was hand-picked, and the pose shows no contact there that `stance_mask` detects.
+- The clearance would come back with a better contact signal from the front end, not from a different cut.
+
+**Not covered.**
+- `pipeline.py`'s cut of `masks.npz` and the side-by-side video was not run end to end; it needs SAM.
+- The web viewer (`web/src/components/live.tsx`) indexes robot frames by video time and clamps at the end. An end cut therefore holds the last pose. A start cut would play early, because it does not read `retarget_trim` yet; no clip has a start cut.
+- Experiments that copy a stored `video_latent.npz` next to a re-retargeted qpos (`generalist_policy.py`, `adaptation_curves.py`, `travel_policy.py`) get the full-length latent with the cut motion. On hurdles the latent is 89 frames against 37 for the motion.

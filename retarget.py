@@ -81,6 +81,8 @@ GRAVITY = 9.81
 # No contact for longer than this, and no flight: not a lifted stance but missed contacts (a run)
 # or a lost foot; the floor is interpolated through the foot's touch-downs instead of grounding it.
 LONG_AIRBORNE_S = 0.5
+# open_flight_trim never leaves a clip shorter than this.
+MIN_KEPT_S = 0.5
 # stance_mask's speed threshold grows by this share of the root's horizontal speed.
 CONTACT_ROOT_SPEED_FRAC = 0.5
 
@@ -406,17 +408,18 @@ def human_to_targets(P, rt: G1Retargeter, proportional=True, fps=30.0, report=No
     proportional (default): the human's pose on the G1's skeleton, feet planted during
     contacts (proportional_motion). proportional=False: the original retarget, the whole human
     scaled uniformly by leg length, kept for comparison. report: an optional dict, filled with
-    the contact decisions ("airborne", "warnings", "stance_frac") for meta.json."""
+    the contact decisions ("airborne", "warnings", "stance_frac") and "trim" (open_flight_trim's record:
+    the sequence is then P[trim["start_frame"]:trim["stop_frame"]]'s) for meta.json."""
     if not proportional:
         return _uniform_targets(P, rt)
     m = proportional_motion(P, rt, fps)
     if report is not None:
-        report.update(airborne=m["airborne"], warnings=m["warnings"],
+        report.update(airborne=m["airborne"], warnings=m["warnings"], trim=m["trim"],
                       stance_frac=[round(float(x), 3) for x in m["stance"].mean(0)])
     J = m["joints"]
     targets_seq, rotations_seq = [], []
     mirror = np.array([1.0, -1.0, 1.0])
-    for t in range(len(P)):
+    for t in range(len(m["stance"])):
         targets = {name: J[joint][t] for name, joint in TARGET_JOINTS.items() if name not in ARM_FRAMES}
         targets["hip_centre"] = J["hip_mid"][t]
         torso = m["torso_rot"][t]
@@ -672,7 +675,10 @@ def ground_phantom_flights(root, feet, stance, floor, fps=30.0, clear=0.01, heig
         there, linearly in between), and a warning is added to `report`.
     report: an optional list; each stretch appends a dict (start_s, dur_s, touch_downs, flights:
     [{take_off_s, dur_s, rise_cm, need_cm, ends_clip}], decision: "flight" / "lowered" /
-    "interpolated", lowered_cm, and a "warning" where one applies). -> (root, feet)."""
+    "interpolated", lowered_cm, a "warning" where one applies, and "open_flight" where a flight the
+    clip's start or end cuts off is too long for its rise even as seen: {edge, keep_from, keep_to
+    (the frames up to its take-off, or from its landing), dur_s, rise_cm, need_cm}, for
+    open_flight_trim). -> (root, feet)."""
     floor = np.broadcast_to(floor, stance.shape)
     above = (feet[..., 2] - floor).min(1)  # the lowest foot's height off the floor
     up = ~stance.any(1) & (above > clear)
@@ -712,11 +718,13 @@ def ground_phantom_flights(root, feet, stance, floor, fps=30.0, clear=0.01, heig
             warn.append(f"no foot contact for {row['dur_s']:.2f} s from {row['start_s']:.2f} s: floor interpolated through "
                         f"{row['touch_downs']} touch-downs of the lowest foot (body lowered up to {row['lowered_cm']:.0f} cm) "
                         "instead of grounding the stretch")
-        for s0, s1, _, rise, _ in flights:
-            ballistic = np.sqrt(8 * max(rise, 1e-3) / GRAVITY)  # the airtime of a flight with this rise
-            if s1 >= n and (s1 - s0) / fps > 1.5 * ballistic:
-                warn.append(f"ends in the air {(s1 - s0) / fps:.2f} s after its last take-off with the pelvis {100 * rise:.0f} cm "
-                            f"up, longer than a ballistic flight of that rise ({ballistic:.2f} s): kept, but the root may be drifting")
+        for s0, s1, _, rise, need in flights:
+            # A flight the clip cuts off was kept for still being up; the clip shows only part of its airtime, so if
+            # even that part fails the closed-flight test (rise < FLIGHT_RISE_FRAC g T^2 / 8) it can't be a flight.
+            if (s0 < 0 or s1 >= n) and rise < need:
+                row["open_flight"] = dict(edge="start" if s0 < 0 else "end", keep_from=max(s1, 0) if s0 < 0 else 0,
+                                          keep_to=n if s0 < 0 else s0 + 1, dur_s=round((s1 - s0) / fps, 2),
+                                          rise_cm=round(100 * rise, 1), need_cm=round(100 * need, 1))
         if warn:
             row["warning"] = "; ".join(warn)
         if report is not None:
@@ -725,6 +733,32 @@ def ground_phantom_flights(root, feet, stance, floor, fps=30.0, clear=0.01, heig
     root[:, 2] -= lower
     feet[..., 2] -= lower[:, None]
     return root, feet
+
+
+def open_flight_trim(airborne, n, fps=30.0):
+    """ground_phantom_flights' report on an n-frame clip -> (start, stop, trim): the frames to keep and
+    trim = None, or {start_frame, stop_frame, frames_cut, seconds_cut, reason} for meta.json.
+
+    A flight the clip's start or end cuts off whose seen part already fails the flight test (open_flight
+    in the report) is no flight: the pose estimate lost the ground (root drift, a missed landing), and
+    no retarget of it is physical. The clip is cut at the take-off before it (or the landing after it),
+    the last (first) contact. The same rule on every clip, no clip-specific times. Not when it would
+    leave under MIN_KEPT_S: a clip that short is a pose failure to report, not one to trim."""
+    start, stop, why = 0, n, []
+    for row in airborne:
+        o = row.get("open_flight")
+        if o:
+            start, stop = max(start, o["keep_from"]), min(stop, o["keep_to"])
+            why.append(f"{o['dur_s']:.2f} s in the air at the clip's {o['edge']} with the pelvis {o['rise_cm']:.0f} cm up "
+                       f"(the flight test asks {o['need_cm']:.0f} cm for that airtime)")
+    if not why or (start, stop) == (0, n):
+        return 0, n, None
+    if (stop - start) / fps < MIN_KEPT_S:
+        return 0, n, dict(start_frame=0, stop_frame=n, frames_cut=0, seconds_cut=0.0,
+                          reason=f"not trimmed (it would keep under {MIN_KEPT_S:g} s): " + "; ".join(why))
+    return start, stop, dict(start_frame=int(start), stop_frame=int(stop), frames_cut=int(n - (stop - start)),
+                             seconds_cut=round(float((n - (stop - start)) / fps), 2),
+                             reason=f"cut {(n - (stop - start)) / fps:.2f} s at the contact next to it: " + "; ".join(why))
 
 
 def _roll_rot(roll):
@@ -774,12 +808,15 @@ def _foot_rotations(foot_yaw, shin, lo, hi):
     return np.stack([[_yaw_rot(y) @ _pitch_rot(p) for y, p in zip(ys, ps)] for ys, ps in zip(foot_yaw, pitch)])
 
 
-def proportional_motion(P, rt: G1Retargeter, fps=30.0):
+def proportional_motion(P, rt: G1Retargeter, fps=30.0, trim=True):
     """The human's motion on a G1-proportioned skeleton, in world coordinates on the G1's floor.
     -> {"joints": {joint: (T, 3)}, "stance": (T, 2), "pelvis_rot", "torso_rot": (T, 3, 3),
     "foot_rot": (T, 2, 3, 3), "scale": root scale, "root_pose" / "root_planted": (T, 3) the hip
     midpoint from the pose estimate and after planting the feet (for measuring the shift), "airborne":
-    ground_phantom_flights' report, "warnings": [str] for meta.json}.
+    ground_phantom_flights' report, "warnings": [str] for meta.json, "trim": open_flight_trim's
+    record or None}. With trim (default), a clip that starts or ends in an impossible flight is cut
+    (open_flight_trim) and redone without it: then every array has trim["stop_frame"] -
+    trim["start_frame"] frames, P[start_frame:stop_frame]'s.
 
     Bones take the G1's lengths and keep the human's directions (rescale_bones), so joint
     angles carry over and the hands and feet land where the G1 can reach. Root translation is
@@ -823,6 +860,10 @@ def proportional_motion(P, rt: G1Retargeter, fps=30.0):
     root, feet, foot_fix = plant_feet(root, ankles, stance, floor)
     root_planted, airborne = root, []
     root, feet = ground_phantom_flights(root, feet, stance, floor, fps, report=airborne)
+    keep_from, keep_to, cut = open_flight_trim(airborne, len(P), fps) if trim else (0, len(P), None)
+    if cut and cut["frames_cut"]:
+        m = proportional_motion(P[keep_from:keep_to], rt, fps, trim=False)
+        return m | {"trim": cut, "warnings": [cut["reason"], *m["warnings"]]}
     start = np.r_[root[0, :2], 0.0]  # hips start over the origin
     root, feet = root - start, feet - start
     joints = {k: root + v for k, v in J.items()}
@@ -851,11 +892,12 @@ def proportional_motion(P, rt: G1Retargeter, fps=30.0):
     return {"joints": joints, "stance": stance, "pelvis_rot": pelvis_rot, "torso_rot": torso_rot,
             "foot_rot": foot_rot, "scale": scale, "root_pose": root_pose - start,
             "root_planted": root_planted - start, "airborne": airborne,
-            "warnings": [r["warning"] for r in airborne if "warning" in r]}
+            "warnings": [r["warning"] for r in airborne if "warning" in r] + ([cut["reason"]] if cut else []),
+            "trim": cut}
 
 
 # Bump with any change to what the retarget produces; code_version() records it with the commit.
-RETARGET_VERSION = "2026-10-31 contacts (touch-downs, per-take-off flights) + leg-plane knees and feet + arm reseeding"
+RETARGET_VERSION = "2026-10-31 contacts (touch-downs, per-take-off flights) + leg-plane knees and feet + arm reseeding + open-flight trim"
 
 
 def code_version():

@@ -82,7 +82,10 @@ def evaluate(rt, P, qpos, targets, stance, fps):
 def run_clip(clip_dir, out_dir, fps):
     P = np.load(clip_dir / "human.npy")
     rt = retarget.G1Retargeter()
-    stance = retarget.proportional_motion(P, rt, fps)["stance"]  # contacts from the human, for both
+    m = retarget.proportional_motion(P, rt, fps)  # contacts from the human, for both
+    if m["trim"] and m["trim"]["frames_cut"]:  # both methods on the frames open_flight_trim kept
+        P = P[m["trim"]["start_frame"]:m["trim"]["stop_frame"]]
+    stance = m["stance"]
     res, qposes = {"frames": len(P), "stance_frac": stance.mean(0).round(2).tolist()}, {}
     for name, prop in METHODS.items():
         rt = retarget.G1Retargeter()

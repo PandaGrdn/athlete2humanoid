@@ -195,7 +195,8 @@ class Contacts(unittest.TestCase):
         self.assertGreater(f[15, 0, 2] - floor, 0.08)  # the stride between still lifts the foot
         self.assertEqual(len(report), 1)
         self.assertTrue(report[0]["flights"][-1]["ends_clip"])
-        self.assertIn("ends in the air", report[0]["warning"])
+        self.assertNotIn("open_flight", report[0])  # 50 cm in 1 s passes the flight test: not trimmed
+        self.assertEqual(retarget.open_flight_trim(report, T, fps), (0, T, None))
 
     def test_clip_ending_in_the_air_is_never_lowered(self):
         fps, T, floor = 30.0, 40, 0.035
@@ -209,6 +210,58 @@ class Contacts(unittest.TestCase):
         r, f = retarget.ground_phantom_flights(root, feet, stance, floor, fps)
         np.testing.assert_allclose(r, root)
         np.testing.assert_allclose(f, feet)
+
+    def drifting_edge(self, T=90, contact=30, rise=0.3, at_start=False):
+        """Contacts for `contact` frames, then the whole body drifts up by `rise` within 0.1 s and
+        stays there to the clip's end (or, at_start, the same played backwards): hurdles' tail."""
+        fps, floor = 30.0, 0.035
+        stance = np.zeros((T, 2), bool)
+        stance[:contact] = True
+        up = np.r_[np.zeros(contact), np.minimum(np.arange(1, T - contact + 1) / 3, 1)] * rise
+        root = np.c_[np.zeros(T), np.zeros(T), 0.7 + up]
+        feet = np.zeros((T, 2, 3))
+        feet[..., 2] = floor + up[:, None]
+        if at_start:
+            stance, root, feet = stance[::-1].copy(), root[::-1].copy(), feet[::-1].copy()
+        report = []
+        retarget.ground_phantom_flights(root, feet, stance, floor, fps, report=report)
+        return report, fps
+
+    def test_impossible_open_flight_is_trimmed_at_the_last_contact(self):
+        report, fps = self.drifting_edge()
+        o = report[-1]["open_flight"]
+        self.assertEqual((o["edge"], o["keep_from"], o["keep_to"]), ("end", 0, 30))  # through the take-off frame
+        self.assertLess(o["rise_cm"], o["need_cm"])
+        start, stop, trim = retarget.open_flight_trim(report, 90, fps)
+        self.assertEqual((start, stop, trim["frames_cut"]), (0, 30, 60))
+        self.assertAlmostEqual(trim["seconds_cut"], 2.0)
+        self.assertIn("in the air at the clip's end", trim["reason"])
+
+    def test_impossible_open_flight_at_the_start_is_trimmed_at_the_first_contact(self):
+        report, fps = self.drifting_edge(at_start=True)
+        self.assertEqual(report[0]["open_flight"]["edge"], "start")
+        start, stop, trim = retarget.open_flight_trim(report, 90, fps)
+        self.assertEqual((start, stop), (60, 90))  # from the landing frame, the first contact
+
+    def test_real_open_flights_are_kept(self):
+        # a jump the clip ends in, 0.33 s after take-off and 10 cm up: as long as a rise that size allows
+        fps, T, floor = 30.0, 40, 0.035
+        stance = np.ones((T, 2), bool)
+        stance[30:] = False
+        root = np.c_[np.zeros(T), np.zeros(T), np.full(T, 0.7)]
+        feet = np.full((T, 2, 3), floor)
+        rise = np.linspace(0, 0.1, 10)
+        root[30:, 2] += rise
+        feet[30:, :, 2] += rise[:, None] + 0.02
+        report = []
+        retarget.ground_phantom_flights(root, feet, stance, floor, fps, report=report)
+        self.assertNotIn("open_flight", report[0])
+        self.assertEqual(retarget.open_flight_trim(report, T, fps), (0, T, None))
+        # a drift that would leave under MIN_KEPT_S is reported, not trimmed
+        report, fps = self.drifting_edge(contact=10)
+        start, stop, trim = retarget.open_flight_trim(report, 90, fps)
+        self.assertEqual((start, stop, trim["frames_cut"]), (0, 90, 0))
+        self.assertTrue(trim["reason"].startswith("not trimmed"))
 
     def test_short_lifted_stance_is_grounded(self):
         fps, T, floor = 30.0, 60, 0.035
@@ -278,6 +331,23 @@ class OnTheG1(unittest.TestCase):
         human, target = retarget.flexion_angles(human_joints(self.P)), retarget.flexion_angles(J)
         for k in human:
             self.assertLess(np.abs(human[k] - target[k]).max(), 1.0, k)
+
+    def test_clip_ending_in_a_drift_is_cut_once(self):
+        # the squat, then the whole body floats up 30 cm for 1.5 s to the end: a pose estimate that
+        # lost the ground. The motion stops at the last contact, and the cut clip is not cut again.
+        P = np.concatenate([self.P, self.P[-1:] + np.minimum(np.arange(1, 46) / 3, 1)[:, None, None] * [0, 0, 0.3]])
+        report = {}
+        targets, rotations = retarget.human_to_targets(P, self.rt, report=report)
+        trim = report["trim"]
+        self.assertEqual(trim["start_frame"], 0)
+        self.assertAlmostEqual(trim["stop_frame"], len(self.P), delta=2)
+        self.assertEqual(len(targets), len(rotations), trim["stop_frame"])
+        self.assertEqual(trim["frames_cut"], len(P) - trim["stop_frame"])
+        self.assertIn(trim["reason"], report["warnings"])
+        m = retarget.proportional_motion(P[:trim["stop_frame"]], self.rt)
+        self.assertIsNone(m["trim"])
+        self.assertTrue(m["stance"].all(1)[:-1].all())
+        self.assertEqual(len(m["stance"]), trim["stop_frame"])
 
     def test_ankle_roll_matches_the_g1_joint(self):
         import mujoco

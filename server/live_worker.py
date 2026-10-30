@@ -148,7 +148,10 @@ def run(video, out, max_seconds, name="clip"):
     emit(stage="retarget", progress=0.1)
     human = pose.human_trajectory(world, image_xy, boxes)
     rt = retarget.G1Retargeter()
-    targets, rotations = retarget.human_to_targets(human, rt, fps=FPS)
+    contacts = {}
+    targets, rotations = retarget.human_to_targets(human, rt, fps=FPS, report=contacts)
+    if contacts["trim"] and contacts["trim"]["frames_cut"]:  # the robot's frames are these of the video's
+        live["retarget_trim"] = contacts["trim"]
     emit(stage="retarget", progress=0.4)
     qpos = rt.retarget_sequence(targets, rotations)
     report = retarget.tracking_report(rt, qpos, targets)

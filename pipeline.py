@@ -81,6 +81,12 @@ def video_to_motion(video_path, out_dir=None, use_sam=True, prompt=config.SAM_PR
     targets, rotations = retarget.human_to_targets(human, rt, fps=fps, report=contacts)
     for w in contacts["warnings"]:
         print("retarget warning:", w)
+    # A clip cut by retarget.open_flight_trim: the motion is these frames of the video, and so is
+    # the silhouette the latent stage makes from masks.npz. human.npy stays whole (the pose).
+    trim = contacts["trim"] if contacts["trim"] and contacts["trim"]["frames_cut"] else None
+    kept = slice(trim["start_frame"], trim["stop_frame"]) if trim else slice(None)
+    if use_sam and trim:
+        np.savez_compressed(out_dir / "masks.npz", masks=masks[kept])
     qpos = rt.retarget_sequence(targets, rotations, fps=fps)
     report = retarget.tracking_report(rt, qpos, targets)
     (out_dir / "retarget_report.json").write_text(json.dumps(report, indent=1))
@@ -89,10 +95,11 @@ def video_to_motion(video_path, out_dir=None, use_sam=True, prompt=config.SAM_PR
     np.save(out_dir / "qpos.npy", qpos)
     csv = retarget.export_mjlab_csv(qpos, out_dir / "motion.csv")
     robot = render.render_qpos_sequence(rt.model, qpos, size=(480, 480))
-    render.save_video(render.side_by_side(frames, robot), out_dir / "side_by_side.mp4", fps=fps)
+    render.save_video(render.side_by_side(frames[kept], robot), out_dir / "side_by_side.mp4", fps=fps)
     meta = {"fps": fps, "frames": len(qpos), "view_azimuth": view_azimuth, "sam": use_sam,
             "video_timing": timing, "retarget": "proportional", "retarget_version": retarget.code_version(),
-            "retarget_warnings": contacts["warnings"], "stance_frac": contacts["stance_frac"]}
+            "retarget_warnings": contacts["warnings"], "stance_frac": contacts["stance_frac"],
+            "trim": trim and {**trim, "of_frames": len(human)}}
     (out_dir / "meta.json").write_text(json.dumps(meta, indent=1))
     return {"csv": csv, "out_dir": out_dir, **meta}
 

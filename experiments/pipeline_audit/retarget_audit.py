@@ -44,7 +44,7 @@ def contact_report(P, rt, fps):
     """proportional_motion's contact steps: the root shift plant_feet applies (also without its constant part, a
     floor / start reference that does not change the output), what ground_phantom_flights lowered and why, the
     pelvis rise it kept, and the root's horizontal travel."""
-    m = retarget.proportional_motion(P, rt, fps)
+    m = retarget.proportional_motion(P, rt, fps, trim=False)  # P is already the kept frames
     if "root_pose" in m:
         stance, root0, root1, root2 = m["stance"], m["root_pose"], m["root_planted"], m["joints"]["hip_mid"]
     else:  # a retarget.py from before fix 1 (for before / after tables): redo its steps
@@ -81,8 +81,13 @@ def audit(P, fps, stored=None, save_qpos=None):
     adr = [model.jnt_qposadr[j] for j in hinges]
     lo, hi = model.jnt_range[hinges].T
     t0 = time.time()
-    targets, rots = retarget.human_to_targets(P, rt, fps=fps)
+    report = {}
+    targets, rots = retarget.human_to_targets(P, rt, fps=fps, report=report)
     qpos = rt.retarget_sequence(targets, rots, fps=fps)
+    trim = report.get("trim")
+    if trim and trim["frames_cut"]:  # open_flight_trim cut the clip: compare with the frames kept
+        P = P[trim["start_frame"]:trim["stop_frame"]]
+        stored = None if stored is None else stored[trim["start_frame"]:trim["stop_frame"]]
     if save_qpos:
         np.save(save_qpos, qpos)
     errs = {n: [] for n in retarget.FRAMES}
@@ -98,14 +103,14 @@ def audit(P, fps, stored=None, save_qpos=None):
     at_cap = speed >= retarget.MAX_JOINT_SPEED * 0.98
     hit = (q < lo + np.radians(1)) | (q > hi - np.radians(1))
     sole = sole_heights(model, qpos)
-    stance = retarget.proportional_motion(P, rt, fps)["stance"]
+    stance = retarget.proportional_motion(P, rt, fps, trim=False)["stance"]
     feet = np.stack([rt.skeleton(qpos)[f"{s}_ankle"] for s in ("left", "right")], 1)
     step = np.linalg.norm(np.diff(feet[..., :2], axis=0), axis=-1)
     both = stance[1:] & stance[:-1]
     human, robot = retarget.flexion_angles(human_skeleton(P)), retarget.flexion_angles(rt.skeleton(qpos))
     ang = lambda f: {a: round(float(f([np.abs(human[f"{s}_{a}"] - robot[f"{s}_{a}"]) for s in ("left", "right")])), 1) for a in ANGLES}
     return dict(
-        frames=len(qpos), seconds=round(time.time() - t0, 1),
+        frames=len(qpos), trim=trim, seconds=round(time.time() - t0, 1),
         stored_vs_recomputed_max_diff_rad=None if stored is None or len(stored) != len(qpos) else round(float(np.abs(stored - qpos).max()), 4),
         tracking_cm=track,
         joint_speed=dict(max_rad_s=round(float(speed.max()), 1), p99_rad_s=round(float(np.percentile(speed, 99)), 1),
