@@ -732,6 +732,20 @@ for task, name, term in (("A2H-TrackingVJ-Flat-Unitree-G1", "video_latent", vide
                         rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
 
 
+# experiments/generalist_policy.py: the same trackers (plain, and with the retarget's look-ahead) with a
+# bigger network, for the zero-shot generalist's network-size comparison. Trained from scratch.
+def bigger_network(rl, dims=(1024, 512, 256)):
+    rl.actor.hidden_dims = rl.critic.hidden_dims = dims
+    return rl
+
+
+for task, cfg in (("A2H-TrackingL-Flat-Unitree-G1", lambda play=False: unitree_g1_flat_tracking_env_cfg(play=play)),
+                  ("A2H-TrackingFutureL-Flat-Unitree-G1",
+                   lambda play=False: conditioned_tracking_cfg("future_reference", future_reference, play=play))):
+    register_mjlab_task(task_id=task, env_cfg=use_variants(cfg()), play_env_cfg=use_variants(cfg(play=True)),
+                        rl_cfg=bigger_network(unitree_g1_tracking_ppo_runner_cfg()), runner_cls=MotionTrackingOnPolicyRunner)
+
+
 if __name__ == "__main__":
     import policy_weights
     from mjlab.scripts.train import main

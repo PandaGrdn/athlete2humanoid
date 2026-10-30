@@ -278,6 +278,9 @@ def main(a):
 
 
 if __name__ == "__main__":
+    if "--level" in sys.argv:  # a prebuilt motion pool: experiments/generalist_policy.py (docs/FRONTIER_GENERALIST.md)
+        from experiments.generalist_policy import main as generalist
+        sys.exit(generalist())
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("clips", help="folder of processed clips (qpos.npy, meta.json, motion.csv, silhouette.mp4, video_latent.npz)")
     ap.add_argument("--out", required=True)
