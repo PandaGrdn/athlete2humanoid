@@ -1,0 +1,210 @@
+{
+ "responses": [
+  {
+   "id": "resp_fixture_1",
+   "object": "response",
+   "model": "muse-spark-1.3",
+   "status": "completed",
+   "output": [
+    {
+     "type": "reasoning",
+     "id": "rs_1",
+     "summary": []
+    },
+    {
+     "type": "function_call",
+     "call_id": "call_1_get_config_1",
+     "name": "get_config",
+     "arguments": "{}"
+    }
+   ],
+   "usage": {
+    "input_tokens": 3000,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 500,
+    "output_tokens_details": {
+     "reasoning_tokens": 400
+    }
+   }
+  },
+  {
+   "id": "resp_fixture_2",
+   "object": "response",
+   "model": "muse-spark-1.3",
+   "status": "completed",
+   "output": [
+    {
+     "type": "reasoning",
+     "id": "rs_2",
+     "summary": []
+    },
+    {
+     "type": "message",
+     "role": "assistant",
+     "content": [
+      {
+       "type": "output_text",
+       "text": "The rollout stops at the arms-sideways moment; finishing should pay more."
+      }
+     ]
+    },
+    {
+     "type": "function_call",
+     "call_id": "call_2_set_param_2",
+     "name": "set_param",
+     "arguments": "{\"path\": \"task.done\", \"value\": 8.0, \"reason\": \"the policy stalls before the last stages; a bigger finish bonus\"}"
+    },
+    {
+     "type": "function_call",
+     "call_id": "call_2_set_param_3",
+     "name": "set_param",
+     "arguments": "{\"path\": \"style_weight\", \"value\": 9.0, \"reason\": \"too high on purpose\"}"
+    },
+    {
+     "type": "function_call",
+     "call_id": "call_2_train_next_round_4",
+     "name": "train_next_round",
+     "arguments": "{\"hypothesis\": \"a larger finish bonus pulls the policy through the last three stages\", \"watch\": \"clean_task_success\"}"
+    }
+   ],
+   "usage": {
+    "input_tokens": 3000,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 500,
+    "output_tokens_details": {
+     "reasoning_tokens": 400
+    }
+   }
+  },
+  {
+   "id": "resp_fixture_3",
+   "object": "response",
+   "model": "muse-spark-1.3",
+   "status": "completed",
+   "output": [
+    {
+     "type": "reasoning",
+     "id": "rs_3",
+     "summary": []
+    },
+    {
+     "type": "message",
+     "role": "assistant",
+     "content": [
+      {
+       "type": "output_text",
+       "text": "Success rose a little."
+      }
+     ]
+    }
+   ],
+   "usage": {
+    "input_tokens": 3000,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 500,
+    "output_tokens_details": {
+     "reasoning_tokens": 400
+    }
+   }
+  },
+  {
+   "id": "resp_fixture_4",
+   "object": "response",
+   "model": "muse-spark-1.3",
+   "status": "completed",
+   "output": [
+    {
+     "type": "reasoning",
+     "id": "rs_4",
+     "summary": []
+    },
+    {
+     "type": "function_call",
+     "call_id": "call_4_set_param_1",
+     "name": "set_param",
+     "arguments": "{\"path\": \"style_weight\", \"value\": 0.5, \"reason\": \"the style term competes with the late arm pose\"}"
+    },
+    {
+     "type": "function_call",
+     "call_id": "call_4_train_next_round_2",
+     "name": "train_next_round",
+     "arguments": "{\"hypothesis\": \"less style weight frees the arms for the sideways pose\", \"watch\": \"clean_stages\"}"
+    }
+   ],
+   "usage": {
+    "input_tokens": 3000,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 500,
+    "output_tokens_details": {
+     "reasoning_tokens": 400
+    }
+   }
+  },
+  {
+   "id": "resp_fixture_5",
+   "object": "response",
+   "model": "muse-spark-1.3",
+   "status": "completed",
+   "output": [
+    {
+     "type": "reasoning",
+     "id": "rs_5",
+     "summary": []
+    },
+    {
+     "type": "function_call",
+     "call_id": "call_5_train_next_round_1",
+     "name": "train_next_round",
+     "arguments": "{\"hypothesis\": \"keep the settings one more round to see if the gain holds\", \"watch\": \"clean_task_success\"}"
+    }
+   ],
+   "usage": {
+    "input_tokens": 3000,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 500,
+    "output_tokens_details": {
+     "reasoning_tokens": 400
+    }
+   }
+  },
+  {
+   "id": "resp_fixture_6",
+   "object": "response",
+   "model": "muse-spark-1.3",
+   "status": "completed",
+   "output": [
+    {
+     "type": "reasoning",
+     "id": "rs_6",
+     "summary": []
+    },
+    {
+     "type": "function_call",
+     "call_id": "call_6_finish_1",
+     "name": "finish",
+     "arguments": "{\"best_round\": 3, \"summary\": \"the finish bonus helped; the style change did little\"}"
+    }
+   ],
+   "usage": {
+    "input_tokens": 3000,
+    "input_tokens_details": {
+     "cached_tokens": 0
+    },
+    "output_tokens": 500,
+    "output_tokens_details": {
+     "reasoning_tokens": 400
+    }
+   }
+  }
+ ]
+}

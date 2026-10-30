@@ -8,6 +8,7 @@ then score every arm the same way.
     clips/<clip>/          the run's processed clips (the target's motion.csv, every clip's video_latent.npz)
     reward.pt              the latent reward bundle the policies were trained with (style term)
     task_spec.json         the task, fixed: every round is scored on it, whatever an arm trains on
+    eval_bank_dense.npz    optional: the bank's V-JEPA latents from an earlier round (they never change)
     arms/<arm>/model_<n>.pt          where the arm's policy is now
     arms/<arm>/reward_config.json    its reward settings (mjlab_tasks A2H_REWARD_CONFIG), optional
     arms/<arm>/task_weights.json     its stage machine's weights, written into the spec it trains on, optional
@@ -104,7 +105,8 @@ def rollout_check(spec, qpos_file, g1):
                                 "completed_at_s", "abandoned")}
 
 
-ROBUST_KEYS = ("task_success", "stages_completed", "stages_frac", "fall_rate", "survival", "vjepa_aligned", "abandoned")
+ROBUST_KEYS = ("task_success", "task_success_evaluate", "stages_completed", "stages_frac", "fall_rate", "survival",
+               "dtw_joint_rad", "vjepa_aligned", "abandoned")
 
 
 def robust_rows(robust, arms):
@@ -156,6 +158,9 @@ def main(a):
 
     # 2. the same scoring for every arm: robustness suites on the fixed spec, batched in one env
     t1 = time.time()
+    if (inp / "eval_bank_dense.npz").exists():  # the bank's V-JEPA latents (~6 min to render), the same every round
+        (out / "robust").mkdir(exist_ok=True)
+        shutil.copy(inp / "eval_bank_dense.npz", out / "robust" / "eval_bank_dense.npz")
     names = [f"task_{arm}" for arm in arms]
     cmd = [sys.executable, ROOT / "experiments" / "robustness_eval.py", "--runs", out, "--out", out / "robust",
            "--target", a.target, "--policies", *names, "--reps", a.reps, "--score", a.score,
@@ -184,7 +189,7 @@ def main(a):
     result["seconds"] = timing | {"total_s": round(time.time() - t0)}
     (out / "round.json").write_text(json.dumps(result, indent=1))
     with tarfile.open(out / "results.tar.gz", "w:gz") as tar:
-        for f in ("round.json", "task_spec.json", "robust/robust.json", "robust/robust_summary.md"):
+        for f in ("round.json", "task_spec.json", "robust/robust.json", "robust/robust_summary.md", "robust/eval_bank_dense.npz"):
             if (out / f).exists():
                 tar.add(out / f, f)
         for arm in arms:

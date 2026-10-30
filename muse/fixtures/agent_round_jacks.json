@@ -1,0 +1,234 @@
+{
+ "target": "jumping_jacks",
+ "iters": 300,
+ "reps": 64,
+ "arms": {
+  "agent": {
+   "checkpoint": "model_1799.pt",
+   "started_at_iteration": 1499,
+   "robust": {
+    "clean nominal": {
+     "task_success": 0.3,
+     "stages_completed": 9.5,
+     "stages_frac": 0.7916666666666666,
+     "fall_rate": 0.02,
+     "survival": 0.98,
+     "vjepa_aligned": 0.34,
+     "abandoned": [
+      {
+       "stage": 10,
+       "name": "arms sideways legs apart",
+       "kind": "pose",
+       "share": 0.7,
+       "fell": 0.0,
+       "feature": "left wrist z",
+       "error_tol": 1.6,
+       "rms_tol": 1.1,
+       "reached": 0.1
+      }
+     ]
+    },
+    "push 0.75 m/s": {
+     "task_success": 0.24,
+     "stages_completed": 8.5,
+     "stages_frac": 0.7083333333333334,
+     "fall_rate": 0.07,
+     "survival": 0.9299999999999999,
+     "vjepa_aligned": 0.34,
+     "abandoned": [
+      {
+       "stage": 10,
+       "name": "arms sideways legs apart",
+       "kind": "pose",
+       "share": 0.76,
+       "fell": 0.0,
+       "feature": "left wrist z",
+       "error_tol": 1.6,
+       "rms_tol": 1.1,
+       "reached": 0.1
+      }
+     ]
+    },
+    "init x2": {
+     "task_success": 0.21,
+     "stages_completed": 8.0,
+     "stages_frac": 0.6666666666666666,
+     "fall_rate": 0.12000000000000001,
+     "survival": 0.88,
+     "vjepa_aligned": 0.34,
+     "abandoned": [
+      {
+       "stage": 10,
+       "name": "arms sideways legs apart",
+       "kind": "pose",
+       "share": 0.79,
+       "fell": 0.0,
+       "feature": "left wrist z",
+       "error_tol": 1.6,
+       "rms_tol": 1.1,
+       "reached": 0.1
+      }
+     ]
+    }
+   },
+   "rollout": {
+    "stages_completed": 9,
+    "stages_total": 12,
+    "success": false,
+    "fell_at_s": null,
+    "next_stage": "arms sideways legs apart",
+    "completed_at_s": [
+     0.5,
+     1.0
+    ],
+    "abandoned": [
+     {
+      "stage": 10,
+      "name": "arms sideways legs apart",
+      "kind": "pose",
+      "why": "clip ended",
+      "feature": "left wrist z",
+      "error_tol": 1.6,
+      "rms_tol": 1.1,
+      "reached": false
+     }
+    ]
+   },
+   "rollout_vjepa_aligned": 0.339,
+   "train": {
+    "iteration": 1798,
+    "mean_reward": 106.4,
+    "mean_episode_length": 500.0,
+    "action_std": 0.61,
+    "rewards": {
+     "task": 12.1,
+     "latent": 0.14,
+     "alive": 0.99
+    },
+    "terminations": {
+     "time_out": 6.75,
+     "fallen": 0.04
+    }
+   },
+   "policy_metrics": {
+    "falls": 0
+   }
+  },
+  "base": {
+   "checkpoint": "model_1799.pt",
+   "started_at_iteration": 1499,
+   "robust": {
+    "clean nominal": {
+     "task_success": 0.2,
+     "stages_completed": 9.1,
+     "stages_frac": 0.7583333333333333,
+     "fall_rate": 0.03,
+     "survival": 0.97,
+     "vjepa_aligned": 0.34,
+     "abandoned": [
+      {
+       "stage": 10,
+       "name": "arms sideways legs apart",
+       "kind": "pose",
+       "share": 0.8,
+       "fell": 0.0,
+       "feature": "left wrist z",
+       "error_tol": 1.6,
+       "rms_tol": 1.1,
+       "reached": 0.1
+      }
+     ]
+    },
+    "push 0.75 m/s": {
+     "task_success": 0.16000000000000003,
+     "stages_completed": 8.1,
+     "stages_frac": 0.6749999999999999,
+     "fall_rate": 0.08,
+     "survival": 0.92,
+     "vjepa_aligned": 0.34,
+     "abandoned": [
+      {
+       "stage": 10,
+       "name": "arms sideways legs apart",
+       "kind": "pose",
+       "share": 0.84,
+       "fell": 0.0,
+       "feature": "left wrist z",
+       "error_tol": 1.6,
+       "rms_tol": 1.1,
+       "reached": 0.1
+      }
+     ]
+    },
+    "init x2": {
+     "task_success": 0.13999999999999999,
+     "stages_completed": 7.6,
+     "stages_frac": 0.6333333333333333,
+     "fall_rate": 0.13,
+     "survival": 0.87,
+     "vjepa_aligned": 0.34,
+     "abandoned": [
+      {
+       "stage": 10,
+       "name": "arms sideways legs apart",
+       "kind": "pose",
+       "share": 0.86,
+       "fell": 0.0,
+       "feature": "left wrist z",
+       "error_tol": 1.6,
+       "rms_tol": 1.1,
+       "reached": 0.1
+      }
+     ]
+    }
+   },
+   "rollout": {
+    "stages_completed": 9,
+    "stages_total": 12,
+    "success": false,
+    "fell_at_s": null,
+    "next_stage": "arms sideways legs apart",
+    "completed_at_s": [
+     0.5,
+     1.0
+    ],
+    "abandoned": [
+     {
+      "stage": 10,
+      "name": "arms sideways legs apart",
+      "kind": "pose",
+      "why": "clip ended",
+      "feature": "left wrist z",
+      "error_tol": 1.6,
+      "rms_tol": 1.1,
+      "reached": false
+     }
+    ]
+   },
+   "rollout_vjepa_aligned": 0.339,
+   "train": {
+    "iteration": 1798,
+    "mean_reward": 106.4,
+    "mean_episode_length": 500.0,
+    "action_std": 0.61,
+    "rewards": {
+     "task": 12.1,
+     "latent": 0.14,
+     "alive": 0.99
+    },
+    "terminations": {
+     "time_out": 6.75,
+     "fallen": 0.04
+    }
+   },
+   "policy_metrics": {
+    "falls": 0
+   }
+  }
+ },
+ "seconds": {
+  "train_s": 600,
+  "eval_s": 300,
+  "total_s": 900
+ }
+}
