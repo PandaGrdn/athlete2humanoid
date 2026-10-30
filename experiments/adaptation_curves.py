@@ -510,7 +510,7 @@ def launch(a):
             tar.add(inp / "clips" / clip, f"clips/{clip}")
             for f in inp.glob("policy_*/*.pt"):
                 tar.add(f, f"{f.parent.name}/{f.name}")
-        if clip == clips[0]:
+        if clip == clips[0] and not a.no_deploy:
             mr.deploy()
         mr.upload([], tar_f, ROOT / "no-secrets-needed")  # no HF token: nothing here downloads gated weights
         cmd = f"python3 experiments/adaptation_curves.py run {mr.run_dir}/inputs --clip {clip} --out {mr.run_dir}/outputs/adapt {a.args}"
@@ -579,6 +579,7 @@ def parser():
     p.add_argument("--gpu", help="GPU for these calls only (e.g. A100-40GB when L40S has no capacity); default: the app's")
     p.add_argument("--poll-s", type=int, default=120)
     p.add_argument("--attach", action="store_true", help="follow already-submitted jobs (modal_call.json)")
+    p.add_argument("--no-deploy", action="store_true", help="use the app as deployed (same modal_app.py; leaves running jobs alone)")
     p = sub.add_parser("report", help="runs' curves.json -> tables, minutes-to-X, chart")
     p.add_argument("runs", nargs="+", help="result folders (outputs/remote_<tag>_<clip>)")
     p.add_argument("--out", required=True)
