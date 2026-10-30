@@ -197,6 +197,7 @@ class TestCalibrationAndDiagnostics(unittest.TestCase):
         self.assertAlmostEqual(cal["floor_m"][0], 2 * 0.04)  # pelvis: 2 x 7 cm capped at CALIB_MAX x 4 cm
         self.assertEqual(R.tracker_calibration(self.res, "poor", self.pols, "punches")["policy"], "poor")
         self.assertIsNone(R.tracker_calibration({"x": {**self.res["good"], "fall_rate": 0.5}}, "best", self.pols, "p"))
+        self.assertIsNone(R.tracker_calibration({"poor": self.res["poor"]}, "best", self.pols, "p"))  # not a good tracker
 
     def test_where_rollouts_stop(self):
         K = self.K

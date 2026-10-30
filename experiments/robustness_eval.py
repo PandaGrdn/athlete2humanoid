@@ -48,7 +48,8 @@ itself there with --mjlab), the V-JEPA scoring in the main env (--no-vjepa skips
    saved rollouts' body positions where episodes start at t = 0.
    Tolerances (keypose specs): floored by the clip's tracker calibration when there is one
    (--calibration, or <runs>/tracker_calibration.json), or measured here with --calibrate: the clean
-   clip is run once uncalibrated, the best tracker's per-feature RMS error sets the floors
+   clip is run once uncalibrated, the best tracker's per-feature RMS error (one that never fell, within
+   CALIB_MAX_JOINT_ERR) sets the floors
    (skill/keypose.py calibrate), <out>/tracker_calibration.json is written, and every condition is
    then scored with it. Stored with the clip, the same floors score every later policy on it.
    Distance to the clip: joint-space DTW to the retarget (at 1x, from the start phase) of every
@@ -300,14 +301,19 @@ def run_env(runs, pols):
 
 
 CALIBRATION = "tracker_calibration.json"  # a clip's tolerance floors from a good tracker (skill/keypose.py calibrate)
+# "Good": a calibration measures what a tracker that copies the clip still misses, so it is only taken from one within
+# this joint error (the punches trackers: 0.08-0.10 rad). The jumping-jacks trackers (best 0.12 rad) never jump, and
+# floors from them would be the error of not doing the move.
+CALIB_MAX_JOINT_ERR = 0.10
 
 
 def tracker_calibration(res, which, pols, clip):
     """The clean clip's results -> the clip's calibration: from `which` policy, or ("best") the one with the lowest
-    joint error among those that never fell. None if there is none."""
+    joint error among those that never fell, if within CALIB_MAX_JOINT_ERR. None if there is none."""
     from skill import keypose as K
     ok = {n: r for n, r in res.items() if "feature_rms_m" in r and r["fall_rate"] == 0}
-    name = which if which in ok else min(ok, key=lambda n: ok[n]["joint_err_rad"], default=None) if which == "best" else None
+    good = {n: r for n, r in ok.items() if r["joint_err_rad"] <= CALIB_MAX_JOINT_ERR}
+    name = which if which in ok else min(good, key=lambda n: good[n]["joint_err_rad"], default=None) if which == "best" else None
     if name is None:
         return None
     r = ok[name]
@@ -696,7 +702,7 @@ def mjlab_stage(a, out):
             if calibrating:  # the clip's calibration from its best tracker; then every condition is scored with it
                 calib = tracker_calibration(res, a.calibrate, pols, a.target)
                 if calib is None:
-                    log("no policy stayed up on the clean clip: not calibrated")
+                    log(f"no policy stayed up on the clean clip within {CALIB_MAX_JOINT_ERR} rad of joint error: not calibrated")
                 else:
                     (out / CALIBRATION).write_text(json.dumps(calib, indent=1))
                     use_calibration(calib)
@@ -978,7 +984,8 @@ def parse(argv=None):
                                           "keypose tolerances floored by a good tracker's error")
     ap.add_argument("--calibrate", nargs="?", const="best", metavar="POLICY",
                     help=f"measure the calibration on the clean clip from POLICY (default: the best tracker that never "
-                         f"fell), write <out>/{CALIBRATION}, and score every condition with it")
+                         f"fell, if within {CALIB_MAX_JOINT_ERR} rad), write <out>/{CALIBRATION}, and score every "
+                         "condition with it")
     ap.add_argument("--summary", help="only (re)write robust_summary.md next to this robust.json")
     ap.add_argument("--smoke", action="store_true", help="tiny: plumbing test")
     ap.add_argument("--mjlab", action="store_true", help=argparse.SUPPRESS)  # internal: stage 1

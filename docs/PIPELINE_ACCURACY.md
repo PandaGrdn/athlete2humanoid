@@ -475,3 +475,139 @@ Cost: about 1 GPU hour for inference on three short clips; the time is in the lo
 - The right-knee asymmetry is reported without a settled cause.
 - Pixel height of the SAM crop itself (masks are not kept in `outputs/`), so the "distance" threshold is an
   estimate from the whole-frame heights.
+
+## Fixes applied
+
+### Fix 2: a success metric that a good tracker passes (2026-10-30)
+
+Code: `skill/keypose.py` (`_compile`, `KeyposeMachine.step`, new `tracking_rms` / `calibration` / `calibrate` /
+`cut_mid_motion`), `skill/task.py` (`features`, `evaluate`), `experiments/robustness_eval.py`. Tests:
+`tests/test_keypose.py` (flicker, tempo, floor, diagnostics, upright, mid-motion end; each new test fails on the
+code before the fix), `tests/test_robustness_eval.py` (calibration choice, where rollouts stop, summary). New
+measurement scripts: `experiments/pipeline_audit/spec_tempo.py` (the 0.7x / 1.4x acceptance check) and
+`wrong_move.py` (rejection checks on saved rollouts). JSON and summaries: `docs/results/pipeline_audit/fix2/`.
+
+What changed:
+
+1. **Flicker-tolerant holds.** A hold is met when 80% (`HOLD_FILL`) of the control steps in its last `hold_s`
+   satisfied the predicate (a ring buffer per env, cleared when a stage begins), not `hold_s` in a row. A flight's
+   airtime still counts in full and in a row: contacts are exact in simulation and the airtime is the jump.
+2. **Tempo-relative holds.** `hold_s` is at most half the stage's own reference duration (`HOLD_STAGE_FRAC`), and
+   the machine scales each pose's and settle's hold by the rollout's tempo so far (its time to this key moment over
+   the reference's, clamped to [0.5, 1]). Arriving more than 3x early (`TEMPO_CUT`) is not the motion at another
+   tempo but a shortcut, and holds in full: without that cut, the punches policies passed the arms clip's spec by
+   starting in its single key pose, 12x "early".
+3. **Tolerance floor from the tracker, stored per clip.** `robustness_eval.py` records each policy's per-body RMS
+   tracking error (`tracking_rms_m`) and per-feature RMS error in the spec's own features (`feature_rms_m`,
+   `K.tracking_rms`) on every condition that plays the clip. `--calibrate` runs the clean clip once uncalibrated,
+   takes the best tracker that never fell and is within 0.10 rad of joint error, writes `tracker_calibration.json`
+   (floor = max(`TOL_MIN`, 2 x RMS) per feature, capped at 2 x `TOL_MIN`), and scores every condition with it.
+   `--calibration FILE` (or `<runs>/tracker_calibration.json`) applies a stored one, so later policies on the clip
+   are held to the same floors; the calibrated spec records it under `calibration`. Relevance, goals and holds are
+   unchanged: only how close counts. The cap is 2x because at 3x the arms and discus specs (one key moment each)
+   accepted the punches rollouts; the 0.10 rad guard because the jumping-jacks trackers (best 0.12 rad) never jump,
+   and floors from them would be the error of not doing the move.
+4. **Diagnostics.** `evaluate()` returns `abandoned`: for each stage skipped, fallen in, or unfinished when the clip
+   ended, the feature furthest outside its tolerance at the rollout's closest approach (`error_tol`, 1 = at the
+   edge), the relevance-weighted RMS, and `reached` (both within 1: the hold, feet or stillness failed instead).
+   The eval aggregates the same per policy and condition from the batched machine, and `robust_summary.md` prints
+   "Where unsuccessful rollouts stop" and the per-body tracking error.
+5. **Upright vector: pelvis -> shoulder midpoint**, for the progress gate, the settle predicates and the fall rule
+   (`task.features`, `task.fallen`). This axis reads real trunk lean, and the references lean a lot more than the old
+   axis showed: 48 deg at the bottom of the squat, 54 deg absorbing the squat jump's landing (the old 4.4 cm axis,
+   mostly the pelvis's own tilt, never went past 26 deg on them). Kept as-is, the old thresholds would have refused
+   the reference's own landings and stopped paying progress at the bottom of its squats, and the squat jump's
+   stand/squat/jump spec failed its reference at 1.4x. So the thresholds now say what they meant on the old axis: a
+   landing is controlled within 60 deg (`LAND_UP`), progress is paid in full to 60 deg and not at all past 75 deg
+   (`GATE_UP`), the fall rule stays at 80 deg, and standing still (start, end, the stand stage) is still within
+   32 deg (`UPRIGHT`). The gate never binds on any of the ten references (min 1.00). `robustness_eval.py`'s own fall
+   rule (torso_link orientation from the simulator's quaternion) is unchanged: it is exact there.
+6. **Found on the way: the punches clip ends mid-motion.** With items 1-2 alone, every punches rollout reached the
+   last stage and stopped there: "turn left, step forward (finish)", right foot height 1.7-2.8x its tolerance (100%
+   of rollouts, per the new diagnostics). The clip's last frame catches the athlete starting a step out of frame (the
+   last frames move at 0.89 m/s, 7x the clip's median), so the end goal was a pose the reference itself touches only
+   on that frame (dwell 0.07 s; every other clip's end pose is held 0.33 s or more), and a tracker one frame behind
+   can never finish before the clip ends. `cut_mid_motion`: when the end pose is held under 0.2 s, the trailing burst
+   (frames over 2x the median speed, at most 0.3 s) is not a goal; the key moments and their tolerance scale are
+   otherwise the clip's (punches keeps its first five key moments; the walk-off is dropped; the spec warns and
+   records `goals_end_s`). Only the punches clip triggers it.
+
+#### The spec against its own reference (all ten clips; before = the code at 260e130)
+
+| clip | self-check | 0.7x | 1.4x | limb noise 2 / 4 / 6 cm | all-body noise 1 / 2 / 3 cm | key moments re-found (1 cm) |
+|---|---|---|---|---|---|---|
+| squat_jump | 12/12 -> 12/12 | 12 -> 12 | 12 -> 12 | 100/100/100 -> 100/100/100 | 67/0/0 -> 100/83/50 | 79% -> 79% |
+| squat | 9/9 -> 9/9 | 9 -> 9 | 9 -> 9 | 100/100/100 -> 100/100/100 | 67/0/0 -> 100/100/100 | 60% -> 60% |
+| lunge | 16/16 -> 16/16 | 16 -> 16 | **3 -> 16** | **75/25/25 -> 100/88/62** | 67/0/0 -> 100/83/50 | 86% -> 86% |
+| arms | 3/3 -> 3/3 | 3 -> 3 | 3 -> 3 | 100/100/100 -> 100/100/100 | 100/33/0 -> 100/100/100 | 100% -> 100% |
+| front_kick | 6/6 -> 6/6 | 6 -> 6 | 6 -> 6 | 100/88/100 -> 100/100/100 | 67/0/0 -> 100/100/100 | 100% -> 100% |
+| jumping_jacks | 13/13 -> 13/13 | 13 -> 13 | 13 -> 13 | 100/100/100 -> 100/100/100 | 100/0/0 -> 100/100/100 | 52% -> 52% |
+| punches | 7/7 -> 6/6 | 7 -> 6 | 7 -> 6 | **100/88/25 -> 100/88/62** | 100/0/0 -> 100/100/100 | 72% -> 83% |
+| shot_put | 4/4 -> 4/4 | 4 -> 4 | **2 -> 4** | 62/50/50 -> 50/75/50 | 83/0/0 -> 100/50/33 | 83% -> 83% |
+| discus | 2/2 -> 2/2 | 2 -> 2 | 2 -> 2 | 100/100/100 -> 100/100/100 | 100/33/0 -> 100/100/100 | 100% -> 100% |
+| hurdles | 2/4 -> 2/4 | 2 -> 2 | 2 -> 2 | 0 -> 0 | 0 -> 0 | - |
+
+From `spec_audit.py`, `spec_noise.py` and `spec_tempo.py` as before (8 noise trials per cell; limb noise leaves the
+pelvis, torso and foot heights exact; all-body noise does not). Every testable spec now passes its reference at
+0.7x, 1x and 1.4x (also the stand/squat/jump specs, `spec_tempo.json`); hurdles is still untestable (it ends mid-air:
+fix 1). All-body noise no longer reads as a fall (the upright vector). Not fixed by this: key-moment stability
+under re-compilation (52-100%, a property of the RDP selection, not of the predicates), and the shot put under limb
+noise, whose remaining failures are all root forward / root turn: `spec_noise.py` perturbs the hip bodies, which
+set the heading the root features are measured in (a simulated robot's hips are exact).
+
+#### Policies re-scored (same checkpoints, CPU mjlab 1.6.0, 16 envs per policy and condition, no training)
+
+| clip | policy (clean joint err) | clean | pushed 1 m/s | pushed 2 m/s (fell) | tempo 0.5x / 2x | standing still, reference frozen |
+|---|---|---|---|---|---|---|
+| punches | scratch, 1500 it (0.079 rad) | 0% -> **100%** | 0% -> 94% | 0% -> 0% (100%) | 0 -> 100% / 0 -> 100% | 0% -> 0% |
+| punches | specialist, 1500 it (0.099 rad) | 0% -> **100%** | 0% -> 94% | 0% -> 50% (38%) | 0 -> 100% / 0 -> 100% | 0% -> 0% |
+| punches | multi, 1500 it (0.104 rad) | 0% -> **100%** | 0% -> 100% | 6% -> 62% (19%) | 0 -> 100% / 0 -> 100% | 0% -> 0% |
+| punches (older retarget) | tracking_var, 300 it (0.139 rad) | 0% -> **100%** | 0% -> 88% | 0% -> 31% (50%) | 0 -> 100% / 0 -> 50% | 0% -> 0% |
+| punches (older retarget) | multi, 300 it (0.181 rad) | 0% -> **0%** | 0% -> 6% | 0% -> 19% (0%) | 0% / 0% | 0% -> 0% |
+| jumping_jacks | multi, 1500 it (0.119 rad) | 0% -> **0%** | 0% -> 0% | 0% -> 12% (0%) | 0% / 0% | 0% -> 0% |
+| jumping_jacks | scratch, 1500 it (0.129 rad) | 0% -> **0%** | 0% -> 0% | 0% -> 0% (50%) | 0% / 0% | 0% -> 0% |
+| jumping_jacks | specialist, 1500 it (0.153 rad) | 0% -> **0%** | 0% -> 0% | 0% -> 0% (19%) | 0% / 0% | 0% -> 0% |
+
+Punches 1500-iteration policies: the `remote_adapt_v2_punches` checkpoints (frontier-adapt); the 300-iteration ones:
+`remote_multiclip_adapt_punches`, trained on the older `mc_inputs` retarget of the same clip (joints up to 0.24 rad
+apart), so they are scored against that clip, with the punches calibration applied. Before = the code at 260e130
+with the spec the runs were scored with; after = the specs recompiled with this code, `--calibrate`. The CPU numbers
+reproduce the GPU eval's (punches clean 0%, joint error 0.079 / 0.099 / 0.104 rad, same as `robust.json`).
+
+- **Good trackers pass; a bad one still fails.** The three 0.08-0.10 rad punches trackers go from 0% to 100%, and
+  the 0.14 rad one with them. The 0.18 rad one still fails, all 16 rollouts stuck on "left hand right, left foot
+  back" with the left wrist's lateral position 1.14x its tolerance at their closest approach. Jumping jacks stays at
+  0%: every rollout stops at the jump (no start learned it, as the adaptation run found).
+- **The calibration raised no floor on punches.** The best tracker's per-feature RMS error is 0.1-4 cm (wrists
+  1.4-4 cm per axis), so 2x stays under every `TOL_MIN`. The audit's inference above (a 0.14 rad tracker lives at the
+  edge of a 10 cm wrist box) was wrong: the box was not the problem, the hold reset (items 1-2) and the end-of-clip
+  goal (item 6) were. The calibration stays as the mechanism that makes "a good tracker passes" hold by
+  construction on clips where tracking error is larger than the minimum tolerances.
+- **Falls and wrong moves are still rejected.** Every rollout that fell failed (success is zero by construction
+  after a fall; at 2 m/s the scratch tracker fell in all 16 and scored 0%). Standing still with the reference frozen
+  scores 0% everywhere, stopped at the first key moment ("right hand up, left hand up", right wrist z 1.6-1.9x).
+  Offline (`wrong_move.py`, all 16 clean rollouts per policy): with either arm held still, every punches tracker
+  fails its own spec (0%); scored against the arms, front kick, jumping jacks, shot put and discus specs it fails
+  every one (0%), also with every tolerance floor at its cap.
+- **What the spec cannot tell apart.** The mirrored punches (`--mirror`: the same combination with the other hands)
+  pass at 100%: punches' required moments are nearly left-right symmetric (the mirror of "left hand left, right hand
+  right" is itself), only two inner key moments are required (`REQUIRED_TOP`), and timing is free, so the loose task
+  cannot see a left/right swap of this combination. It was not rejected before either: before, nothing passed.
+  Under 2 m/s shoves, 2 of 16 jumping-jacks rollouts were knocked into a 0.12-0.18 s hop with 6-9 cm of pelvis rise,
+  which the jacks' small-hop flight stage accepts (with or without calibration).
+
+#### Effect on training and on other code
+
+- The reward machine is the same one the task-first tasks train on (`mjlab_tasks.TaskReward`), so holds, the
+  upright gate and the landing threshold also change their training reward; the stock and A2H tracking tasks do not
+  use it. Existing task-first checkpoints were trained on the old machine.
+- `skill/variations.py`'s self-check filter uses the same `evaluate()` (`variants_audit.py`, unchanged
+  `variations.py`): the lunge keeps 21 of 36 TRAIN variants instead of 15 (self-check drops 13 -> 7). Of the 7, 4
+  also clip their joint limits and 3 fail only the self-check, all at the step ("left foot up, left foot forward",
+  tempo 1.33 or warped timing): the foot height is 2.2-3.3x its tolerance and never reached while the machine is in
+  that stage, i.e. the variant's foot passes its apex while the previous stage is still being completed. That is a
+  stage-ordering problem the holds don't cover; left for the variants fix. The shot put still drops 6 on the
+  self-check (root forward 1.2x), all of which also clip 9% of joint samples, so they go either way. Punches keeps
+  36/36 as before.
+- What was not done: no Colab or GPU was used (mjlab 1.6.0 on CPU is the same version the Colab VMs install, at 16
+  instead of 64 envs per policy); no V-JEPA scoring; no policy was retrained.
