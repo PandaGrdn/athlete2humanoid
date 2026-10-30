@@ -103,7 +103,7 @@ export default function App() {
       {ui === "pixel" ? <PixelFooter switcher={<UiSwitch ui={ui} setUi={setUi} />} />
         : ui === "aurora" ? <AuroraFooter switcher={<UiSwitch ui={ui} setUi={setUi} />} /> : <footer className="site">
         <div className="container">
-          <span>Video → SAM 3.1 → MediaPipe → mink IK → V-JEPA 2 reward → PPO (mjlab) → Unitree G1</span>
+          <span>Video → SAM 3.1 → SAM 3D Body → mink IK → V-JEPA 2 reward → PPO (mjlab) → Unitree G1</span>
           <span>Meta Global AI Developer Hackathon · Push the Frontier</span>
           <UiSwitch ui={ui} setUi={setUi} />
         </div>

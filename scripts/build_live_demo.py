@@ -2,6 +2,12 @@
 
     python scripts/build_live_demo.py            # -> web/public/live-demo/<id>/ and index.json
     python scripts/build_live_demo.py --muse     # also have Muse name the key moments (needs MUSE_API_KEY)
+    python scripts/build_live_demo.py --processed build/live_demo_in   # 1. the worker's processed.mp4 per clip,
+    MODAL_PROFILE=a2h python -m modal run --detach frontends/sam3d_modal.py --videos build/live_demo_in/<id>.mp4,...
+    python scripts/build_live_demo.py --sam3d outputs/frontend_ab/sam3d     # 2. the builds, pose from SAM 3D Body
+
+With --sam3d, the pose stage uses SAM 3D Body's output for the same processed frames (the pipeline's front end,
+docs/PIPELINE_ACCURACY.md fix 3) instead of MediaPipe; the API's own live runner stays on MediaPipe (CPU).
 
 Each sample clip goes through the real live worker (server/live_worker.py, as the API runs it), with
 its stage messages recorded at the times they arrived: the replay is that build, not an animation.
@@ -30,20 +36,20 @@ OUT = REPO / "web" / "public" / "live-demo"
 RUNS = REPO / "outputs"
 
 # id, clip (clips/<name>.*), title, [(policy label key, run/policy folder)]
+# The runs trained on the SAM 3D Body references (2026-10-30; docs/PIPELINE_ACCURACY.md fix 3), each started from
+# the policy an earlier run trained on the same clip's MediaPipe reference.
 CLIPS = [
     ("front-kick", "front_kick", "Front kick",
-     [("tracking", "remote_latent_kp_kick/policy_tracking"), ("taskhybrid", "remote_latent_fix_kick/policy_taskhybrid"),
-      ("task", "remote_latent_fix_kick/policy_task"),
-      ("tracking_var", "remote_variants_var_kick/policy_tracking_var"),
-      ("taskhybrid_var", "remote_variants_var_kick/policy_taskhybrid_var")]),
+     [("tracking", "remote_latent_s3_kick/policy_tracking"),
+      ("tracking_var", "remote_variants_s3_kick/policy_tracking_var"),
+      ("taskhybrid_var", "remote_variants_s3_kick/policy_taskhybrid_var")]),
     ("squat-jump", "squat_jump", "Squat jump",
-     [("tracking", "remote_latent_final/policy_tracking"), ("taskhybrid", "remote_latent_fix_sj/policy_taskhybrid"),
-      ("task", "remote_latent_fix_sj/policy_task"),
-      ("tracking_var", "remote_variants_var_sj/policy_tracking_var"),
-      ("taskhybrid_var", "remote_variants_var_sj/policy_taskhybrid_var")]),
-    ("jumping-jacks", "jumping_jacks", "Jumping jacks", [("task", "remote_latent_kp_jacks/policy_task")]),
-    ("lunge", "lunge", "Lunge", [("task", "remote_latent_loose_lunge/policy_task")]),
-    ("punches", "punches", "Punches", [("task", "remote_latent_loose_punch/policy_task")]),
+     [("tracking", "remote_latent_s3_sj/policy_tracking"),
+      ("tracking_var", "remote_variants_s3_sj/policy_tracking_var"),
+      ("taskhybrid_var", "remote_variants_s3_sj/policy_taskhybrid_var")]),
+    ("jumping-jacks", "jumping_jacks", "Jumping jacks", [("task", "remote_latent_s3_jacks/policy_task")]),
+    ("lunge", "lunge", "Lunge", [("task", "remote_latent_s3_lunge/policy_task")]),
+    ("punches", "punches", "Punches", [("task", "remote_latent_s3_punch/policy_task")]),
 ]
 POLICY_LABEL = {"tracking": "Tracking", "task": "Task", "taskhybrid": "Task + tracking", "taskphase": "Task (no reference)",
                 "tracking_var": "Tracking, trained on variants", "taskhybrid_var": "Task + tracking, trained on variants"}
@@ -65,14 +71,15 @@ def web_video(src, dst, height=360):
                     str(dst.with_suffix(".jpg"))], check=True)
 
 
-def record_build(video, out):
+def record_build(video, out, sam3d=None):
     """Run the live worker on video as the API does; its stage messages with their arrival times."""
     if out.exists():
         shutil.rmtree(out)
     (out / "scratch").mkdir(parents=True)
     from server.live import _env
     t0 = time.monotonic()
-    proc = subprocess.Popen([sys.executable, "-m", "server.live_worker", str(video), str(out), "--max-seconds", "20"],
+    extra = ["--sam3d", str(sam3d)] if sam3d else []
+    proc = subprocess.Popen([sys.executable, "-m", "server.live_worker", str(video), str(out), "--max-seconds", "20", *extra],
                             cwd=REPO, env=_env(out), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     events = []
     for line in proc.stdout:
@@ -120,13 +127,26 @@ def score(policy_dir, clip):
             "fell_at_s": r["fell_at_s"]}
 
 
-def build(cid, clip, title, policies, muse=False):
+def clip_video(clip):
+    return next(p for p in (REPO / "clips").glob(f"{clip}.*") if p.suffix.lower() in (".mov", ".mp4"))
+
+
+def processed(dst):
+    """Each clip as the live worker re-encodes it (processed.mp4), for SAM 3D Body to run on: <dst>/<clip>.mp4."""
+    from server.live_worker import transcode
+    dst.mkdir(parents=True, exist_ok=True)
+    for _, clip, _, _ in CLIPS:
+        transcode(clip_video(clip), dst / f"{clip}.mp4", 20)
+        print(dst / f"{clip}.mp4")
+
+
+def build(cid, clip, title, policies, muse=False, sam3d=None):
     from server.runs import task_spec_view
-    video = next(p for p in (REPO / "clips").glob(f"{clip}.*") if p.suffix.lower() in (".mov", ".mp4"))
+    video = clip_video(clip)
     d = OUT / cid
     work = REPO / "build" / "live_demo" / cid
     print(f"{cid}: building the environment from {video.name}")
-    events = record_build(video, work)
+    events = record_build(video, work, sam3d)
     if muse:
         from muse.client import MuseClient
         from muse.moment_namer import name_moments
@@ -160,13 +180,17 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--only", nargs="*", help="these clip ids")
     ap.add_argument("--muse", action="store_true", help="Muse names the key moments (MUSE_API_KEY)")
+    ap.add_argument("--processed", type=Path, help="only write each clip's processed.mp4 here, as <clip>.mp4")
+    ap.add_argument("--sam3d", type=Path, help="folder of SAM 3D Body npz per clip (<clip>.npz) for those processed frames")
     a = ap.parse_args(argv)
+    if a.processed:
+        return processed(a.processed)
     index_f = OUT / "index.json"
     index = {e["id"]: e for e in json.loads(index_f.read_text())["clips"]} if index_f.exists() else {}
     for cid, clip, title, policies in CLIPS:
         if a.only and cid not in a.only:
             continue
-        index[cid] = build(cid, clip, title, policies, a.muse)
+        index[cid] = build(cid, clip, title, policies, a.muse, a.sam3d / f"{clip}.npz" if a.sam3d else None)
     order = [c[0] for c in CLIPS]
     index_f.write_text(json.dumps({"clips": sorted(index.values(), key=lambda e: order.index(e["id"]))}, indent=1))
     print(f"{index_f}: {len(index)} recorded builds")

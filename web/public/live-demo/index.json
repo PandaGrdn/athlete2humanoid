@@ -3,13 +3,11 @@
   {
    "id": "front-kick",
    "title": "Front kick",
-   "summary": "4 key moments: ready -> right foot up, right foot forward -> right foot down, right foot left -> right foot up, right foot right -> right foot down, right foot back -> finish",
+   "summary": "4 key moments: ready -> right foot up, right foot forward -> right foot down, right foot back -> right foot up, right foot forward -> right foot down, right foot back -> finish",
    "duration_s": 5.5,
    "poster": "processed.jpg",
    "policies": [
     "Tracking",
-    "Task + tracking",
-    "Task",
     "Tracking, trained on variants",
     "Task + tracking, trained on variants"
    ]
@@ -17,13 +15,11 @@
   {
    "id": "squat-jump",
    "title": "Squat jump",
-   "summary": "6 key moments, 2 jumps: ready -> crouch, left hand forward -> jump -> land -> crouch, left foot down -> crouch -> rise, left hand back -> jump -> land -> crouch, left hand forward -> rise, left foot back (finish)",
+   "summary": "7 key moments, 2 jumps: ready -> crouch -> rise, right hand back -> jump -> land -> crouch, right hand forward -> rise, right hand back -> crouch, left hand forward -> rise, left hand back -> jump -> land -> left hand forward, right hand up (finish)",
    "duration_s": 9.0,
    "poster": "processed.jpg",
    "policies": [
     "Tracking",
-    "Task + tracking",
-    "Task",
     "Tracking, trained on variants",
     "Task + tracking, trained on variants"
    ]
@@ -31,7 +27,7 @@
   {
    "id": "jumping-jacks",
    "title": "Jumping jacks",
-   "summary": "11 key moments: ready -> arms overhead -> standing arms down -> arms overhead -> standing arms down -> arms overhead -> standing arms down -> midair arms wide -> arms overhead -> standing arms down -> arms overhead -> standing arms down (finish)",
+   "summary": "10 key moments: ready -> right hand up, left hand up -> right hand down, left hand down -> right hand up, left hand up -> right hand down, left hand down -> right hand up, left hand up -> right hand down, left hand down -> right hand up, left hand up -> right hand down, left hand down -> right hand up, left hand up -> right hand down, left hand down (finish)",
    "duration_s": 5.3,
    "poster": "processed.jpg",
    "policies": [
@@ -41,7 +37,7 @@
   {
    "id": "lunge",
    "title": "Lunge",
-   "summary": "13 key moments: ready -> right foot forward -> right kneeling lunge -> standing rise -> feet together stance -> left knee lifted -> left foot forward -> left kneeling lunge -> standing rise -> feet together stance -> right foot forward -> right kneeling lunge -> standing rise -> neutral standing (finish)",
+   "summary": "13 key moments: ready -> crouch, right foot left -> right foot forward, right foot right -> crouch -> rise -> right foot back, rise -> left foot up -> left foot down, left foot forward -> crouch -> rise, step back -> right foot forward, left foot back -> crouch -> rise, left foot forward -> right hand down, right foot right (finish)",
    "duration_s": 9.9,
    "poster": "processed.jpg",
    "policies": [
@@ -51,7 +47,7 @@
   {
    "id": "punches",
    "title": "Punches",
-   "summary": "7 key moments: ready -> boxing guard stance -> right punch extended -> right cross extended -> right punch extended -> right cross extended -> right punch extended -> hands lowered (finish)",
+   "summary": "11 key moments: ready -> right hand up -> left hand up -> left hand forward -> right hand forward, left hand back -> right hand back, left hand forward -> right hand forward, left hand back -> right hand back, left hand forward -> right hand forward, left hand back -> right hand back, left hand forward -> right hand forward, left hand back -> right hand back, right hand down (finish)",
    "duration_s": 5.6,
    "poster": "processed.jpg",
    "policies": [

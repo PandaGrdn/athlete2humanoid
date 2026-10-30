@@ -3,7 +3,7 @@
  "status": "ready",
  "kicker": "Generalisation",
  "title": "Front kick: learning the action, not the recording",
- "tagline": "Trained on 36 automatic variants of one clip, the tracker completes 100% of 7 variants it never saw, with 0% falls. The best single-clip policy manages 43% and falls 57% of the time.",
+ "tagline": "Trained on 36 automatic variants of one clip, the tracker completes 100% of 7 variants it never saw, with 0% falls. The best single-clip policy manages 66% and falls 34% of the time.",
  "story": {
   "shown": "The front kick phone video, retargeted to the G1, then turned into variants with nothing action-specific: mirrored, faster and slower, bigger and smaller, unevenly re-timed. Each variant gets its own key-moment spec from the same compiler.",
   "learned": "Two policies trained on all the training variants at once, warm-started from the clip's tracking policy. Each environment plays one variant and is scored against that variant's spec.",
@@ -25,20 +25,20 @@
   },
   {
    "kind": "pose",
-   "label": "Right foot up, right foot right",
+   "label": "Right foot up, right foot forward",
    "start_s": 1.967,
-   "end_s": 4.2
+   "end_s": 4.167
   },
   {
    "kind": "pose",
-   "label": "Right foot down, right foot left",
-   "start_s": 4.2,
-   "end_s": 4.733
+   "label": "Right foot down, right foot back",
+   "start_s": 4.167,
+   "end_s": 4.8
   },
   {
    "kind": "settle",
    "label": "Finish",
-   "start_s": 4.733,
+   "start_s": 4.8,
    "end_s": 5.567
   }
  ],
@@ -46,18 +46,18 @@
   "src": "front-kick-variants/source.mp4",
   "poster": "front-kick-variants/source.jpg",
   "label": "Phone video → G1 reference",
-  "width": 752,
+  "width": 750,
   "height": 480,
   "duration_s": 5.53,
   "panels": [
    {
     "label": "Athlete",
     "from": 0,
-    "to": 0.361
+    "to": 0.36
    },
    {
     "label": "G1 reference",
-    "from": 0.361,
+    "from": 0.36,
     "to": 1,
     "tone": "good"
    }
@@ -101,19 +101,19 @@
   {
    "label": "Held-out variants completed",
    "display": "100%",
-   "note": "tracking trained on variants; 43% for the best single-clip policy",
+   "note": "tracking trained on variants; 66% for the best single-clip policy",
    "tone": "good"
   },
   {
    "label": "Falls on held-out variants",
    "display": "0%",
-   "note": "57% for that single-clip policy",
-   "tone": null
+   "note": "34% for that single-clip policy",
+   "tone": "good"
   },
   {
    "label": "V-JEPA 2 similarity",
-   "display": "0.66",
-   "note": "on the clip; single-clip tracking 0.63"
+   "display": "0.58",
+   "note": "on the clip; single-clip tracking 0.58"
   }
  ],
  "policies": [
@@ -124,14 +124,14 @@
    "reward": "Joint tracking, trained on 36 automatic variants of the clip (mirrored, re-timed, scaled) at once.",
    "values": {
     "heldout": {
-     "value": 0.998,
+     "value": 1.0,
      "display": "100%",
      "good": true
     },
     "heldout_falls": {
-     "value": 0.002,
+     "value": 0.0,
      "display": "0%",
-     "good": false
+     "good": true
     },
     "clean": {
      "value": 1.0,
@@ -139,12 +139,12 @@
      "good": true
     },
     "vjepa": {
-     "value": 0.657,
-     "display": "0.66"
+     "value": 0.584,
+     "display": "0.58"
     },
     "joint_deg": {
-     "value": 6.3,
-     "display": "6.3°"
+     "value": 5.4,
+     "display": "5.4°"
     }
    }
   },
@@ -155,14 +155,14 @@
    "reward": "Key moments plus tracking, each variant scored against its own spec; trained on the same 36 variants.",
    "values": {
     "heldout": {
-     "value": 0.679,
-     "display": "68%",
-     "good": false
+     "value": 0.768,
+     "display": "77%",
+     "good": true
     },
     "heldout_falls": {
-     "value": 0.154,
-     "display": "15%",
-     "good": false
+     "value": 0.0,
+     "display": "0%",
+     "good": true
     },
     "clean": {
      "value": 1.0,
@@ -170,12 +170,12 @@
      "good": true
     },
     "vjepa": {
-     "value": 0.381,
-     "display": "0.38"
+     "value": 0.326,
+     "display": "0.33"
     },
     "joint_deg": {
-     "value": 18.9,
-     "display": "18.9°"
+     "value": 14.1,
+     "display": "14.1°"
     }
    }
   },
@@ -186,13 +186,13 @@
    "reward": "Copies the retarget's joint angles (the standard motion-imitation reward).",
    "values": {
     "heldout": {
-     "value": 0.429,
-     "display": "43%",
+     "value": 0.656,
+     "display": "66%",
      "good": false
     },
     "heldout_falls": {
-     "value": 0.571,
-     "display": "57%",
+     "value": 0.344,
+     "display": "34%",
      "good": false
     },
     "clean": {
@@ -201,74 +201,12 @@
      "good": true
     },
     "vjepa": {
-     "value": 0.63,
-     "display": "0.63"
+     "value": 0.577,
+     "display": "0.58"
     },
     "joint_deg": {
-     "value": 5.9,
-     "display": "5.9°"
-    }
-   }
-  },
-  {
-   "key": "taskhybrid",
-   "label": "Task + tracking",
-   "color": "#d95926",
-   "reward": "The clip's key moments in order, plus joint tracking. Trained on the clip alone.",
-   "values": {
-    "heldout": {
-     "value": 0.183,
-     "display": "18%",
-     "good": false
-    },
-    "heldout_falls": {
-     "value": 0.531,
-     "display": "53%",
-     "good": false
-    },
-    "clean": {
-     "value": 1.0,
-     "display": "100%",
-     "good": true
-    },
-    "vjepa": {
-     "value": 0.529,
-     "display": "0.53"
-    },
-    "joint_deg": {
-     "value": 14.2,
-     "display": "14.2°"
-    }
-   }
-  },
-  {
-   "key": "task",
-   "label": "Task",
-   "color": "#c98bf0",
-   "reward": "Rewarded for reaching the clip's key moments in order (keypose spec), plus weak V-JEPA 2 and tracking style terms. Sees the retarget. Ends only on a fall.",
-   "values": {
-    "heldout": {
-     "value": 0.388,
-     "display": "39%",
-     "good": false
-    },
-    "heldout_falls": {
-     "value": 0.301,
-     "display": "30%",
-     "good": false
-    },
-    "clean": {
-     "value": 1.0,
-     "display": "100%",
-     "good": true
-    },
-    "vjepa": {
-     "value": 0.449,
-     "display": "0.45"
-    },
-    "joint_deg": {
-     "value": 18.1,
-     "display": "18.1°"
+     "value": 4.6,
+     "display": "4.6°"
     }
    }
   }
@@ -316,16 +254,6 @@
     "key": "tracking",
     "label": "Tracking",
     "color": "#3987e5"
-   },
-   {
-    "key": "taskhybrid",
-    "label": "Task + tracking",
-    "color": "#d95926"
-   },
-   {
-    "key": "task",
-    "label": "Task",
-    "color": "#c98bf0"
    }
   ],
   "conditions": [
@@ -340,21 +268,11 @@
       "task_success": 1.0
      },
      "taskhybrid_var": {
-      "fall_rate": 0.016,
+      "fall_rate": 0.0,
       "vjepa": null,
-      "task_success": 0.969
+      "task_success": 0.094
      },
      "tracking": {
-      "fall_rate": 1.0,
-      "vjepa": null,
-      "task_success": 0.0
-     },
-     "taskhybrid": {
-      "fall_rate": 1.0,
-      "vjepa": null,
-      "task_success": 0.0
-     },
-     "task": {
       "fall_rate": 1.0,
       "vjepa": null,
       "task_success": 0.0
@@ -372,21 +290,11 @@
       "task_success": 1.0
      },
      "taskhybrid_var": {
-      "fall_rate": 0.484,
+      "fall_rate": 0.0,
       "vjepa": null,
-      "task_success": 0.5
+      "task_success": 1.0
      },
      "tracking": {
-      "fall_rate": 1.0,
-      "vjepa": null,
-      "task_success": 0.0
-     },
-     "taskhybrid": {
-      "fall_rate": 1.0,
-      "vjepa": null,
-      "task_success": 0.0
-     },
-     "task": {
       "fall_rate": 1.0,
       "vjepa": null,
       "task_success": 0.0
@@ -399,29 +307,19 @@
     "level": "0.5x tempo",
     "cells": {
      "tracking_var": {
-      "fall_rate": 0.016,
+      "fall_rate": 0.0,
       "vjepa": null,
-      "task_success": 0.984
+      "task_success": 1.0
      },
      "taskhybrid_var": {
-      "fall_rate": 0.578,
+      "fall_rate": 0.0,
       "vjepa": null,
-      "task_success": 0.422
+      "task_success": 0.281
      },
      "tracking": {
-      "fall_rate": 1.0,
+      "fall_rate": 0.406,
       "vjepa": null,
-      "task_success": 0.0
-     },
-     "taskhybrid": {
-      "fall_rate": 0.906,
-      "vjepa": null,
-      "task_success": 0.094
-     },
-     "task": {
-      "fall_rate": 0.109,
-      "vjepa": null,
-      "task_success": 0.719
+      "task_success": 0.594
      }
     }
    },
@@ -438,22 +336,12 @@
      "taskhybrid_var": {
       "fall_rate": 0.0,
       "vjepa": null,
-      "task_success": 0.859
+      "task_success": 1.0
      },
      "tracking": {
       "fall_rate": 0.0,
       "vjepa": null,
       "task_success": 1.0
-     },
-     "taskhybrid": {
-      "fall_rate": 0.0,
-      "vjepa": null,
-      "task_success": 0.0
-     },
-     "task": {
-      "fall_rate": 0.0,
-      "vjepa": null,
-      "task_success": 0.0
      }
     }
    },
@@ -470,22 +358,12 @@
      "taskhybrid_var": {
       "fall_rate": 0.0,
       "vjepa": null,
-      "task_success": 0.0
+      "task_success": 1.0
      },
      "tracking": {
       "fall_rate": 0.0,
       "vjepa": null,
       "task_success": 1.0
-     },
-     "taskhybrid": {
-      "fall_rate": 0.0,
-      "vjepa": null,
-      "task_success": 0.0
-     },
-     "task": {
-      "fall_rate": 0.0,
-      "vjepa": null,
-      "task_success": 0.0
      }
     }
    },
@@ -508,16 +386,6 @@
       "fall_rate": 0.0,
       "vjepa": null,
       "task_success": 1.0
-     },
-     "taskhybrid": {
-      "fall_rate": 0.0,
-      "vjepa": null,
-      "task_success": 1.0
-     },
-     "task": {
-      "fall_rate": 0.0,
-      "vjepa": null,
-      "task_success": 1.0
      }
     }
    },
@@ -537,16 +405,6 @@
       "task_success": 1.0
      },
      "tracking": {
-      "fall_rate": 1.0,
-      "vjepa": null,
-      "task_success": 0.0
-     },
-     "taskhybrid": {
-      "fall_rate": 0.812,
-      "vjepa": null,
-      "task_success": 0.188
-     },
-     "task": {
       "fall_rate": 0.0,
       "vjepa": null,
       "task_success": 1.0
@@ -559,29 +417,19 @@
     "level": "0.5x",
     "cells": {
      "tracking_var": {
-      "fall_rate": 0.016,
-      "vjepa": 0.677,
-      "task_success": 0.984
+      "fall_rate": 0.0,
+      "vjepa": 0.616,
+      "task_success": 1.0
      },
      "taskhybrid_var": {
-      "fall_rate": 0.219,
-      "vjepa": 0.424,
-      "task_success": 0.781
+      "fall_rate": 0.0,
+      "vjepa": 0.456,
+      "task_success": 1.0
      },
      "tracking": {
-      "fall_rate": 0.984,
-      "vjepa": 0.492,
-      "task_success": 0.016
-     },
-     "taskhybrid": {
-      "fall_rate": 0.688,
-      "vjepa": 0.59,
-      "task_success": 0.312
-     },
-     "task": {
-      "fall_rate": 0.047,
-      "vjepa": 0.468,
-      "task_success": 0.906
+      "fall_rate": 0.453,
+      "vjepa": 0.421,
+      "task_success": 0.547
      }
     }
    },
@@ -592,27 +440,17 @@
     "cells": {
      "tracking_var": {
       "fall_rate": 0.0,
-      "vjepa": 0.674,
+      "vjepa": 0.603,
       "task_success": 1.0
      },
      "taskhybrid_var": {
       "fall_rate": 0.0,
-      "vjepa": 0.497,
+      "vjepa": 0.386,
       "task_success": 1.0
      },
      "tracking": {
       "fall_rate": 0.0,
-      "vjepa": 0.621,
-      "task_success": 1.0
-     },
-     "taskhybrid": {
-      "fall_rate": 0.0,
-      "vjepa": 0.582,
-      "task_success": 1.0
-     },
-     "task": {
-      "fall_rate": 0.0,
-      "vjepa": 0.486,
+      "vjepa": 0.573,
       "task_success": 1.0
      }
     }
@@ -624,28 +462,18 @@
     "cells": {
      "tracking_var": {
       "fall_rate": 0.0,
-      "vjepa": 0.661,
-      "task_success": 0.719
+      "vjepa": 0.59,
+      "task_success": 0.969
      },
      "taskhybrid_var": {
-      "fall_rate": 0.0,
-      "vjepa": 0.532,
-      "task_success": 0.0
+      "fall_rate": 0.016,
+      "vjepa": 0.37,
+      "task_success": 0.984
      },
      "tracking": {
-      "fall_rate": 1.0,
-      "vjepa": 0.355,
-      "task_success": 0.0
-     },
-     "taskhybrid": {
-      "fall_rate": 1.0,
-      "vjepa": 0.345,
-      "task_success": 0.0
-     },
-     "task": {
-      "fall_rate": 0.0,
-      "vjepa": 0.488,
-      "task_success": 0.5
+      "fall_rate": 0.141,
+      "vjepa": 0.392,
+      "task_success": 0.703
      }
     }
    },
@@ -656,27 +484,17 @@
     "cells": {
      "tracking_var": {
       "fall_rate": 0.0,
-      "vjepa": 0.646,
-      "task_success": 0.859
+      "vjepa": 0.588,
+      "task_success": 1.0
      },
      "taskhybrid_var": {
-      "fall_rate": 0.016,
-      "vjepa": 0.483,
-      "task_success": 0.984
+      "fall_rate": 0.0,
+      "vjepa": 0.41,
+      "task_success": 1.0
      },
      "tracking": {
       "fall_rate": 0.0,
-      "vjepa": 0.626,
-      "task_success": 0.953
-     },
-     "taskhybrid": {
-      "fall_rate": 0.0,
-      "vjepa": 0.521,
-      "task_success": 1.0
-     },
-     "task": {
-      "fall_rate": 0.0,
-      "vjepa": 0.451,
+      "vjepa": 0.58,
       "task_success": 1.0
      }
     }
@@ -688,27 +506,17 @@
     "cells": {
      "tracking_var": {
       "fall_rate": 0.0,
-      "vjepa": 0.607,
-      "task_success": 0.938
+      "vjepa": 0.585,
+      "task_success": 1.0
      },
      "taskhybrid_var": {
       "fall_rate": 0.0,
-      "vjepa": 0.485,
+      "vjepa": 0.327,
       "task_success": 1.0
      },
      "tracking": {
       "fall_rate": 0.0,
-      "vjepa": 0.615,
-      "task_success": 0.875
-     },
-     "taskhybrid": {
-      "fall_rate": 0.0,
-      "vjepa": 0.524,
-      "task_success": 1.0
-     },
-     "task": {
-      "fall_rate": 0.0,
-      "vjepa": 0.48,
+      "vjepa": 0.565,
       "task_success": 1.0
      }
     }
@@ -719,28 +527,18 @@
     "level": "1 m/s",
     "cells": {
      "tracking_var": {
-      "fall_rate": 0.062,
-      "vjepa": 0.609,
-      "task_success": 0.75
-     },
-     "taskhybrid_var": {
-      "fall_rate": 0.031,
-      "vjepa": 0.49,
-      "task_success": 0.969
-     },
-     "tracking": {
-      "fall_rate": 0.031,
-      "vjepa": 0.6,
-      "task_success": 0.922
-     },
-     "taskhybrid": {
       "fall_rate": 0.0,
-      "vjepa": 0.529,
+      "vjepa": 0.56,
       "task_success": 1.0
      },
-     "task": {
+     "taskhybrid_var": {
       "fall_rate": 0.0,
-      "vjepa": 0.461,
+      "vjepa": 0.431,
+      "task_success": 1.0
+     },
+     "tracking": {
+      "fall_rate": 0.0,
+      "vjepa": 0.554,
       "task_success": 1.0
      }
     }
@@ -751,29 +549,19 @@
     "level": "1.5 m/s",
     "cells": {
      "tracking_var": {
-      "fall_rate": 0.078,
-      "vjepa": 0.604,
-      "task_success": 0.844
+      "fall_rate": 0.047,
+      "vjepa": 0.536,
+      "task_success": 0.922
      },
      "taskhybrid_var": {
-      "fall_rate": 0.156,
-      "vjepa": 0.476,
-      "task_success": 0.828
+      "fall_rate": 0.0,
+      "vjepa": 0.457,
+      "task_success": 1.0
      },
      "tracking": {
-      "fall_rate": 0.156,
-      "vjepa": 0.576,
-      "task_success": 0.719
-     },
-     "taskhybrid": {
       "fall_rate": 0.031,
-      "vjepa": 0.512,
-      "task_success": 0.969
-     },
-     "task": {
-      "fall_rate": 0.031,
-      "vjepa": 0.471,
-      "task_success": 0.969
+      "vjepa": 0.534,
+      "task_success": 0.938
      }
     }
    },
@@ -784,27 +572,17 @@
     "cells": {
      "tracking_var": {
       "fall_rate": 0.0,
-      "vjepa": 0.402,
+      "vjepa": 0.407,
       "task_success": 0.0
      },
      "taskhybrid_var": {
-      "fall_rate": 0.906,
-      "vjepa": 0.32,
+      "fall_rate": 0.0,
+      "vjepa": 0.416,
       "task_success": 0.0
      },
      "tracking": {
       "fall_rate": 0.0,
-      "vjepa": 0.355,
-      "task_success": 0.0
-     },
-     "taskhybrid": {
-      "fall_rate": 0.0,
-      "vjepa": 0.344,
-      "task_success": 0.0
-     },
-     "task": {
-      "fall_rate": 0.0,
-      "vjepa": 0.328,
+      "vjepa": 0.291,
       "task_success": 0.0
      }
     }
@@ -814,11 +592,11 @@
   "metric": "task_success"
  },
  "sources": [
-  "outputs/remote_robust_gen2_kick/robust.json",
-  "outputs/remote_variants_var_kick/task_spec.json",
-  "outputs/remote_variants_var_kick/variants/variants.json"
+  "outputs/remote_robust_s3_kick/robust.json",
+  "outputs/remote_variants_s3_kick/task_spec.json",
+  "outputs/remote_variants_s3_kick/variants/variants.json"
  ],
  "notes": [
-  "Single-clip task and task + tracking are the spec-fixed retrains (docs/KEYPOSE_SPEC.md)."
+  "Every policy here trained on the SAM 3D Body reference of the clip (docs/PIPELINE_ACCURACY.md, fix 3), warm-started from the policy an earlier run trained on its MediaPipe reference."
  ]
 }

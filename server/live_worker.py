@@ -10,7 +10,9 @@ stderr, which the server logs and never shows.
 
   video        ffmpeg re-encodes the upload: first --max-seconds s, longer side <= 640 px, 30 fps,
                H.264, no audio or metadata -> processed.mp4 (also what the browser plays)
-  pose         MediaPipe on the whole frame (no SAM 3.1 on CPU, so: one person in shot)
+  pose         MediaPipe on the whole frame (no SAM 3.1 on CPU, so: one person in shot); or, with --sam3d, SAM 3D
+               Body's output for these same frames (frontends/sam3d_run.py on processed.mp4, run on a GPU
+               beforehand: scripts/build_live_demo.py's recorded builds)
   retarget     mink IK onto the Unitree G1
   environment  skill/keypose.py: key moments, contacts, the reward machine, and the retarget's own
                score against it (the self-check) -> task_spec.json
@@ -91,7 +93,7 @@ def _round(a, nd):
     return [[None if np.isnan(p).any() else p.tolist() for p in f] for f in a]
 
 
-def run(video, out, max_seconds, name="clip"):
+def run(video, out, max_seconds, name="clip", sam3d=None):
     out.mkdir(parents=True, exist_ok=True)
     live = {"fps": FPS, "frames": 0, "duration_s": 0.0, "video": None, "landmarks": None, "pose_found": None,
             "robot": None, "retarget_error_cm": None, "timings_s": {}}
@@ -126,8 +128,19 @@ def run(video, out, max_seconds, name="clip"):
     import pose
     import track
     emit(stage="pose", progress=0.0)
-    crops, boxes = track.crop_to_mask(frames, np.ones((T, H, W), bool))
-    world, image_xy, _ = pose.landmarks_from_crops(crops, FPS, progress=lambda i, n: emit(stage="pose", progress=i / n))
+    d = None
+    if sam3d:
+        from frontends import sam3d_body  # not in the Space image: imported only when asked for
+        d = sam3d_body.cached(sam3d, frames)
+        if d is None:
+            raise RuntimeError(f"{sam3d} is not SAM 3D Body's output for these {T} frames at {W}x{H}")
+        world, image_xy, boxes = sam3d_body.landmarks(d)
+    else:
+        crops, boxes = track.crop_to_mask(frames, np.ones((T, H, W), bool))
+        world, image_xy, _ = pose.landmarks_from_crops(crops, FPS, progress=lambda i, n: emit(stage="pose", progress=i / n))
+        del crops
+    model = "SAM 3D Body" if d is not None else "MediaPipe"
+    live["pose_model"] = model
     found = float((~np.isnan(world[:, 0, 0])).mean())
     x0, y0, side = boxes[:, 0:1], boxes[:, 1:2], boxes[:, 2:3]
     px = np.stack([(x0 + image_xy[..., 0] * side) / W, (y0 + image_xy[..., 1] * side) / H], -1)
@@ -136,11 +149,10 @@ def run(video, out, max_seconds, name="clip"):
                          "edges": [[keep.index(a), keep.index(b)] for a, b in LANDMARK_EDGES],
                          "frames": [None if np.isnan(f).all() else f for f in _round(px[:, keep], 4)]}
     live["pose_found"] = round(found, 3)
-    del crops
     if found < MIN_POSE_FOUND:
         save()
         raise ClipError(f"a person was found in only {found:.0%} of frames; film one person, whole body in shot")
-    done("pose", t0, f"pose found in {found:.0%} of frames")
+    done("pose", t0, f"pose ({model}) found in {found:.0%} of frames")
 
     # retarget
     t0 = time.monotonic()
@@ -178,9 +190,10 @@ def main(argv=None):
     ap.add_argument("out")
     ap.add_argument("--max-seconds", type=float, default=20.0)
     ap.add_argument("--name", default="clip")
+    ap.add_argument("--sam3d", help="SAM 3D Body's npz for this video's processed frames: the pose instead of MediaPipe")
     a = ap.parse_args(argv)
     try:
-        run(Path(a.video), Path(a.out), a.max_seconds, a.name)
+        run(Path(a.video), Path(a.out), a.max_seconds, a.name, a.sam3d)
     except ClipError as e:
         emit(error=str(e))
         return 2

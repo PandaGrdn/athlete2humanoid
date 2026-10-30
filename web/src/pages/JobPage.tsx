@@ -7,7 +7,7 @@ import { Icon, LoopVideo, StatusPill } from "../components/ui";
 import { Typed } from "../components/pixel";
 
 const MODEL: Record<string, string> = {
-  silhouette: "SAM 3.1", pose: "MediaPipe", retarget: "mink", environment: "key poses", latent: "V-JEPA 2", train: "mjlab PPO", eval: "V-JEPA 2",
+  silhouette: "SAM 3.1", pose: "SAM 3D Body", retarget: "mink", environment: "key poses", latent: "V-JEPA 2", train: "mjlab PPO", eval: "V-JEPA 2",
 };
 
 /** The job's task environment, fetched once its stage has started; retried while the job runs (a GPU job's

@@ -312,7 +312,7 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
             <dl className="kv card card-pad live-stats">
               <dt>Clip</dt><dd>{live.duration_s.toFixed(1)} s · {live.frames} frames @ {Math.round(live.fps)} fps</dd>
               {live.video && <><dt>Processed size</dt><dd>{live.video.width}×{live.video.height}</dd></>}
-              <dt>Pose found</dt><dd>{fmt.pct(live.pose_found)}</dd>
+              <dt>Pose found</dt><dd>{fmt.pct(live.pose_found)}{live.pose_model ? ` · ${live.pose_model}` : ""}</dd>
               {live.retarget_error_cm && <><dt>Retarget error (mean / max)</dt><dd>{retargetErr(live.retarget_error_cm)}</dd></>}
             </dl>
           )}
@@ -322,7 +322,7 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
           <div className="card stepper live-steps">
             {(job?.stages.length ? job.stages : STEPS.map((s) => ({ ...s, status: "pending" as const, progress: 0, description: "", started_at: null, finished_at: null }))).map((s, i) => {
               const took = live?.timings_s[s.key] ?? (s.started_at && s.finished_at ? s.finished_at - s.started_at : null);
-              const model = STEPS.find((x) => x.key === s.key)?.model;
+              const model = (s.key === "pose" && live?.pose_model) || STEPS.find((x) => x.key === s.key)?.model;
               return (
                 <div className={`stage ${s.status}`} key={s.key}>
                   <div className="marker">{s.status === "done" ? <Icon name="check" size={14} /> : s.status === "skipped" ? "–" : i + 1}</div>

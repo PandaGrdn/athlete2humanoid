@@ -33,9 +33,10 @@ RUN_FILES = ["eval.json", "status.json", "task_spec.json", "distill_report.json"
 POLICY_FILES = ["policy.mp4", "policy_metrics.json", "policy.onnx"]
 CLIP_FILES = ["meta.json", "retarget_report.json", "motion.csv", "side_by_side.mp4", "silhouette.mp4"]
 
-# The gallery: the final squat-jump run and every keypose run (docs/KEYPOSE_SPEC.md) that has finished.
-DEFAULT_RUNS = ["remote_latent_final", "remote_latent_kp_*", "remote_latent_loose_*"]
-DEFAULT_DEMO_RUN = "latent_kp_kick"  # featured on the home page: a front kick learned from its video alone
+# The gallery: the runs trained on the SAM 3D Body references (docs/PIPELINE_ACCURACY.md, fix 3): single-clip
+# tracking on the squat jump, front kick and squat, the keypose task on jumping jacks, lunge and punches.
+DEFAULT_RUNS = ["remote_latent_s3_*"]
+DEFAULT_DEMO_RUN = "latent_s3_kick"  # featured on the home page: a front kick learned from its video
 
 # What server/live_worker.py imports from the repo (no latent/, no SAM: MediaPipe on CPU), and its assets.
 LIVE_MODULES = ["config.py", "pose.py", "track.py", "retarget.py", "render.py",

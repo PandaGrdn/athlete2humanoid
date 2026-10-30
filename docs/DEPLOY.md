@@ -222,13 +222,13 @@ The script never prints a token: `hf` and `wrangler` use their own stored logins
 
 It never copies `.env`, raw clips or full logs.
 
-The default runs are the final squat-jump run and every keypose run that has finished:
-`outputs/remote_latent_final`, `outputs/remote_latent_kp_*` and `outputs/remote_latent_loose_*` (any folder with an
-`eval.json`; `DEFAULT_RUNS` in the script). A new keypose run therefore joins the next deploy by itself. To ship
-other runs, pass their folders explicitly.
+The default runs are the ones trained on the SAM 3D Body references (`docs/PIPELINE_ACCURACY.md`, fix 3):
+`outputs/remote_latent_s3_*` (any folder with an `eval.json`; `DEFAULT_RUNS` in the script). The MediaPipe-era runs
+(`remote_latent_final`, `remote_latent_kp_*`, `remote_latent_loose_*`) are no longer shipped. To ship other runs,
+pass their folders explicitly.
 
-The home page features `latent_kp_kick`, the front kick learned from its video alone, whenever that run is in the
-bundle. `--demo-run <id>` picks another.
+The home page features `latent_s3_kick`, the front kick, whenever that run is in the bundle. `--demo-run <id>` picks
+another.
 
 The live runner adds about 50 MB:
 
