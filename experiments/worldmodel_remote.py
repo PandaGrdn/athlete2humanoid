@@ -35,6 +35,7 @@ POLICIES = {"policy_tracking_var": O / "mc_inputs" / "policy_tracking_var" / "mo
             "policy_multi": O / "mc_adapt_inputs" / "policy_multi" / "model_1999.pt",
             "policy_multi_vj": O / "mc_adapt_inputs" / "policy_multi_vj" / "model_1999.pt",
             "policy_multi_vjc": O / "remote_multiclip_vjc1" / "policy_multi_vjc" / "model_1999.pt"}
+PART = 64 << 20  # bytes per Colab upload
 PCAS = {"pca_vj.npz": O / "mc_adapt_inputs" / "vjl_pca.npz", "pca_vjc.npz": O / "remote_multiclip_vjc1" / "vjl_pca.npz"}
 
 
@@ -94,6 +95,23 @@ def main_colab(a):
     R.job_spec = lambda _: ("--with-main", command(a, R.REMOTE, out), {"results.tar.gz": f"{out}/results.tar.gz"})
     R.wait_for_clips = lambda *_: []
     R.pack_weights = lambda _: pack(tar, a.latents, a.resume)
+    colab = R.colab
+
+    def in_parts(*args, timeout=600, check=True):
+        """Colab refuses a single upload of a few hundred MB: the inputs go up in parts, joined on the VM."""
+        if args[0] != "upload" or Path(args[3]) != tar:
+            return colab(*args, timeout=timeout, check=check)
+        data, parts = tar.read_bytes(), []
+        for k in range(0, len(data), PART):
+            f = tar.with_name(f"{tar.name}.{len(parts):02d}")
+            f.write_bytes(data[k:k + PART])
+            colab("upload", "-s", R.SESSION, str(f), f"{args[4]}.{len(parts):02d}", timeout=timeout)
+            parts.append(f"{args[4]}.{len(parts):02d}")
+            f.unlink()
+        R.log(f"inputs uploaded in {len(parts)} parts")
+        return R._exec(f"import shutil; o = open('{args[4]}', 'wb'); "
+                       f"[shutil.copyfileobj(open(p, 'rb'), o) for p in {parts!r}]; o.close()")
+    R.colab = in_parts
     R.main(ra)
 
 
