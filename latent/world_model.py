@@ -157,8 +157,8 @@ class LatentPredictor:
                         e = np.sum((p.predict(z, h)[:n] - shifted(z, h)[:n]) ** 2)
                         r.append(e / max(np.sum((z[:n] - shifted(z, h)[:n]) ** 2), 1e-12))
             return float(np.mean(r))
-        scores = {lam: score(lam) for lam in grid}
-        best = min(scores, key=scores.get)
+        scores = {lam: score(lam) for lam in grid} if len(groups) > 1 else {}
+        best = min(scores, key=scores.get) if scores else 10.0  # one clip: nothing to leave out
         p = cls(lam=best, **kw).fit([z for zs in groups.values() for z in zs])
         p.cv = scores
         return p
