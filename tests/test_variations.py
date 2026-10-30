@@ -5,7 +5,6 @@ The generator needs MuJoCo and the G1 assets (scripts/fetch_assets.sh); the env 
 
 import importlib.util
 import json
-import os
 from pathlib import Path
 
 import numpy as np
@@ -18,7 +17,7 @@ pytest.importorskip("scipy")
 from skill import task as T  # noqa: E402
 
 DATA = Path(__file__).parent / "data"
-QPOS = DATA / "qpos_front_kick.npy"  # outputs/remote_latent_final/clips/front_kick/qpos.npy, 30 fps
+QPOS = DATA / "qpos_front_kick.npy"  # front_kick's human.npy through the 20 rad/s-capped retarget.py, 30 fps
 
 
 @pytest.fixture(scope="module")
@@ -66,9 +65,109 @@ def test_amplitude_scales_about_the_first_frame_and_keeps_contact(g1, kick):
     small, _ = V.scale(kick, 0.8, g1, spec_foot0)
     j0 = kick[0, 7:]
     assert np.allclose(small[:, 7:] - j0, 0.8 * (kick[:, 7:] - j0), atol=1e-6)
-    lo = lambda q: g1.bodies(q)[:, [3, 6], 2].min(1)  # noqa: E731
-    grounded = lo(kick) - spec_foot0 < T.DOWN
-    assert np.abs(lo(small)[grounded] - lo(kick)[grounded]).max() < 1e-3  # the planted foot stays on the floor
+    grounded = g1.bodies(kick)[:, [3, 6], 2].min(1) - spec_foot0 < T.DOWN
+    assert np.abs(g1.soles(small)[grounded] - g1.soles(kick)[grounded]).max() < 1e-6  # the planted sole stays on the floor
+
+
+G = 9.81
+
+
+def hop(pos_bodies, n=90, start=30, apex=0.15, slow=1.0, fps=30.0):
+    """(n, bodies, 3) body positions: standing still, then one rigid hop whose feet rise `apex` m. slow > 1 stretches
+    its airtime without changing its height (not a jump gravity allows)."""
+    t = (np.arange(n) - start) / fps / slow
+    T0 = 2 * np.sqrt(2 * apex / G)
+    z = np.where((t > 0) & (t < T0), G * T0 / 2 * t - G / 2 * t ** 2, 0.0)
+    out = np.repeat(pos_bodies[None], n, 0).astype(np.float64)
+    out[..., 2] += z[:, None]
+    return out
+
+
+def test_flights_measure_ballistic_ratio_between_frames():
+    """A real hop reads 1 (rise above the air threshold vs g T^2 / 8 of the time above it), whatever frame
+    the threshold crossings fall between; one with twice its airtime reads 1/4."""
+    from latent.reward_net import BODIES
+    from skill import variations as V
+    body = np.zeros((len(BODIES), 3))
+    body[0, 2] = 0.7
+    for start in (30, 30.4, 30.7):
+        f = V.flights(hop(body, start=start), 0.0, 30.0)
+        assert len(f) == 1 and abs(f[0]["ratio"] - 1) < 0.05
+        assert f[0]["air_s"] == pytest.approx(2 * np.sqrt(2 * (0.15 - V.FLIGHT_AIR) / G), abs=0.01)
+    assert V.flights(hop(body, slow=2.0), 0.0, 30.0)[0]["ratio"] == pytest.approx(0.25, abs=0.03)
+    assert V.flights(hop(body, apex=0.09), 0.0, 30.0) == []  # never clears the air threshold
+
+
+def test_time_map_holds_the_speed_cap():
+    """A speed-up plays the stretches already at the cap at 1x; amplitude > 1 may slow them to 1 / alpha; flights
+    stay at 1x whatever the cap says."""
+    from skill import variations as V
+    n, rng = 60, np.random.default_rng(0)
+    air = np.zeros(n, bool)
+    air[40:50] = True
+    js = np.full(n - 1, 10.0)
+    js[10:20] = 20.0
+    js[30:35] = 22.0
+    js[42:46] = 22.0
+    src = V.time_map(n, [], 1.5, 0.0, air, rng, js, 20.0, 1 / 1.1)
+    step = np.diff(src)
+    at = lambda a, b: step[(src[:-1] >= a) & (src[1:] <= b)]  # noqa: E731
+    assert np.allclose(at(0, 9), 1.5) and np.allclose(at(10, 19), 1.0)
+    assert np.allclose(at(30, 34), 20 / 22) and np.allclose(at(41, 48), 1.0)
+
+
+@pytest.fixture(scope="module")
+def stand(g1):
+    return g1.model.key("stand").qpos.astype(np.float64)
+
+
+def hop_qpos(stand, apex=0.15, slow=1.0, n=90):
+    from latent.reward_net import BODIES
+    q = np.repeat(stand[None], n, 0)
+    q[:, 2] += hop(np.zeros((len(BODIES), 3)), n=n, apex=apex, slow=slow)[:, 0, 2]
+    return q
+
+
+def test_amplitude_retimes_flights_to_their_new_rise(g1, stand):
+    """Scaled 1.25x, a ballistic hop rises 1.25x as high in the same airtime unless re-timed; re-timed, it is
+    ballistic again and longer."""
+    from skill import variations as V
+    q = hop_qpos(stand)
+    foot0 = float(np.percentile(g1.bodies(q)[:, [3, 6], 2].min(1), 5))
+    big, _ = V.scale(q, 1.25, g1, foot0)
+    (unretimed,) = V.flights(g1.bodies(big), foot0, 30.0)
+    assert unretimed["ratio"] > 1.2
+    v, _, src = V.make(q, g1, False, 1.0, 1.25, 0.0, [], foot0, fps=30.0)
+    (f,) = V.flights(g1.bodies(v), foot0, 30.0)
+    assert abs(f["ratio"] - 1) < 0.1 and f["air_s"] == pytest.approx(unretimed["air_s"] * np.sqrt(unretimed["ratio"]), rel=0.05)
+    assert np.all(np.diff(src) > 0) and src[0] == 0 and src[-1] > len(q) - 2
+
+
+def test_filter_drops_unphysical_variants(g1, stand):
+    """The filter's physical rules, each on the variant that breaks it."""
+    from skill import variations as V
+    grid = [(False, 1.0, 1.0, 0.0), (False, 1.0, 0.6, 0.0), (False, 1.0, 1.25, 0.0)]
+    vs = V.generate(hop_qpos(stand), 30.0, grid, g1=g1, log=lambda s: None)
+    assert [v["ok"] for v in vs] == [True, False, True]
+    assert vs[1]["rules"] == ["lost flight"]  # 0.6x of a 15 cm hop no longer clears the floor by 10 cm
+    floaty = V.generate(hop_qpos(stand, slow=2.0), 30.0, grid[:1], g1=g1, log=lambda s: None)[0]
+    assert "ballistic" in floaty["rules"] and "outside [0.6, 1.5]" in floaty["why"]
+    fast = stand + np.zeros((60, 1))
+    fast[30:, 7 + 15] += 1.0  # one joint jumps 1 rad in one frame: 30 rad/s
+    v = V.generate(fast, 30.0, grid[:1], g1=g1, log=lambda s: None)[0]
+    assert "speed" in v["rules"]
+    sunk = stand + np.zeros((60, 1))
+    sunk[20:40, 2] -= 0.05
+    v = V.generate(sunk, 30.0, grid[:1], g1=g1, log=lambda s: None)[0]
+    assert "penetration" in v["rules"]
+
+
+def test_slow_tempo_does_not_sink_the_feet(g1, kick):
+    """Blending frames linearly would put a moving planted foot through the floor between them."""
+    from skill import variations as V
+    t = np.arange(0, len(kick) - 1, 0.75)
+    out = V.regrounded(kick, t, g1)
+    assert np.abs(g1.soles(out) - np.interp(t, np.arange(len(kick)), g1.soles(kick))).max() < 1e-6
 
 
 def test_variants_pass_their_own_specs(g1, kick):

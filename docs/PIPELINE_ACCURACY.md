@@ -475,3 +475,94 @@ Cost: about 1 GPU hour for inference on three short clips; the time is in the lo
 - The right-knee asymmetry is reported without a settled cause.
 - Pixel height of the SAM crop itself (masks are not kept in `outputs/`), so the "distance" threshold is an
   estimate from the whole-frame heights.
+
+## Fixes applied
+
+### Fix 4: physical variant filter and ballistic re-timing (`skill/variations.py`, 2026-10-30)
+
+Each variant now records the rules it broke (`rules`) and the reasons in words (`why`). The new rules are:
+`speed` (a joint faster than `retarget.MAX_JOINT_SPEED`), `ballistic` (a flight's rise / (g T²/8) outside
+[0.6, 1.5]), `lost flight` (fewer flights than the clip has) and `penetration` (the soles more than 2 cm into the
+floor). The existing rules are `limits`, `self-check` and `spec`. The generator was changed so that it stops making
+the variants the filter would drop for reasons of its own:
+
+- **Ballistic re-timing.** After amplitude scaling, each flight is re-timed to the airtime its new pelvis rise
+  needs, `sqrt(8 rise / g)`. The flight's frames and one frame either side are stretched uniformly, so the
+  time between the threshold crossings scales exactly.
+- **Cap-aware tempo.** A speed-up never takes a joint past the cap: on a stretch already near the cap it plays
+  only as fast as the cap allows. Amplitude above 1 may slow such a stretch to 1/alpha. Flights stay at 1x, so
+  the cap can still be broken in the air and the filter drops those variants.
+- **Resampling keeps the feet on the floor.** Linear blending of two frames whose joints are 0.6 rad apart
+  moves a planted foot along a chord: shot put at tempo 0.75 went 5.3 cm into a floor that neither source frame
+  is in. After resampling, the root height is corrected so the lowest sole sits where the source's sole
+  height interpolates to.
+- **Amplitude re-grounds by the sole, not the ankle.** A scaled ankle pitch tipped the discus thrower's toe
+  3.4 cm into the floor.
+- **Flights are measured between frames.** Airtime is now the time between interpolated threshold crossings.
+  Counting whole frames made a 5-frame hop read ±20% in T and ±40% in rise / ballistic: the jumping-jack hop
+  read 1.25, and is 0.94. The "3 flights at 1.6x" in Stage 4 were mostly this noise. Measured properly,
+  amplitude 1.1 without re-timing gives 1.16 and amplitude 0.85 gives 0.80 (squat jump: 0.72).
+
+Before and after, from `experiments/pipeline_audit/variants_audit.py` on the 36-variant TRAIN grid of all ten
+clips. Both columns use the new between-frames flight measure. The clips are the current retarget (20 rad/s
+cap), run as `retarget_audit.py --save-qpos`, then `variants_audit.py --qpos-dir`. The JSON is in
+`docs/results/pipeline_audit/variants_fix4/`.
+
+| clip | kept, before -> after | dropped after (rule: count; a variant can break several) | max joint speed kept (rad/s) | kept flights' rise / ballistic | kept variants that lost a flight | max penetration kept (cm) |
+|---|---|---|---|---|---|---|
+| squat_jump | 36 -> **36** | - | 11.8 -> 11.8 | 0.72-1.00 -> **0.84-1.02** | 0 -> 0 | 0.9 -> 0.3 |
+| squat | 36 -> **36** | - | 7.9 -> 7.9 | - | - | 0.2 -> 0.1 |
+| lunge | 15 -> **16** | limits 12, self-check 12 | 13.3 -> 13.3 | - | - | 1.3 -> 0.9 |
+| arms | 36 -> **36** | - | 14.2 -> 14.2 | - | - | 0.0 -> 0.0 |
+| front_kick | 36 -> **36** | - | 23.7 -> **20.0** | - | - | 0.2 -> 0.1 |
+| jumping_jacks | 36 -> **12** | lost flight 12, speed 12 | 34.6 -> **20.0** | 0.80-1.16 -> **0.93-1.03** | 14 -> **0** | 0.3 -> 0.1 |
+| punches | 36 -> **36** | - | 14.2 -> 14.2 | - | - | 0.6 -> 0.3 |
+| shot_put | 24 -> **24** | limits 12, self-check 3 | 31.3 -> **20.0** | - | - | 5.3 -> **1.8** |
+| discus | 24 -> **24** | limits 12 | 29.2 -> **20.0** | - | - | 3.5 -> **1.0** |
+| hurdles | 24 -> **24** | limits 12, speed 12 | 24.9 -> **20.0** | - | - | 1.8 -> 0.7 |
+
+On the stored `qpos.npy` the result differs:
+
+- front kick keeps 26 of 36;
+- jumping jacks, shot put and discus keep 0, because the base clip itself runs at 76, 172 and 61 rad/s;
+- hurdles keeps 0, as before (self-check, and the phantom flight at 0.05 x ballistic).
+
+That is the stale-retarget problem from summary point 5. Re-processing those clips (fix 7) is the cure; the
+filter now refuses to train on them in the meantime.
+
+What is still dropped, and why:
+
+- **Lunge, 12 self-check, and shot put, 3: the keypose hold rule (fix 2, `skill/keypose.py`, not changed here).**
+  With every pose hold at 0, all 15 pass. In every case the stage the self-check stops at already has hold 0,
+  because `fit_holds` halved it to 0 and then stopped. The reference sits inside that stage's tolerance for
+  0.2-2.3 s. The culprit is an *earlier* stage's hold, usually stage 2 at 0.3-0.4 s; zeroing that one hold
+  fixes 9 of 12 lunge drops and 3 of 3 shot-put drops.
+  - Example: lunge `o_t1.33_a1.1` completes stage 2 at 4.0 s instead of ~1.4 s, when the next lunge comes back
+    to a similar pose. By then every later stage's window has passed.
+  - Suggested fix in `fit_holds`: when the stuck stage has no hold left, halve the holds of the stages before
+    it, latest first.
+  - The "13 lunge self-check" drops in Stage 4 are now 12, because amplitude re-grounding by the soles changed one
+    variant.
+- **Jumping jacks, 12 `lost flight` (every amplitude-0.85 variant).** The hop keeps its feet above the 10 cm air
+  threshold for 5 frames (0.16 s); scaled to 0.85, it is above it for under `T.MIN_FLIGHT` (0.15 s). The
+  feet still clear 11.6 cm, but the spec no longer sees a flight, so a policy trained on the variant would not
+  be asked to hop. These variants are dropped, not repaired.
+- **Jumping jacks and hurdles, 12 `speed` each (every amplitude-1.1 variant).** The base retarget is at the
+  20 rad/s cap in airborne frames (jumping jacks: 2 of its 7 capped frames), most likely the shoulder handling
+  of fix 5. Flight time is fixed by gravity, so
+  1.1x amplitude means 22 rad/s there. Fix 5 should free these.
+- **Limits, 12 each on lunge, shot put, discus and hurdles (every amplitude-1.1 variant).** These are honest, as
+  Stage 4 says: the retargets already graze the ankle limits.
+- **No variant is dropped for `penetration` or `ballistic` on the current retargets.** The generator no longer
+  makes them; the rules remain as guards.
+
+Tests are in `tests/test_variations.py`:
+
+- the flight measure is exact between frames, and reads 1/4 for a hop with twice its airtime;
+- the time map holds the cap and keeps flights at 1x;
+- a 1.25x hop is re-timed back to ballistic;
+- each physical rule drops a synthetic variant that breaks it;
+- slow tempo keeps the soles on the source's floor.
+
+`tests/data/qpos_front_kick.npy` is now the capped retarget of the same clip. The old one had a frame at
+21.7 rad/s, so its own identity variant was dropped.
