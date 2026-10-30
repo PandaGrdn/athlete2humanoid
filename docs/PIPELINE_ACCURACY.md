@@ -733,3 +733,97 @@ Costs and side effects:
   `retarget_audit.py --save-qpos <dir>` writes the new ones.
 - Not done: training the hurdles and shot put on the new references (both Colab A100 slots were taken by other
   sessions' jobs).
+
+### Fix 6: coverage (camera compensation, athlete selection, intake checks), 2026-10-30
+
+What changed:
+
+- **`camera.py` (new): background camera compensation.** For every frame, the motion that maps it onto the
+  first frame is estimated from the background only. The athlete is masked out with SAM's mask joined to a
+  silhouette drawn from the pose landmarks, so `--no-sam` works too. `pose.human_trajectory(camera=...)`
+  maps the 2D landmarks through it before lifting to metres, so a pan or zoom no longer becomes root motion
+  and the torso ruler is measured in one image plane.
+  - Shi-Tomasi corners, tracked with pyramidal Lucas-Kanade (forward-backward checked) against a keyframe
+    rather than chained pair by pair, so errors do not add up. RANSAC fit. ORB, then phase correlation, as
+    fallbacks.
+  - Motion model: a similarity (pan, tilt, roll, zoom). A full homography is available
+    (`estimate(model="homography")`) but was less stable on frames with few features.
+  - Static cameras are a strict no-op: under 2 px of accumulated motion at the athlete, every matrix is the
+    identity and the root is bit-identical.
+  - An estimate is "unreliable" when fewer than 80% of the distinct frames register from features, as on the
+    1900 films (grain, flicker, mostly repeated frames). It is then applied only to a clear pan, over 5% of
+    the frame width.
+  - Like the audit said, a homography covers rotation and zoom, not a camera that translates.
+- **`athlete.py` (new): athlete selection.** `pipeline.py --athlete` takes `x,y` (a click), `x0,y0,x1,y1` (a
+  box) or an index counted from the left, on the first frame.
+  - With SAM it picks that object from SAM 3.1's outputs instead of the most-seen one
+    (`track.main_track_masks(select=)`; `sam_track.py --athlete`).
+  - Without SAM a CPU tracker follows the chosen person: MediaPipe in a crop around the last position,
+    upscaled so distant athletes are detected; a torso-colour check so it does not jump to someone else;
+    full-frame re-detection after a loss.
+  - `athlete.continuity` flags mask jumps (identity switches or same-shot splices).
+- **Intake checks, in `camera.json` beside each clip's outputs (the `meta.json` writer is untouched):**
+  - the athlete's pixel height (`pose.height_check`, a warning under 400 px);
+  - shot cuts (colour-histogram jumps);
+  - hip teleports and mask jumps (splices of the same shot, which a histogram cannot see);
+  - frames where camera motion could not be measured.
+- `pipeline.py`: a minimal hook (`camera.intake` before `human_trajectory`; `--athlete`, `--no-camera`).
+
+Measured on CPU, no downloads. The scripts are in `experiments/camera_coverage/` and the JSON in
+`docs/results/camera_coverage/`. Each clip's landmarks were cached on the whole frame (phone clips) or with
+the CPU tracker (films), because SAM masks are not stored.
+
+**Static clips and synthetic pans.** Static: the clip as filmed; "root change" is the maximum change in any
+root coordinate with the camera stage on vs off. Synthetic: a cropped copy of the same clip whose camera pans
+to follow the athlete with a sway, tilts and zooms in 10%, with MediaPipe re-run on the warped video. Cells
+are mean / max cm of the pelvis from the static clip's pelvis, so the "true camera" column is the floor that
+pose noise on the re-cropped video allows.
+
+| clip | height px | static: detected / root change | synthetic camera motion (px) | camera error, mean / max (px) | uncompensated | compensated | true camera |
+|---|---|---|---|---|---|---|---|
+| squat_jump | 1377 | yes / 0.00 cm | 59 | 0.13 / 0.6 | 4.9 / 7.1 | 0.7 / 2.0 | 0.7 / 2.0 |
+| squat | 1361 | yes / 0.00 cm | 53 | 0.08 / 0.3 | 5.3 / 7.3 | 0.8 / 1.7 | 0.8 / 1.7 |
+| lunge | 1078 | yes / 0.00 cm | 192 | 0.45 / 0.9 | 17.6 / 31.2 | 3.1 / 7.1 | 3.1 / 7.1 |
+| arms | 1127 | yes / 0.00 cm | 100 | 0.11 / 0.5 | 10.8 / 15.5 | 0.6 / 1.3 | 0.6 / 1.3 |
+| front_kick | 1027 | yes / 0.00 cm | 132 | 0.21 / 0.5 | 12.9 / 21.7 | 2.1 / 2.8 | 2.1 / 2.7 |
+| jumping_jacks | 1313 | yes / 0.00 cm | 70 | 0.16 / 0.3 | 7.7 / 10.3 | 0.5 / 1.1 | 0.5 / 1.1 |
+| punches | 1316 | yes / 0.00 cm | 95 | 0.07 / 0.3 | 7.4 / 13.5 | 1.0 / 1.6 | 1.0 / 1.6 |
+| shot_put (1900) | 699 | yes (unreliable) / 0.00 cm | 203 | 11.1 / 18.7 | 29.3 / 56.9 | 7.3 / 9.9 | 2.9 / 4.6 |
+| discus (1900) | 685 | yes (unreliable) / 0.00 cm | 139 | 59.3 / 92.9 | 19.3 / 40.4 | 16.8 / 26.3 | 9.2 / 16.1 |
+| hurdles (1900) | 416 | yes (unreliable) / 0.00 cm | 463 | 10.5 / 17.6 | 94.9 / 207.6 | 6.9 / 11.3 | 6.1 / 8.8 |
+
+- **No regression on static clips.** All ten keep their root bit for bit.
+  - On the phone clips the measured motion is 0.1-0.6 px.
+  - The films read 12-32 px with an unreliable estimate and are left alone. Hurdles probably does drift about
+    27 px (phase correlation on the roof agrees), so that is a correction this conservative rule forgoes.
+- **On a phone-quality pan the compensation is as good as knowing the camera.** Camera error is under 1 px
+  and the root equals the true-camera root to 0.1 cm, against 5-31 cm of phantom travel without it.
+- **On the films it removes most but not all of the pan.** Grain and repeated frames leave 10-60 px of
+  error. Hurdles drops from 95 / 208 cm to 7 / 11 cm, discus from 19 / 40 to 17 / 26.
+- The pixel heights confirm the audit's estimate. The films are at 416-699 px with the tracker's crop.
+  Without it, MediaPipe on the whole frame finds the hurdler in 0% of frames (shot put 73%, discus 89%);
+  with the CPU tracker, 100% for all three (the hurdler needs a box on frame 0).
+
+**The rejected pro clips** (`docs/PRO_CLIPS.md`, already on disk from the first download; CPU tracker with a
+box on the first frame, since SAM needs a GPU). Root numbers are over the frames where the tracker was
+verifiably on the athlete (checked on a contact sheet). Speeds are 0.3 s means of the pelvis's in-plane
+speed.
+
+| clip (why rejected) | athlete px | camera | root without compensation | root with compensation | plausible now? |
+|---|---|---|---|---|---|
+| High jump, Sudamericanos (distant, crowded, cuts) | 274 (warned) | pans 1740 px following the curved run-up | 0.2 m net over the 3.7 s run-up, peak 2.1 m/s: running on the spot | 12.3 m, accelerating from 0.5 to 5.1 m/s | **run-up yes.** The flop is lost: MediaPipe does not detect the inverted body over the bar, and the tracker ends on an official (flagged). No histogram cut was found in the source. |
+| Javelin, EuroGames (distant, panning) | 200 (warned) | pans 1470 px with the thrower | 0.4 m over the 1.9 s approach, peak 1.5 m/s | 5.5 m, 2.3 to 5.0 m/s | **approach yes**, a typical javelin run-up speed. The thrower is lost in the crowd at the throw (frame ~60, flagged); 200 px is too small. |
+| Biron running long jump (distant, crowded, panning) | 1115 | whip pan, 6200 px | net -1.1 m, peak 9.8 m/s | 11.8 m net, but peaks at 20 m/s and the pelvis dips 1.9 m | **no.** The pan is removed, but the jumper runs straight at the camera (300 to 1100 px tall). The fixed torso ruler and zero-depth assumption are wrong for that, which no homography fixes. |
+| Sweeney long jump (spliced out of order) | 385 (warned) | static, unreliable estimate, left alone | | | **flagged.** Mask jumps at the splices (frames 20-29, 56, 85, 116 of the excerpt). The histogram cut test finds nothing on a same-shot splice. |
+| Sweeney high jump (cut before landing) | | | | | not run: an incomplete motion is not a camera problem. The "starts and ends on the floor" intake check covers it. |
+
+What is left:
+
+- **Depth motion.** Clips filmed head-on or with a depth component need a per-frame ruler or a
+  world-grounded front end (Fix 3).
+- **Inverted or distant bodies.** MediaPipe loses them (the flop over the bar; the 200 px thrower in a crowd).
+  SAM's masks with a click prompt keep identity, but the pose is still MediaPipe's.
+- **Not run on a GPU.** SAM with `--athlete` selection is tested on fake SAM outputs only.
+- **Other entry points.** `experiments/process_clips.py` calls `video_to_motion` with defaults, so camera
+  compensation is now on there. It is a no-op on all ten stored clips, per the table above.
+  `server/live_worker.py` does not call the camera stage yet.

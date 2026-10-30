@@ -44,30 +44,38 @@ def track(video_path, prompt=config.SAM_PROMPT, frame_index=0):
     return outputs
 
 
-def athlete_masks(video_path, n_frames, prompt=config.SAM_PROMPT):
-    """(n_frames, H, W) athlete masks, running SAM in its own env when A2H_SAM_PYTHON is set."""
+def athlete_masks(video_path, n_frames, prompt=config.SAM_PROMPT, select=None):
+    """(n_frames, H, W) athlete masks, running SAM in its own env when A2H_SAM_PYTHON is set.
+    select: the caller's choice of athlete on the first frame (athlete.py), else the most-seen object."""
     if not config.SAM_PYTHON:
-        return main_track_masks(track(video_path, prompt=prompt), n_frames)[0]
+        return main_track_masks(track(video_path, prompt=prompt), n_frames, select=select)[0]
     with tempfile.TemporaryDirectory() as tmp:
         out = f"{tmp}/masks.npz"
+        extra = ["--athlete", str(select)] if select else []
         subprocess.run([config.SAM_PYTHON, str(config.ROOT / "sam_track.py"), str(Path(video_path).resolve()),
-                        "--prompt", prompt, "--out", out], check=True, cwd=config.ROOT)
+                        "--prompt", prompt, "--out", out, *extra], check=True, cwd=config.ROOT)
         masks = np.load(out)["masks"]
     if len(masks) < n_frames:  # SAM gave no output for trailing frames
         masks = np.concatenate([masks, np.zeros((n_frames - len(masks), *masks.shape[1:]), bool)])
     return masks[:n_frames]
 
 
-def main_track_masks(outputs, n_frames):
-    """Pick the object seen most often with the highest confidence (the athlete), return
-    (n_frames, H, W) bool masks; frames where it's missing are all False."""
+def main_track_masks(outputs, n_frames, select=None):
+    """Pick the object seen most often with the highest confidence (the athlete), or the one the
+    caller chose on the first frame (select: athlete.parse), return (n_frames, H, W) bool masks;
+    frames where it's missing are all False."""
     score = {}
     for out in outputs.values():
         for obj_id, prob in zip(out["out_obj_ids"], out["out_probs"]):
             score[int(obj_id)] = score.get(int(obj_id), 0.0) + float(prob)
     if not score:
         raise RuntimeError("SAM found nothing. Try another prompt, e.g. 'person'.")
-    best = max(score, key=score.get)
+    if select:
+        import athlete
+
+        best = athlete.select_object(outputs, select)
+    else:
+        best = max(score, key=score.get)
     first = next(iter(outputs.values()))["out_binary_masks"]
     h, w = np.asarray(first).shape[-2:]
     masks = np.zeros((n_frames, h, w), bool)
