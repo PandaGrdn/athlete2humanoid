@@ -1,0 +1,650 @@
+[
+ {
+  "clip": "shot_put",
+  "iters": 1500,
+  "start": "multi",
+  "ref_travel_m": 1.1239365339279175,
+  "variants": {
+   "stock": 24,
+   "synced": 24
+  },
+  "timing": {
+   "base": {
+    "wall_s": 9030.048424243927,
+    "returncode": 0,
+    "parallel": 8
+   },
+   "reward": {
+    "wall_s": 9120.048786640167,
+    "returncode": 0,
+    "parallel": 8
+   },
+   "phase": {
+    "wall_s": 9210.048951864243,
+    "returncode": 0,
+    "parallel": 8
+   },
+   "term": {
+    "wall_s": 9240.050149202347,
+    "returncode": 0,
+    "parallel": 8
+   },
+   "all": {
+    "wall_s": 9330.050111532211,
+    "returncode": 0,
+    "parallel": 8
+   }
+  },
+  "policies": {
+   "all": {
+    "task": "A2H-Travel-Flat-Unitree-G1",
+    "variants": "stock",
+    "suites": {
+     "clean": {
+      "task_success": 1.0,
+      "fall_rate": 0.0,
+      "stages_frac": 1.0,
+      "torso_err_m": 0.0900166928768158,
+      "joint_err_rad": 0.2161080688238144
+     },
+     "push": {
+      "task_success": 0.9375,
+      "fall_rate": 0.015625,
+      "stages_frac": 0.984375,
+      "torso_err_m": 0.19001983106136322,
+      "joint_err_rad": 0.22396579384803772
+     },
+     "init": {
+      "task_success": 0.890625,
+      "fall_rate": 0.03125,
+      "stages_frac": 0.9296875,
+      "torso_err_m": 0.1446133553981781,
+      "joint_err_rad": 0.23143607378005981
+     },
+     "tempo": {
+      "task_success": 0.5,
+      "fall_rate": 0.015625,
+      "stages_frac": 0.8151041865348816,
+      "torso_err_m": 0.1902889758348465,
+      "joint_err_rad": 0.23820506036281586
+     },
+     "transfer": {
+      "task_success": 0.4,
+      "fall_rate": 0.0,
+      "stages_frac": 0.7,
+      "torso_err_m": 0.14879028797149657,
+      "joint_err_rad": 0.1965766429901123
+     }
+    },
+    "travel": {
+     "travel_frac": 0.9612793065607548,
+     "end_err_m": 0.0503306039609015,
+     "rollouts": 16
+    }
+   },
+   "base": {
+    "task": "A2H-Tracking-Flat-Unitree-G1",
+    "variants": "stock",
+    "suites": {
+     "clean": {
+      "task_success": 0.078125,
+      "fall_rate": 0.0,
+      "stages_frac": 0.6458333730697632,
+      "torso_err_m": 0.3065706789493561,
+      "joint_err_rad": 0.18356339633464813
+     },
+     "push": {
+      "task_success": 0.234375,
+      "fall_rate": 0.0,
+      "stages_frac": 0.65625,
+      "torso_err_m": 0.40927183628082275,
+      "joint_err_rad": 0.18884524703025818
+     },
+     "init": {
+      "task_success": 0.765625,
+      "fall_rate": 0.0,
+      "stages_frac": 0.8359375,
+      "torso_err_m": 0.3525902032852173,
+      "joint_err_rad": 0.18445782363414764
+     },
+     "tempo": {
+      "task_success": 0.140625,
+      "fall_rate": 0.0390625,
+      "stages_frac": 0.520833358168602,
+      "torso_err_m": 0.6161544024944305,
+      "joint_err_rad": 0.20577071607112885
+     },
+     "transfer": {
+      "task_success": 0.065625,
+      "fall_rate": 0.003125,
+      "stages_frac": 0.3265625,
+      "torso_err_m": 0.32066380977630615,
+      "joint_err_rad": 0.17308286726474761
+     }
+    },
+    "travel": {
+     "travel_frac": 0.7333399578928947,
+     "end_err_m": 0.41862897016108036,
+     "rollouts": 16
+    }
+   },
+   "base_pro": {
+    "task": "compare",
+    "variants": null,
+    "suites": {
+     "clean": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.4947916865348816,
+      "torso_err_m": 0.381109356880188,
+      "joint_err_rad": 0.1890513002872467
+     },
+     "push": {
+      "task_success": 0.078125,
+      "fall_rate": 0.03125,
+      "stages_frac": 0.5364583730697632,
+      "torso_err_m": 0.4682616591453552,
+      "joint_err_rad": 0.19532424211502075
+     },
+     "init": {
+      "task_success": 0.65625,
+      "fall_rate": 0.078125,
+      "stages_frac": 0.7604166865348816,
+      "torso_err_m": 0.4118068814277649,
+      "joint_err_rad": 0.19959083199501038
+     },
+     "tempo": {
+      "task_success": 0.3203125,
+      "fall_rate": 0.328125,
+      "stages_frac": 0.6041666716337204,
+      "torso_err_m": 0.720404863357544,
+      "joint_err_rad": 0.23352539539337158
+     },
+     "transfer": {
+      "task_success": 0.159375,
+      "fall_rate": 0.05,
+      "stages_frac": 0.3578125,
+      "torso_err_m": 0.35153238773345946,
+      "joint_err_rad": 0.18344612419605255
+     }
+    },
+    "travel": {
+     "travel_frac": 0.6258597634732723,
+     "end_err_m": 0.4484220836311579,
+     "rollouts": 16
+    }
+   },
+   "phase": {
+    "task": "A2H-TravelPhase-Flat-Unitree-G1",
+    "variants": "stock",
+    "suites": {
+     "clean": {
+      "task_success": 0.8125,
+      "fall_rate": 0.0,
+      "stages_frac": 0.9375,
+      "torso_err_m": 0.23286983370780945,
+      "joint_err_rad": 0.194368377327919
+     },
+     "push": {
+      "task_success": 0.53125,
+      "fall_rate": 0.0,
+      "stages_frac": 0.7864583730697632,
+      "torso_err_m": 0.3615330755710602,
+      "joint_err_rad": 0.19818376004695892
+     },
+     "init": {
+      "task_success": 0.796875,
+      "fall_rate": 0.046875,
+      "stages_frac": 0.84375,
+      "torso_err_m": 0.36159902811050415,
+      "joint_err_rad": 0.21920113265514374
+     },
+     "tempo": {
+      "task_success": 0.5,
+      "fall_rate": 0.0390625,
+      "stages_frac": 0.6666666716337204,
+      "torso_err_m": 0.63213911652565,
+      "joint_err_rad": 0.2150336354970932
+     },
+     "transfer": {
+      "task_success": 0.4,
+      "fall_rate": 0.0,
+      "stages_frac": 0.6484375,
+      "torso_err_m": 0.27755351960659025,
+      "joint_err_rad": 0.17689256966114045
+     }
+    },
+    "travel": {
+     "travel_frac": 0.9692184329032898,
+     "end_err_m": 0.23289180919528008,
+     "rollouts": 16
+    }
+   },
+   "reward": {
+    "task": "A2H-TravelReward-Flat-Unitree-G1",
+    "variants": "stock",
+    "suites": {
+     "clean": {
+      "task_success": 0.765625,
+      "fall_rate": 0.0,
+      "stages_frac": 0.921875,
+      "torso_err_m": 0.13695743680000305,
+      "joint_err_rad": 0.20998027920722961
+     },
+     "push": {
+      "task_success": 0.640625,
+      "fall_rate": 0.0,
+      "stages_frac": 0.8645833730697632,
+      "torso_err_m": 0.26987913250923157,
+      "joint_err_rad": 0.2148781269788742
+     },
+     "init": {
+      "task_success": 0.875,
+      "fall_rate": 0.0,
+      "stages_frac": 0.9140625,
+      "torso_err_m": 0.22862403094768524,
+      "joint_err_rad": 0.2100794017314911
+     },
+     "tempo": {
+      "task_success": 0.5,
+      "fall_rate": 0.3359375,
+      "stages_frac": 0.6666666716337204,
+      "torso_err_m": 0.4600518122315407,
+      "joint_err_rad": 0.2431926354765892
+     },
+     "transfer": {
+      "task_success": 0.4,
+      "fall_rate": 0.0,
+      "stages_frac": 0.659375,
+      "torso_err_m": 0.1986093521118164,
+      "joint_err_rad": 0.19777393341064453
+     }
+    },
+    "travel": {
+     "travel_frac": 0.9516615495085716,
+     "end_err_m": 0.09473827492911369,
+     "rollouts": 16
+    }
+   },
+   "term": {
+    "task": "A2H-TravelTerm-Flat-Unitree-G1",
+    "variants": "stock",
+    "suites": {
+     "clean": {
+      "task_success": 1.0,
+      "fall_rate": 0.0,
+      "stages_frac": 1.0,
+      "torso_err_m": 0.12068704515695572,
+      "joint_err_rad": 0.2012820839881897
+     },
+     "push": {
+      "task_success": 0.734375,
+      "fall_rate": 0.046875,
+      "stages_frac": 0.90625,
+      "torso_err_m": 0.21616055071353912,
+      "joint_err_rad": 0.21339422464370728
+     },
+     "init": {
+      "task_success": 0.828125,
+      "fall_rate": 0.109375,
+      "stages_frac": 0.859375,
+      "torso_err_m": 0.195376455783844,
+      "joint_err_rad": 0.2078409492969513
+     },
+     "tempo": {
+      "task_success": 0.484375,
+      "fall_rate": 0.515625,
+      "stages_frac": 0.6666666716337204,
+      "torso_err_m": 0.21928996592760086,
+      "joint_err_rad": 0.2500235363841057
+     },
+     "transfer": {
+      "task_success": 0.396875,
+      "fall_rate": 0.003125,
+      "stages_frac": 0.6921875,
+      "torso_err_m": 0.1906733512878418,
+      "joint_err_rad": 0.1900511711835861
+     }
+    },
+    "travel": {
+     "travel_frac": 0.9344106689095497,
+     "end_err_m": 0.07962041278369725,
+     "rollouts": 16
+    }
+   }
+  }
+ },
+ {
+  "clip": "lunge",
+  "iters": 1500,
+  "start": "multi",
+  "ref_travel_m": 0.08795849233865738,
+  "variants": {
+   "stock": 15,
+   "synced": 24
+  },
+  "timing": {
+   "base": {
+    "wall_s": 7350.0389404296875,
+    "returncode": 0,
+    "parallel": 8
+   },
+   "synced": {
+    "wall_s": 7620.039933919907,
+    "returncode": 0,
+    "parallel": 8
+   },
+   "all": {
+    "wall_s": 7890.041213750839,
+    "returncode": 0,
+    "parallel": 8
+   },
+   "all_synced": {
+    "wall_s": 7890.041118860245,
+    "returncode": 0,
+    "parallel": 8
+   }
+  },
+  "policies": {
+   "all": {
+    "task": "A2H-Travel-Flat-Unitree-G1",
+    "variants": "stock",
+    "suites": {
+     "clean": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.125,
+      "torso_err_m": 0.10147054493427277,
+      "joint_err_rad": 0.17781558632850647
+     },
+     "push": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.1552734375,
+      "torso_err_m": 0.24014361202716827,
+      "joint_err_rad": 0.1835308074951172
+     },
+     "init": {
+      "task_success": 0.0,
+      "fall_rate": 0.046875,
+      "stages_frac": 0.08509385585784912,
+      "torso_err_m": 0.14920467138290405,
+      "joint_err_rad": 0.1887907236814499
+     },
+     "tempo": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.12646484375,
+      "torso_err_m": 0.14072253555059433,
+      "joint_err_rad": 0.18172074109315872
+     },
+     "transfer": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.13311632350087166,
+      "torso_err_m": 0.12230339273810387,
+      "joint_err_rad": 0.17890075594186783
+     }
+    },
+    "travel": {
+     "travel_frac": 2.200181260704994,
+     "end_err_m": 0.10297928540967405,
+     "rollouts": 16
+    }
+   },
+   "all_synced": {
+    "task": "A2H-Travel-Flat-Unitree-G1",
+    "variants": "synced",
+    "suites": {
+     "clean": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.125,
+      "torso_err_m": 0.0937272310256958,
+      "joint_err_rad": 0.19934529066085815
+     },
+     "push": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.1611328125,
+      "torso_err_m": 0.22070841491222382,
+      "joint_err_rad": 0.19985739886760712
+     },
+     "init": {
+      "task_success": 0.0,
+      "fall_rate": 0.03125,
+      "stages_frac": 0.09329862892627716,
+      "torso_err_m": 0.16648520529270172,
+      "joint_err_rad": 0.20596887171268463
+     },
+     "tempo": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.1337890625,
+      "torso_err_m": 0.11481215804815292,
+      "joint_err_rad": 0.198981374502182
+     },
+     "transfer": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.14978298917412758,
+      "torso_err_m": 0.09746560268104076,
+      "joint_err_rad": 0.1912955902516842
+     }
+    },
+    "travel": {
+     "travel_frac": 1.8535156697034836,
+     "end_err_m": 0.07924291538074613,
+     "rollouts": 16
+    }
+   },
+   "base": {
+    "task": "A2H-Tracking-Flat-Unitree-G1",
+    "variants": "stock",
+    "suites": {
+     "clean": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.1259765625,
+      "torso_err_m": 0.11173603683710098,
+      "joint_err_rad": 0.1549658626317978
+     },
+     "push": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.1630859375,
+      "torso_err_m": 0.30407828092575073,
+      "joint_err_rad": 0.16107171773910522
+     },
+     "init": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.08818019926548004,
+      "torso_err_m": 0.1985395848751068,
+      "joint_err_rad": 0.1538376361131668
+     },
+     "tempo": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.15087890625,
+      "torso_err_m": 0.2600901834666729,
+      "joint_err_rad": 0.1649191677570343
+     },
+     "transfer": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.1733940988779068,
+      "torso_err_m": 0.14619290828704834,
+      "joint_err_rad": 0.15947861596941948
+     }
+    },
+    "travel": {
+     "travel_frac": 2.1699356958270073,
+     "end_err_m": 0.10036294558085501,
+     "rollouts": 16
+    }
+   },
+   "synced": {
+    "task": "A2H-Tracking-Flat-Unitree-G1",
+    "variants": "synced",
+    "suites": {
+     "clean": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.1376953125,
+      "torso_err_m": 0.11657087504863739,
+      "joint_err_rad": 0.16969206929206848
+     },
+     "push": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.1650390625,
+      "torso_err_m": 0.3734157681465149,
+      "joint_err_rad": 0.17396000027656555
+     },
+     "init": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.07471998780965805,
+      "torso_err_m": 0.24967904388904572,
+      "joint_err_rad": 0.16980335116386414
+     },
+     "tempo": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.1337890625,
+      "torso_err_m": 0.20196984708309174,
+      "joint_err_rad": 0.17526280879974365
+     },
+     "transfer": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.19852431491017342,
+      "torso_err_m": 0.14501626417040825,
+      "joint_err_rad": 0.16840315237641335
+     }
+    },
+    "travel": {
+     "travel_frac": 2.392520420253277,
+     "end_err_m": 0.12731531541794538,
+     "rollouts": 16
+    }
+   }
+  }
+ },
+ {
+  "clip": "squat_jump",
+  "iters": 1500,
+  "start": "multi",
+  "ref_travel_m": 0.056982774287462234,
+  "variants": {
+   "stock": 36
+  },
+  "timing": {
+   "base": {
+    "wall_s": 3990.0192499160767,
+    "returncode": 0,
+    "parallel": 8
+   },
+   "all": {
+    "wall_s": 4080.0196907520294,
+    "returncode": 0,
+    "parallel": 8
+   }
+  },
+  "policies": {
+   "all": {
+    "task": "A2H-Travel-Flat-Unitree-G1",
+    "variants": "stock",
+    "suites": {
+     "clean": {
+      "task_success": 1.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.8802083730697632,
+      "torso_err_m": 0.05924692004919052,
+      "joint_err_rad": 0.14407230913639069
+     },
+     "push": {
+      "task_success": 0.46875,
+      "fall_rate": 0.03125,
+      "stages_frac": 0.7096353769302368,
+      "torso_err_m": 0.25091850757598877,
+      "joint_err_rad": 0.15208597481250763
+     },
+     "init": {
+      "task_success": 0.9375,
+      "fall_rate": 0.0,
+      "stages_frac": 0.829410195350647,
+      "torso_err_m": 0.09934189915657043,
+      "joint_err_rad": 0.14588412642478943
+     },
+     "tempo": {
+      "task_success": 0.5,
+      "fall_rate": 0.0,
+      "stages_frac": 0.5930989533662796,
+      "torso_err_m": 0.1245279498398304,
+      "joint_err_rad": 0.15220019966363907
+     },
+     "transfer": {
+      "task_success": 0.9330357142857143,
+      "fall_rate": 0.0,
+      "stages_frac": 0.8127799374716622,
+      "torso_err_m": 0.0766892922776086,
+      "joint_err_rad": 0.1431137067931039
+     }
+    },
+    "travel": {
+     "travel_frac": 0.3432578155770898,
+     "end_err_m": 0.054155871039256454,
+     "rollouts": 16
+    }
+   },
+   "base": {
+    "task": "A2H-Tracking-Flat-Unitree-G1",
+    "variants": "stock",
+    "suites": {
+     "clean": {
+      "task_success": 1.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.8033853769302368,
+      "torso_err_m": 0.11063185334205627,
+      "joint_err_rad": 0.11222484707832336
+     },
+     "push": {
+      "task_success": 0.671875,
+      "fall_rate": 0.09375,
+      "stages_frac": 0.75,
+      "torso_err_m": 0.3123769164085388,
+      "joint_err_rad": 0.11950096487998962
+     },
+     "init": {
+      "task_success": 0.921875,
+      "fall_rate": 0.0,
+      "stages_frac": 0.7459398508071899,
+      "torso_err_m": 0.1307346522808075,
+      "joint_err_rad": 0.11230043321847916
+     },
+     "tempo": {
+      "task_success": 0.5,
+      "fall_rate": 0.0,
+      "stages_frac": 0.5885416567325592,
+      "torso_err_m": 0.17138873413205147,
+      "joint_err_rad": 0.12376293912529945
+     },
+     "transfer": {
+      "task_success": 0.7745535714285714,
+      "fall_rate": 0.0,
+      "stages_frac": 0.713329383305141,
+      "torso_err_m": 0.11133846108402524,
+      "joint_err_rad": 0.11272269487380981
+     }
+    },
+    "travel": {
+     "travel_frac": -0.19633735874776903,
+     "end_err_m": 0.09592806338332593,
+     "rollouts": 16
+    }
+   }
+  }
+ }
+]
