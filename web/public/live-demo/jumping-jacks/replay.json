@@ -2,7 +2,7 @@
  "id": "jumping-jacks",
  "title": "Jumping jacks",
  "clip": "jumping_jacks.mov",
- "recorded": "2026-10-28",
+ "recorded": "2026-10-30",
  "stages": [
   {
    "key": "video",
@@ -27,128 +27,53 @@
  ],
  "events": [
   {
-   "t": 0.19,
+   "t": 0.12,
    "stage": "video",
    "progress": 0.1
   },
   {
-   "t": 10.53,
+   "t": 8.35,
    "stage": "video",
    "done": true,
    "log": "video: 5.3 s at 30 fps, 360x640 (first 20 s, rescaled)"
   },
   {
-   "t": 11.65,
+   "t": 9.22,
    "stage": "pose",
    "progress": 0.0
   },
   {
-   "t": 12.13,
-   "stage": "pose",
-   "progress": 0.056962025316455694
-  },
-  {
-   "t": 12.26,
-   "stage": "pose",
-   "progress": 0.12025316455696203
-  },
-  {
-   "t": 12.39,
-   "stage": "pose",
-   "progress": 0.18354430379746836
-  },
-  {
-   "t": 12.52,
-   "stage": "pose",
-   "progress": 0.2468354430379747
-  },
-  {
-   "t": 12.65,
-   "stage": "pose",
-   "progress": 0.310126582278481
-  },
-  {
-   "t": 12.79,
-   "stage": "pose",
-   "progress": 0.37341772151898733
-  },
-  {
-   "t": 12.93,
-   "stage": "pose",
-   "progress": 0.43670886075949367
-  },
-  {
-   "t": 13.06,
-   "stage": "pose",
-   "progress": 0.5
-  },
-  {
-   "t": 13.19,
-   "stage": "pose",
-   "progress": 0.5632911392405063
-  },
-  {
-   "t": 13.31,
-   "stage": "pose",
-   "progress": 0.6265822784810127
-  },
-  {
-   "t": 13.44,
-   "stage": "pose",
-   "progress": 0.689873417721519
-  },
-  {
-   "t": 13.58,
-   "stage": "pose",
-   "progress": 0.7531645569620253
-  },
-  {
-   "t": 13.71,
-   "stage": "pose",
-   "progress": 0.8164556962025317
-  },
-  {
-   "t": 13.84,
-   "stage": "pose",
-   "progress": 0.879746835443038
-  },
-  {
-   "t": 13.97,
-   "stage": "pose",
-   "progress": 0.9430379746835443
-  },
-  {
-   "t": 14.26,
+   "t": 9.22,
    "stage": "pose",
    "done": true,
-   "log": "pose found in 100% of frames"
+   "log": "pose (SAM 3D Body) found in 100% of frames"
   },
   {
-   "t": 14.36,
+   "t": 9.31,
    "stage": "retarget",
    "progress": 0.1
   },
   {
-   "t": 14.49,
+   "t": 9.41,
    "stage": "retarget",
    "progress": 0.4
   },
   {
-   "t": 15.51,
+   "t": 11.54,
    "stage": "retarget",
    "done": true,
-   "log": "retarget error 0.7 cm (mean over end effectors)"
+   "log": "retarget error 0.4 cm (mean over end effectors)"
   },
   {
-   "t": 16.68,
+   "t": 12.61,
    "stage": "environment",
    "progress": 0.2
   },
   {
-   "t": 16.8,
+   "t": 12.72,
    "stage": "environment",
    "done": true,
-   "log": "task spec: 11 key moments: ready -> left hand up, right hand up -> left hand down, right hand down -> left hand up, right hand up -> left hand down, right hand down -> left hand up, right hand up -> left hand down, right hand down -> left hand up, rise -> crouch, right hand up -> left hand down, right hand down -> left hand up, right hand up -> left hand down, right hand down (finish) (the retarget scores 12/12)"
+   "log": "task spec: 10 key moments: ready -> right hand up, left hand up -> right hand down, left hand down -> right hand up, left hand up -> right hand down, left hand down -> right hand up, left hand up -> right hand down, left hand down -> right hand up, left hand up -> right hand down, left hand down -> right hand up, left hand up -> right hand down, left hand down (finish) (the retarget scores 11/11)"
   }
  ],
  "policies": [
@@ -157,324 +82,324 @@
    "label": "Task",
    "video": "policy_task.mp4",
    "poster": "policy_task.jpg",
-   "run": "remote_latent_kp_jacks",
+   "run": "remote_latent_s3_jacks",
    "curve": {
     "iterations": 1500,
     "points": [
      [
       0,
-      -2.94,
-      17.71
+      -3.24,
+      21.95
      ],
      [
       25,
-      -4.28,
-      65.58
+      -49.29,
+      423.28
      ],
      [
       50,
-      -2.73,
-      109.64
+      -43.72,
+      473.38
      ],
      [
       75,
-      0.55,
-      153.43
+      -15.86,
+      404.26
      ],
      [
       100,
-      1.12,
-      116.56
+      10.31,
+      433.46
      ],
      [
       125,
-      -0.76,
-      106.45
+      31.0,
+      469.0
      ],
      [
       150,
-      -0.7,
-      73.43
+      41.27,
+      485.61
      ],
      [
       175,
-      7.66,
-      101.42
+      50.91,
+      499.13
      ],
      [
       200,
-      12.38,
-      116.68
+      56.44,
+      496.38
      ],
      [
       225,
-      10.16,
-      100.06
+      60.03,
+      483.51
      ],
      [
       250,
-      16.14,
-      133.89
+      68.68,
+      497.78
      ],
      [
       275,
-      62.7,
-      403.2
+      71.57,
+      497.17
      ],
      [
       300,
-      75.73,
-      466.14
+      76.27,
+      500.0
      ],
      [
       325,
-      69.1,
-      423.98
+      77.84,
+      490.07
      ],
      [
       350,
-      74.61,
-      441.5
+      82.69,
+      498.69
      ],
      [
       375,
-      75.78,
-      447.42
+      81.8,
+      495.67
      ],
      [
       400,
-      76.0,
-      443.31
+      85.11,
+      500.0
      ],
      [
       425,
-      78.87,
-      451.94
+      87.7,
+      499.54
      ],
      [
       450,
-      83.27,
-      478.9
+      86.07,
+      500.0
      ],
      [
       475,
-      82.63,
-      468.74
+      89.66,
+      500.0
      ],
      [
       500,
-      80.48,
-      458.56
+      87.73,
+      496.57
      ],
      [
       525,
-      82.7,
-      471.23
+      90.57,
+      500.0
      ],
      [
       550,
-      77.96,
-      457.99
+      91.54,
+      497.37
      ],
      [
       575,
-      78.69,
-      460.85
+      98.11,
+      500.0
      ],
      [
       600,
-      77.93,
-      470.91
+      101.58,
+      498.37
      ],
      [
       625,
-      81.24,
-      475.65
+      102.42,
+      491.08
      ],
      [
       650,
-      78.92,
-      465.11
+      100.8,
+      485.46
      ],
      [
       675,
-      76.51,
-      462.18
+      103.34,
+      500.0
      ],
      [
       700,
-      78.83,
-      469.89
+      103.98,
+      500.0
      ],
      [
       725,
-      79.99,
-      479.96
+      102.92,
+      498.22
      ],
      [
       750,
-      79.3,
-      468.99
+      104.31,
+      496.68
      ],
      [
       775,
-      79.83,
-      474.54
+      103.88,
+      497.4
      ],
      [
       800,
-      80.71,
-      478.31
+      105.7,
+      500.0
      ],
      [
       825,
-      84.16,
-      481.65
+      106.91,
+      500.0
      ],
      [
       850,
-      83.97,
-      481.0
+      103.88,
+      500.0
      ],
      [
       875,
-      84.23,
-      491.21
+      103.5,
+      495.9
      ],
      [
       900,
-      80.17,
-      476.11
+      103.98,
+      495.34
      ],
      [
       925,
-      80.68,
-      478.15
+      104.89,
+      500.0
      ],
      [
       950,
-      79.74,
-      465.8
+      103.24,
+      493.66
      ],
      [
       975,
-      82.12,
-      482.68
+      103.29,
+      497.6
      ],
      [
       1000,
-      81.34,
-      464.61
+      102.3,
+      491.33
      ],
      [
       1025,
-      84.45,
-      483.76
+      105.18,
+      499.7
      ],
      [
       1050,
-      82.63,
-      478.54
+      104.04,
+      500.0
      ],
      [
       1075,
-      83.79,
-      479.36
+      103.91,
+      492.34
      ],
      [
       1100,
-      87.82,
-      494.33
+      105.73,
+      496.09
      ],
      [
       1125,
-      85.27,
-      489.61
+      104.64,
+      497.61
      ],
      [
       1150,
-      83.89,
-      472.9
+      103.08,
+      495.0
      ],
      [
       1175,
-      84.79,
-      474.31
+      105.69,
+      500.0
      ],
      [
       1200,
-      88.08,
-      495.76
+      104.52,
+      495.98
      ],
      [
       1225,
-      85.73,
-      485.03
+      103.33,
+      491.95
      ],
      [
       1250,
-      81.45,
-      467.4
+      106.56,
+      497.01
      ],
      [
       1275,
-      90.51,
-      487.31
+      104.73,
+      494.72
      ],
      [
       1300,
-      87.91,
-      499.31
+      104.15,
+      492.27
      ],
      [
       1325,
-      83.35,
-      470.88
+      104.9,
+      494.4
      ],
      [
       1350,
-      82.26,
-      464.89
+      106.7,
+      500.0
      ],
      [
       1375,
-      86.87,
-      479.04
+      107.52,
+      500.0
      ],
      [
       1400,
-      85.01,
-      483.73
+      105.68,
+      494.07
      ],
      [
       1425,
-      90.76,
-      498.79
+      108.17,
+      500.0
      ],
      [
       1450,
-      81.59,
-      465.77
+      106.52,
+      500.0
      ],
      [
       1475,
-      83.26,
-      485.81
+      104.79,
+      500.0
      ],
      [
       1499,
-      84.08,
-      469.61
+      106.43,
+      500.0
      ]
     ]
    },
    "checker": {
-    "stages_completed": 1,
-    "stages_total": 13,
-    "success": false,
+    "stages_completed": 12,
+    "stages_total": 12,
+    "success": true,
     "fell_at_s": null
    }
   }
  ],
- "named_by": "muse-spark-1.3"
+ "named_by": null
 }

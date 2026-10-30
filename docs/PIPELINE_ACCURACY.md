@@ -715,6 +715,36 @@ Notes on the table:
 Not done: no policy was retrained on the new references. Policies in `outputs/` and the web examples built from
 them were trained on the MediaPipe references.
 
+#### Policies retrained on the SAM 3D Body references, for the demo pages (2026-10-30)
+
+The website's gallery, Live-page recorded builds and 3D showcase now show policies trained on the re-processed
+clips.
+- **Compute:** 8 training runs, 2 robustness evaluations and 3 push recordings on Modal (profile `a2h`), about
+  9 GPU-hours.
+- **Starting weights:** each policy started from the policy an earlier run trained on the same clip's MediaPipe
+  reference.
+- **Inputs:** `outputs/sam3d_inputs/<run>/`.
+- **Runs:** `outputs/remote_{latent,variants,robust,pushes}_s3_*`.
+
+| clip | policy | task spec, own clip | held-out variants completed (falls) | before (MediaPipe references) |
+|---|---|---|---|---|
+| squat_jump | tracking, variants | 12/12 | **82% (0%)** | 78% (0%) |
+| squat_jump | tracking, this clip only | 12/12 | 33% (18%) | 28% (29%) |
+| front_kick | tracking, variants | 6/6 | **100% (0%)** | 100% (0%) |
+| front_kick | tracking, this clip only | 6/6 | 66% (34%) | 43% (57%), best single-clip |
+| squat | tracking | 6/6 | - | - |
+| lunge | task | **14/14** | - | not completed in any evaluation |
+| punches | task | **12/12** | - | not completed in any evaluation |
+| jumping_jacks | task | 9/12 (12/12 against the Live page's spec) | - | not completed in any evaluation |
+
+Notes:
+- "Task spec, own clip" is the run's `eval.json`. The Live page re-scores each rollout against the spec its own
+  recording compiles, where every policy above passes.
+- The "before" column for lunge, punches and jumping jacks is from the showcase notes (PR #9 era): no policy
+  completed them.
+- The Live page's pose stage in the recorded builds is SAM 3D Body, via `server/live_worker.py --sam3d`, run on the
+  same processed frames on a GPU beforehand. Uploads to the CPU live runner still use MediaPipe.
+
 ### Fix 4: physical variant filter and ballistic re-timing (`skill/variations.py`, 2026-10-30)
 
 Each variant now records the rules it broke (`rules`) and the reasons in words (`why`). The new rules are:

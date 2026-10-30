@@ -26,7 +26,7 @@ const FIGURES = [
   { v: "7", k: "Stages", sub: "From the first frame of video to an evaluated policy, all automatic." },
   { v: "29", k: "Degrees of freedom", sub: "Every joint of the Unitree G1 is driven by the trained network." },
   { v: "4,096", k: "Simulated robots", sub: "G1s learning in parallel in mjlab on one GPU." },
-  { v: "78%", k: "Held-out variants", sub: "Squat-jump variants the policy never trained on, completed." },
+  { v: "82%", k: "Held-out variants", sub: "Squat-jump variants the policy never trained on, completed." },
 ];
 
 const STATEMENT = "The robot is rewarded for looking like the clip, not only for matching its joint angles. The judge is Meta's V-JEPA 2, a model that learned how the world moves by watching video.";

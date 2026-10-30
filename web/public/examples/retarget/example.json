@@ -2,7 +2,7 @@
  "id": "retarget",
  "kicker": "Retargeting",
  "title": "A human body on G1 proportions",
- "tagline": "Rebuilding the person on the G1's own bone lengths keeps their joint angles (2.4–10× smaller angle error) and plants the feet: foot sliding drops from 29.1 to 0.4 cm/s, averaged over 7 clips.",
+ "tagline": "Rebuilding the person on the G1's own bone lengths keeps their joint angles (2.2–18× smaller angle error) and plants the feet: foot sliding drops from 12.4 to 0.0 cm/s, averaged over 7 clips.",
  "story": {
   "shown": "The same squat-jump video, retargeted two ways. Uniform scaling shrinks the whole person by leg length; the G1's hips are still about 60% wider than the scaled human's, so the inverse kinematics chases targets no G1 pose can reach: feet slide and elbows straighten.",
   "learned": "Proportional retargeting walks the skeleton from the hips and gives every bone the human's direction but the G1's length, then pins each planted foot to the floor. Every joint angle is the human's, and the hands and feet land where the G1 can actually reach.",
@@ -97,20 +97,20 @@
  "metrics": [
   {
    "label": "Foot sliding",
-   "display": "29.1 → 0.4",
+   "display": "12.4 → 0.0",
    "unit": "cm/s",
    "note": "mean of 7 clips, uniform → proportional",
    "tone": "good"
   },
   {
    "label": "Joint-angle error",
-   "display": "2.4–10× lower",
+   "display": "2.2–18× lower",
    "note": "knee, hip, elbow and shoulder vs. the human",
    "tone": "good"
   },
   {
    "label": "Frames at a joint limit",
-   "display": "40% → 12%",
+   "display": "22% → 4%",
    "note": "the IK pinned against the G1's range"
   }
  ],
@@ -118,74 +118,74 @@
   {
    "label": "Foot sliding while planted",
    "unit": "cm/s",
-   "before": 29.13,
-   "after": 0.4,
-   "ratio": 72.2,
-   "clip_before": 32.52,
-   "clip_after": 0.13
+   "before": 12.44,
+   "after": 0.02,
+   "ratio": 501.2,
+   "clip_before": 11.44,
+   "clip_after": 0.01
   },
   {
    "label": "Planted-foot drift",
    "unit": "cm",
-   "before": 15.71,
-   "after": 0.23,
-   "ratio": 67.9,
-   "clip_before": 19.34,
-   "clip_after": 0.09
+   "before": 8.96,
+   "after": 0.01,
+   "ratio": 727.7,
+   "clip_before": 9.98,
+   "clip_after": 0.01
   },
   {
    "label": "Foot floating above the floor",
    "unit": "cm",
-   "before": 5.18,
-   "after": 0.06,
-   "ratio": 86.7,
-   "clip_before": 6.78,
-   "clip_after": 0.03
+   "before": 2.36,
+   "after": 0.01,
+   "ratio": 187.1,
+   "clip_before": 1.65,
+   "clip_after": 0.0
   },
   {
    "label": "Frames at a joint limit",
    "unit": "%",
-   "before": 39.59,
-   "after": 11.97,
-   "ratio": 3.3,
-   "clip_before": 16.97,
-   "clip_after": 5.17
+   "before": 21.88,
+   "after": 4.25,
+   "ratio": 5.1,
+   "clip_before": 15.87,
+   "clip_after": 0.0
   },
   {
    "label": "Knee angle error",
    "unit": "°",
-   "before": 11.92,
-   "after": 3.02,
-   "ratio": 3.9,
-   "clip_before": 7.43,
-   "clip_after": 2.32
+   "before": 6.1,
+   "after": 1.03,
+   "ratio": 5.9,
+   "clip_before": 3.39,
+   "clip_after": 0.52
   },
   {
    "label": "Hip angle error",
    "unit": "°",
-   "before": 10.66,
-   "after": 4.38,
-   "ratio": 2.4,
-   "clip_before": 9.89,
-   "clip_after": 4.86
+   "before": 5.38,
+   "after": 2.47,
+   "ratio": 2.2,
+   "clip_before": 3.25,
+   "clip_after": 2.86
   },
   {
    "label": "Elbow angle error",
    "unit": "°",
-   "before": 13.35,
-   "after": 1.29,
-   "ratio": 10.3,
-   "clip_before": 14.8,
-   "clip_after": 0.89
+   "before": 19.09,
+   "after": 1.03,
+   "ratio": 18.5,
+   "clip_before": 21.28,
+   "clip_after": 0.55
   },
   {
    "label": "Shoulder angle error",
    "unit": "°",
-   "before": 8.94,
-   "after": 2.35,
-   "ratio": 3.8,
-   "clip_before": 8.78,
-   "clip_after": 3.77
+   "before": 5.3,
+   "after": 1.87,
+   "ratio": 2.8,
+   "clip_before": 4.69,
+   "clip_after": 2.49
   }
  ],
  "compare_labels": {

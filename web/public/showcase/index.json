@@ -9,11 +9,11 @@
    ],
    "kicker": "One phone video → one policy",
    "lede": "A person squat-jumping on a phone video became this simulated Unitree G1, controlled by a policy trained with reinforcement learning. It's the policy, not an animation of the video. Push it.",
-   "video": "One clip from a phone: a person squat-jumping, twice. SAM 3.1 segments them, MediaPipe lifts their pose to 3D.",
+   "video": "One clip from a phone: a person squat-jumping, twice. SAM 3.1 segments them, SAM 3D Body lifts their pose to 3D.",
    "policy": "PPO in mjlab across thousands of simulated G1s, on 36 automatic variants of the clip, with pushes during training. What you see is that network's own run in MuJoCo, recorded.",
    "facts": [
     {
-     "v": "78%",
+     "v": "82%",
      "l": "of held-out variants completed"
     }
    ],
@@ -29,7 +29,7 @@
    ],
    "kicker": "One phone video → one policy",
    "lede": "Two front kicks on a phone video, turned into a policy that balances on one leg through each kick. Push it mid-kick.",
-   "video": "One clip from a phone: two front kicks with the right leg. SAM 3.1 segments the person, MediaPipe lifts their pose to 3D.",
+   "video": "One clip from a phone: two front kicks with the right leg. SAM 3.1 segments the person, SAM 3D Body lifts their pose to 3D.",
    "policy": "PPO in mjlab on 36 automatic variants of the clip (mirrored, re-timed, rescaled), with pushes during training. The network's own run in MuJoCo, recorded.",
    "facts": [
     {
@@ -49,11 +49,11 @@
    ],
    "kicker": "One phone video → one policy",
    "lede": "Two slow squats on a phone video. The policy follows the reference within a few degrees per joint, and keeps its feet planted when pushed.",
-   "video": "One clip from a phone: two bodyweight squats. SAM 3.1 segments the person, MediaPipe lifts their pose to 3D.",
+   "video": "One clip from a phone: two bodyweight squats. SAM 3.1 segments the person, SAM 3D Body lifts their pose to 3D.",
    "policy": "PPO in mjlab tracking the retarget, trained on the clip itself (2,000 iterations), with pushes during training. The network's own run in MuJoCo, recorded.",
    "facts": [
     {
-     "v": "0.08 rad",
+     "v": "0.06 rad",
      "l": "mean joint error to the reference"
     }
    ]

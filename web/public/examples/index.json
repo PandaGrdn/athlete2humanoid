@@ -1,12 +1,12 @@
 {
  "version": 1,
- "generated_at": "2026-10-29T03:54:56+00:00",
+ "generated_at": "2026-10-30T22:12:25+00:00",
  "examples": [
   {
    "id": "squat-jump-variants",
    "kicker": "Generalisation",
    "title": "Squat jump: learning the action, not the recording",
-   "tagline": "Trained on 36 automatic variants of one clip, the tracker completes 78% of 7 variants it never saw, with 0% falls. The best single-clip policy manages 28% and falls 29% of the time.",
+   "tagline": "Trained on 36 automatic variants of one clip, the tracker completes 82% of 7 variants it never saw, with 0% falls. The best single-clip policy manages 33% and falls 18% of the time.",
    "status": "ready",
    "poster": "squat-jump-variants/source.jpg",
    "video": "squat-jump-variants/source.mp4"
@@ -15,7 +15,7 @@
    "id": "front-kick-variants",
    "kicker": "Generalisation",
    "title": "Front kick: learning the action, not the recording",
-   "tagline": "Trained on 36 automatic variants of one clip, the tracker completes 100% of 7 variants it never saw, with 0% falls. The best single-clip policy manages 43% and falls 57% of the time.",
+   "tagline": "Trained on 36 automatic variants of one clip, the tracker completes 100% of 7 variants it never saw, with 0% falls. The best single-clip policy manages 66% and falls 34% of the time.",
    "status": "ready",
    "poster": "front-kick-variants/source.jpg",
    "video": "front-kick-variants/source.mp4"
@@ -24,7 +24,7 @@
    "id": "retarget",
    "kicker": "Retargeting",
    "title": "A human body on G1 proportions",
-   "tagline": "Rebuilding the person on the G1's own bone lengths keeps their joint angles (2.4–10× smaller angle error) and plants the feet: foot sliding drops from 29.1 to 0.4 cm/s, averaged over 7 clips.",
+   "tagline": "Rebuilding the person on the G1's own bone lengths keeps their joint angles (2.2–18× smaller angle error) and plants the feet: foot sliding drops from 12.4 to 0.0 cm/s, averaged over 7 clips.",
    "status": "ready",
    "poster": "retarget/compare.jpg",
    "video": "retarget/compare.mp4"
@@ -33,7 +33,7 @@
    "id": "goal-relevance",
    "kicker": "What matters",
    "title": "Imitate what serves the jump",
-   "tagline": "Arm-waving added before the jump gets the minimum weight (0.10, the same as standing still) while the takeoff push and the landing peak at 0.97–1.00.",
+   "tagline": "Arm-waving added before the jump gets the minimum weight (0.10, the same as standing still) while the takeoff push and the landing peak at 0.98–1.00.",
    "status": "ready",
    "poster": "goal-relevance/hype.jpg",
    "video": "goal-relevance/hype.mp4"
