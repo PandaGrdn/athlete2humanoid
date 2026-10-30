@@ -85,6 +85,12 @@ def _runs(labels, fps, min_s):
     return runs
 
 
+def lands(n_frames, touchdown, fps):
+    """Whether a clip of n_frames shows the landing of a flight that touches down at frame `touchdown`: the feet
+    are back down at least HOLD[LAND] before it ends."""
+    return n_frames - touchdown >= HOLD[LAND] * fps
+
+
 def compile_spec(pos, fps, skill=None, max_clearance=MAX_CLEARANCE, name=None):
     """pos: (T, bodies, 3) retarget body positions (G1-sized) at fps -> task spec (JSON-able)."""
     pos = np.asarray(pos, np.float32)
@@ -119,7 +125,8 @@ def compile_spec(pos, fps, skill=None, max_clearance=MAX_CLEARANCE, name=None):
                            "clearance": round(float(min(lo[s:e].max(), max_clearance)), 3),
                            "ref_clearance": round(float(lo[s:e].max()), 3),
                            "min_air_s": round(float(np.clip(0.5 * flight, 0.05, 0.12)), 3)})
-            add(LAND, e, e)
+            if lands(len(pos), e, fps):  # a clip that ends in the air (the hurdles) shows no landing to ask for
+                add(LAND, e, e)
             last_air = e
         elif lab == "low" and (s - last_air) / fps < LAND_WINDOW:  # absorbing the landing
             if stages[-1]["kind"] == "stand":  # passed through standing height on the way down
@@ -138,7 +145,8 @@ def compile_spec(pos, fps, skill=None, max_clearance=MAX_CLEARANCE, name=None):
     spec = {"name": name, "fps": fps, "duration_s": round(len(pos) / fps, 3),
             "h0": round(h0, 3), "foot0": round(foot0, 3), "z_low": round(0.7 * h0, 3),
             "down": DOWN, "air": AIR, "down_ref": round(down_ref, 3), "air_ref": round(air_ref, 3), "weights": dict(WEIGHTS), "stages": stages,
-            "summary": summarize(stages), "warnings": []}
+            "summary": summarize(stages),
+            "warnings": ["the clip ends in the air: no landing to do"] if stages[-1]["kind"] == "jump" else []}
     if skill:
         attach_skill(spec, skill)
     return spec

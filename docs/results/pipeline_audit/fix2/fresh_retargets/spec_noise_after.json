@@ -1,0 +1,692 @@
+{
+ "squat_jump": {
+  "stages": 12,
+  "2cm": {
+   "as_is": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   }
+  },
+  "4cm": {
+   "as_is": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   }
+  },
+  "6cm": {
+   "as_is": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   }
+  }
+ },
+ "squat": {
+  "stages": 9,
+  "2cm": {
+   "as_is": {
+    "stages_done": 9.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 9.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 9.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 9.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 9.0,
+    "pass_rate": 1.0
+   }
+  },
+  "4cm": {
+   "as_is": {
+    "stages_done": 9.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 9.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 9.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 9.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 9.0,
+    "pass_rate": 1.0
+   }
+  },
+  "6cm": {
+   "as_is": {
+    "stages_done": 9.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 9.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 9.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 9.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 9.0,
+    "pass_rate": 1.0
+   }
+  }
+ },
+ "lunge": {
+  "stages": 15,
+  "2cm": {
+   "as_is": {
+    "stages_done": 15.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 15.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 15.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 15.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 15.0,
+    "pass_rate": 1.0
+   }
+  },
+  "4cm": {
+   "as_is": {
+    "stages_done": 15.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 15.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 15.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 15.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 15.0,
+    "pass_rate": 1.0
+   }
+  },
+  "6cm": {
+   "as_is": {
+    "stages_done": 15.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 15.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 15.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 15.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 15.0,
+    "pass_rate": 1.0
+   }
+  }
+ },
+ "arms": {
+  "stages": 3,
+  "2cm": {
+   "as_is": {
+    "stages_done": 3.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 3.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 3.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 3.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 3.0,
+    "pass_rate": 1.0
+   }
+  },
+  "4cm": {
+   "as_is": {
+    "stages_done": 3.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 3.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 3.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 3.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 3.0,
+    "pass_rate": 1.0
+   }
+  },
+  "6cm": {
+   "as_is": {
+    "stages_done": 3.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 3.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 3.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 3.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 3.0,
+    "pass_rate": 1.0
+   }
+  }
+ },
+ "front_kick": {
+  "stages": 6,
+  "2cm": {
+   "as_is": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   }
+  },
+  "4cm": {
+   "as_is": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   }
+  },
+  "6cm": {
+   "as_is": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   }
+  }
+ },
+ "jumping_jacks": {
+  "stages": 12,
+  "2cm": {
+   "as_is": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   }
+  },
+  "4cm": {
+   "as_is": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   }
+  },
+  "6cm": {
+   "as_is": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 12.0,
+    "pass_rate": 1.0
+   }
+  }
+ },
+ "punches": {
+  "stages": 6,
+  "2cm": {
+   "as_is": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   }
+  },
+  "4cm": {
+   "as_is": {
+    "stages_done": 5.9,
+    "pass_rate": 0.88
+   },
+   "no_hold": {
+    "stages_done": 5.9,
+    "pass_rate": 0.88
+   },
+   "tol_x2": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   }
+  },
+  "6cm": {
+   "as_is": {
+    "stages_done": 5.2,
+    "pass_rate": 0.5
+   },
+   "no_hold": {
+    "stages_done": 5.9,
+    "pass_rate": 0.88
+   },
+   "tol_x2": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 6.0,
+    "pass_rate": 1.0
+   }
+  }
+ },
+ "shot_put": {
+  "stages": 4,
+  "2cm": {
+   "as_is": {
+    "stages_done": 3.6,
+    "pass_rate": 0.88
+   },
+   "no_hold": {
+    "stages_done": 4.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 4.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 4.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 4.0,
+    "pass_rate": 1.0
+   }
+  },
+  "4cm": {
+   "as_is": {
+    "stages_done": 2.8,
+    "pass_rate": 0.5
+   },
+   "no_hold": {
+    "stages_done": 3.1,
+    "pass_rate": 0.62
+   },
+   "tol_x2": {
+    "stages_done": 4.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 4.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 4.0,
+    "pass_rate": 1.0
+   }
+  },
+  "6cm": {
+   "as_is": {
+    "stages_done": 3.6,
+    "pass_rate": 0.88
+   },
+   "no_hold": {
+    "stages_done": 3.5,
+    "pass_rate": 0.75
+   },
+   "tol_x2": {
+    "stages_done": 4.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 4.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 4.0,
+    "pass_rate": 1.0
+   }
+  }
+ },
+ "discus": {
+  "stages": 2,
+  "2cm": {
+   "as_is": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   }
+  },
+  "4cm": {
+   "as_is": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   }
+  },
+  "6cm": {
+   "as_is": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   }
+  }
+ },
+ "hurdles": {
+  "stages": 2,
+  "2cm": {
+   "as_is": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   }
+  },
+  "4cm": {
+   "as_is": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   }
+  },
+  "6cm": {
+   "as_is": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "no_hold": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "tol_x2": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "tol_x3": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   },
+   "no_hold_tol_x2": {
+    "stages_done": 2.0,
+    "pass_rate": 1.0
+   }
+  }
+ }
+}

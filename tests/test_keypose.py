@@ -444,3 +444,64 @@ def test_a_clip_cut_mid_motion_does_not_end_on_its_last_frame():
     assert T.evaluate(spec, lag, FPS)["success"]
     calm = K.compile_keypose_spec(motion("punch"), FPS)  # a clip that ends at rest is compiled as before
     assert "goals_end_s" not in calm and not calm["warnings"]
+
+
+def test_a_clip_that_ends_in_the_air_asks_for_no_landing():
+    """The hurdles clip ends over the hurdle: its spec ends with the flight (no landing, no finish the video doesn't
+    show), and the reference passes it; standing still and a body that never leaves the floor still fail."""
+    pos = motion("jump")
+    t = np.arange(len(pos)) / FPS
+    cut = pos[: int(np.searchsorted(t, 8.0 / 3 + 0.1))]  # the clip ends just past the second flight's apex
+    spec = self_spec(K.compile_keypose_spec(cut, FPS))
+    assert spec["stages"][-1]["kind"] == "flight" and spec["warnings"]
+    assert [s["kind"] for s in spec["stages"]].count("flight") == 2
+    assert T.evaluate(spec, cut, FPS)["success"]
+    assert not T.evaluate(spec, np.repeat(cut[:1], len(cut), 0), FPS)["success"]
+    grounded = motion("squat")[: len(cut)]
+    assert not T.evaluate(spec, grounded, FPS)["success"]
+    full = K.compile_keypose_spec(pos, FPS)  # one that lands keeps its landings and finish
+    assert full["stages"][-1]["kind"] != "flight" and not full["warnings"]
+    assert T.compile_spec(cut, FPS)["stages"][-1]["kind"] == "jump"  # the stand/squat/jump spec too
+
+
+def test_the_next_root_goal_is_measured_from_the_closest_approach():
+    """_compile measures a stage's root goal from the reference's previous key frame; the machine anchors it where
+    the rollout came closest to that key pose, which for the reference itself is the key frame, at any tempo."""
+    pos = motion("squat")
+    pos[:, :, 0] += np.linspace(0, 0.8, len(pos))[:, None]  # travelling forward through the squats
+    spec = self_spec(K.compile_keypose_spec(pos, FPS))
+    poses = [i for i, s in enumerate(spec["stages"]) if s["kind"] == "pose"]
+    for speed in (1.0, 1.4):
+        p = torch.as_tensor(resampled(pos, speed))
+        m = T.machine(spec, 1, dt=1 / FPS)
+        m.reset(torch.tensor([0]), 0.0, p[:1])
+        anchors = {}
+        for t in range(1, len(p)):
+            before = int(m.stage[0])
+            m.step(p[t:t + 1])
+            if int(m.stage[0]) != before:
+                anchors[before] = float(m.anchor_xy[0, 0])
+        assert bool(m.done[0]), speed
+        for i in poses[:-1]:
+            if i in anchors and not spec["stages"][i].get("optional"):
+                key_x = float(pos[spec["stages"][i]["frame"], K.PELVIS, 0])
+                assert abs(anchors[i] - key_x) < 0.8 / len(pos) * speed * 3 + 1e-3, (speed, i, anchors[i], key_x)
+
+
+def test_a_spin_is_judged_by_the_turn_it_measures():
+    """A discus-like spin past a full turn: the root-turn tolerance is a share of the wrapped turn the goal measures,
+    not of the unwrapped spin (that allowed 2.2 rad either way on the discus), and the reference still passes."""
+    pos = motion("squat", reps=1)
+    n = len(pos)
+    yaw = np.clip((np.arange(n) / FPS - 1.0) / 2.0, 0, 1) * (2 * np.pi + 0.8)  # 1 turn and 0.8 rad, from 1 s to 3 s
+    rel = pos - pos[:, :1]
+    c, s = np.cos(yaw)[:, None], np.sin(yaw)[:, None]
+    spun = pos.copy()
+    spun[..., 0], spun[..., 1] = pos[:, :1, 0] + c * rel[..., 0] - s * rel[..., 1], pos[:, :1, 1] + s * rel[..., 0] + c * rel[..., 1]
+    spec = self_spec(K.compile_keypose_spec(spun, FPS))
+    i = spec["features"].index("root turn")
+    for st in spec["stages"]:
+        if st["kind"] == "pose" and st["relevance"][i] > 0:
+            wrapped = abs(st["goal"][i])
+            assert st["tol"][i] <= max(K.TOL_MIN[i].item(), K.TOL_FRAC * wrapped) / np.sqrt(st["relevance"][i]) + 1e-3
+    assert T.evaluate(spec, spun, FPS)["success"]
