@@ -3,59 +3,60 @@
   {
    "id": "squat-jump",
    "tab": "Squat jump",
-   "title": ["The squat jump,", "learned."],
+   "title": [
+    "The squat jump,",
+    "learned."
+   ],
    "kicker": "One phone video → one policy",
    "lede": "A person squat-jumping on a phone video became this simulated Unitree G1, controlled by a policy trained with reinforcement learning. It's the policy, not an animation of the video. Push it.",
    "video": "One clip from a phone: a person squat-jumping, twice. SAM 3.1 segments them, MediaPipe lifts their pose to 3D.",
    "policy": "PPO in mjlab across thousands of simulated G1s, on 36 automatic variants of the clip, with pushes during training. What you see is that network's own run in MuJoCo, recorded.",
-   "facts": [{"v": "78%", "l": "of held-out variants completed"}],
+   "facts": [
+    {
+     "v": "78%",
+     "l": "of held-out variants completed"
+    }
+   ],
    "research": "/research/squat-jump-variants",
    "fallback": "examples/squat-jump-variants/policy_tracking_var.mp4"
   },
   {
    "id": "front-kick",
    "tab": "Front kick",
-   "title": ["The front kick,", "learned."],
+   "title": [
+    "The front kick,",
+    "learned."
+   ],
    "kicker": "One phone video → one policy",
    "lede": "Two front kicks on a phone video, turned into a policy that balances on one leg through each kick. Push it mid-kick.",
    "video": "One clip from a phone: two front kicks with the right leg. SAM 3.1 segments the person, MediaPipe lifts their pose to 3D.",
    "policy": "PPO in mjlab on 36 automatic variants of the clip (mirrored, re-timed, rescaled), with pushes during training. The network's own run in MuJoCo, recorded.",
-   "facts": [{"v": "100%", "l": "of held-out variants completed"}],
+   "facts": [
+    {
+     "v": "100%",
+     "l": "of held-out variants completed"
+    }
+   ],
    "research": "/research/front-kick-variants",
    "fallback": "examples/front-kick-variants/policy_tracking_var.mp4"
   },
   {
    "id": "squat",
    "tab": "Squat",
-   "title": ["The squat,", "learned."],
+   "title": [
+    "The squat,",
+    "learned."
+   ],
    "kicker": "One phone video → one policy",
    "lede": "Two slow squats on a phone video. The policy follows the reference within a few degrees per joint, and keeps its feet planted when pushed.",
    "video": "One clip from a phone: two bodyweight squats. SAM 3.1 segments the person, MediaPipe lifts their pose to 3D.",
    "policy": "PPO in mjlab tracking the retarget, trained on the clip itself (2,000 iterations), with pushes during training. The network's own run in MuJoCo, recorded.",
-   "facts": [{"v": "0.08 rad", "l": "mean joint error to the reference"}]
-  },
-  {
-   "id": "discus",
-   "tab": "Discus · 1900",
-   "title": ["A 1900 discus", "throw, learned."],
-   "kicker": "A 1900 film → one policy",
-   "lede": "Josiah McCracken, a 1900 Olympic medallist, throwing the discus for Étienne-Jules Marey's camera in 1900: a 429° spin and a release. Shown here as its silhouette. Push it mid-spin.",
-   "video": "A public-domain 1900 film: grainy, flickering, 25 fps. SAM 3.1 still finds the athlete in every frame; MediaPipe lifts the pose to 3D.",
-   "policy": "PPO in mjlab, starting from a policy trained on five other clips, then 1,500 iterations on this clip's variants. The network's own run in MuJoCo, recorded.",
-   "facts": [{"v": "100%", "l": "of throws completed in evaluation"}, {"v": "92%", "l": "completed under 0.5–1.5 m/s pushes"}],
-   "research": null
-  },
-  {
-   "id": "shot-put",
-   "tab": "Shot put · 1900",
-   "title": ["A 1900 shot put,", "almost."],
-   "kicker": "A 1900 film → one policy",
-   "lede": "Josiah McCracken, shot put silver medallist at the 1900 Paris Olympics, filmed by Étienne-Jules Marey. The policy holds the wind-up and the throw without falling, but it doesn't learn the 1 m sideways glide yet: compare it with the retarget ghost.",
-   "video": "A public-domain 1900 film by Étienne-Jules Marey. SAM 3.1 finds the athlete in every frame; MediaPipe lifts the pose to 3D.",
-   "policy": "PPO in mjlab, starting from a policy trained on five other clips, then 1,500 iterations on this clip's variants. It tracks the joints closely but stays near its starting spot.",
-   "facts": [{"v": "0.19 rad", "l": "mean joint error to the reference"}],
-   "research": null,
-   "caveat": "Work in progress: no glide yet"
+   "facts": [
+    {
+     "v": "0.08 rad",
+     "l": "mean joint error to the reference"
+    }
+   ]
   }
  ]
 }
