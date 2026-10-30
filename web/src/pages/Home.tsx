@@ -11,7 +11,7 @@ import { startLiveBuild } from "./LivePage";
 
 const PIPELINE = [
   { title: "Silhouette", text: "Segment and track the person through every frame.", model: "SAM 3.1" },
-  { title: "Pose", text: "3D body landmarks per frame, lifted to world space.", model: "MediaPipe" },
+  { title: "Pose", text: "3D body landmarks per frame, lifted to world space.", model: "SAM 3D Body" },
   { title: "Retarget", text: "Inverse kinematics onto a 29-DoF Unitree G1.", model: "mink IK" },
   { title: "Task environment", text: "Key moments, contacts and the reward machine, from the retarget.", model: "key poses" },
   { title: "Latent reward", text: "Embed video and robot renders; distill a reward net.", model: "V-JEPA 2" },

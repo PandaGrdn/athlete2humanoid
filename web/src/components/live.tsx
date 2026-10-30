@@ -38,7 +38,7 @@ function useCanvas(draw: (c: CanvasRenderingContext2D, w: number, h: number) => 
   return ref;
 }
 
-/** MediaPipe's 2D landmarks over the processed video, at the video's current frame. The video is
+/** The pose model's 2D landmarks over the processed video, at the video's current frame. The video is
  *  object-fit: contain, so the landmarks go in the letterboxed picture, not the element's box. */
 export function PoseOverlay({ video, data }: { video: HTMLVideoElement | null; data: LiveData }) {
   const lm = data.landmarks;

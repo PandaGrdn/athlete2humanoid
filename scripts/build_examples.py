@@ -342,7 +342,7 @@ def ex_squat_v1(runs, media):
 
 
 def ex_retarget(runs, media):
-    cmp = read_json(runs / "retarget_compare" / "compare.json")
+    cmp = read_json(runs / RETARGET_COMPARE / "compare.json")
     clip = "squat_jump"
     clips = sorted(cmp)
 
@@ -369,7 +369,7 @@ def ex_retarget(runs, media):
     angle = [c for c in compare if c["label"].endswith("angle error")]
     ratios = sorted(c["ratio"] for c in angle)
     slide = compare[0]
-    video = runs / "retarget_compare" / clip / "compare.mp4"
+    video = runs / RETARGET_COMPARE / clip / "compare.mp4"
     w, h, _ = probe(video)
     athlete_w = w - 2 * h  # athlete | robot (h x h) | robot (h x h)
     panels = [{"label": "Athlete", "from": 0, "to": r(athlete_w / w)},
@@ -416,8 +416,8 @@ def ex_retarget(runs, media):
 
 
 def ex_goal_relevance(runs, media):
-    clean = read_json(runs / "goal_relevance" / "squat_jump" / "importance.json")
-    hype_dir = runs / "goal_relevance" / "squat_jump_hype"
+    clean = read_json(runs / GOAL_RELEVANCE / "squat_jump" / "importance.json")
+    hype_dir = runs / GOAL_RELEVANCE / "squat_jump_hype"
     imp = read_json(hype_dir / "importance.json")
     spec = read_json(hype_dir / "task_spec.json")
     fps, w = imp["fps"], imp["weight"]
@@ -450,7 +450,7 @@ def ex_goal_relevance(runs, media):
     arms_prop = prop["group_share"]["left_arm"] + prop["group_share"]["right_arm"]
     same_after = max(abs(x - y) for x, y in zip(w[ib:], clean["weight"][ib:]))
 
-    clip = runs / "remote_latent" / "clips" / "squat_jump"
+    clip = runs / REFERENCE_CLIPS / "squat_jump"
     sbs = clip / "side_by_side.mp4"
     rendered = render_hype(qpos, read_json(clip / "meta.json"))
     if rendered:
@@ -865,10 +865,10 @@ def ex_variants(runs, media, short, target, title, single_run):
     """Tracking and task+tracking trained on automatic variants of a clip, against the single-clip policies on
     held-out variants (experiments/variant_policy.py, then robustness_eval with --transfer)."""
     ex_id = f"{target.replace('_', '-')}-variants"
-    run, rb_f = runs / f"remote_variants_var_{short}", runs / f"remote_robust_gen2_{short}" / "robust.json"
+    run, rb_f = runs / f"remote_variants_{VARIANT_TAG}_{short}", runs / f"remote_robust_{VARIANT_TAG}_{short}" / "robust.json"
     rb = read_json(rb_f)
     summ, meta = rb["summary"], rb["meta"]
-    keys = ["tracking_var", "taskhybrid_var", "tracking", "taskhybrid", "task"]
+    keys = [k for k in ("tracking_var", "taskhybrid_var", "tracking", "taskhybrid", "task") if k in summ]
     pct = lambda x: f"{x:.0%}"  # noqa: E731
     spec = read_json(run / "task_spec.json")
     clip = run / "clips" / target
@@ -887,7 +887,7 @@ def ex_variants(runs, media, short, target, title, single_run):
         if c.get("dtw_joint_rad") is not None:
             v["joint_deg"] = {"value": r(c["dtw_joint_rad"] * 57.29578, 1), "display": f"{c['dtw_joint_rad'] * 57.29578:.1f}°"}
         rows.append({"key": k, "label": label, "color": POLICY_COLOR[k], "reward": what, "values": v})
-    best = max(("tracking", "taskhybrid", "task"), key=lambda k: summ[k]["transfer"]["task_success"])
+    best = max([k for k in ("tracking", "taskhybrid", "task") if k in summ], key=lambda k: summ[k]["transfer"]["task_success"])
     tv, base = summ["tracking_var"]["transfer"], summ[best]["transfer"]
     names = {"transfer": "Held-out variant", "tempo": "Tempo", "push": "Pushed (random)", "noref": "No reference"}
     conditions = [{"suite": c["suite"], "suite_label": names[c["suite"]],
@@ -938,7 +938,8 @@ def ex_variants(runs, media, short, target, title, single_run):
         "robust": {"policies": [{"key": k, "label": POLICY_INFO[k][0], "color": POLICY_COLOR[k]} for k in keys],
                    "conditions": conditions, "reps": meta["reps"], "metric": "task_success"},
         "sources": [_rel(runs, rb_f), _rel(runs, run / "task_spec.json"), _rel(runs, run / "variants" / "variants.json")],
-        "notes": ["Single-clip task and task + tracking are the spec-fixed retrains (docs/KEYPOSE_SPEC.md)."],
+        "notes": ["Every policy here trained on the SAM 3D Body reference of the clip (docs/PIPELINE_ACCURACY.md, fix 3), "
+                  "warm-started from the policy an earlier run trained on its MediaPipe reference."],
     }
 
 
@@ -966,6 +967,14 @@ def _sbs_panels(path):
 
 # --- build / check -------------------------------------------------------------------------------
 
+# The gallery's runs: the SAM 3D Body references (docs/PIPELINE_ACCURACY.md, fix 3) and what was trained on them.
+# The MediaPipe-era folders (retarget_compare, goal_relevance, remote_variants_var_*, remote_robust_gen2_*,
+# remote_latent_final / _kp_kick) are kept in outputs/ but no longer shown.
+REFERENCE_CLIPS = "mc_inputs/clips"  # re-processed in place with SAM 3D Body (experiments/reprocess_clips.py)
+RETARGET_COMPARE = "retarget_compare_s3"
+GOAL_RELEVANCE = "goal_relevance_s3"
+VARIANT_TAG = "s3"  # remote_variants_s3_<short>, remote_robust_s3_<short>, remote_latent_s3_<short> (single clip)
+
 BUILDERS = ["squat-jump-variants", "front-kick-variants", "retarget", "goal-relevance"]
 
 
@@ -982,9 +991,9 @@ def build(runs, out, force=False):
               "squat-jump-final": lambda: ex_final(runs, media),
               "robustness-final": lambda: ex_robustness_final(runs, built.get("squat-jump-final")),
               "front-kick": lambda: ex_keypose_kick(runs, media),
-              "squat-jump-variants": lambda: ex_variants(runs, media, "sj", "squat_jump", "Squat jump", "remote_latent_final"),
+              "squat-jump-variants": lambda: ex_variants(runs, media, "sj", "squat_jump", "Squat jump", f"remote_latent_{VARIANT_TAG}_sj"),
               "front-kick-variants": lambda: ex_variants(runs, media, "kick", "front_kick", "Front kick",
-                                                         "remote_latent_kp_kick")}[name]()
+                                                         f"remote_latent_{VARIANT_TAG}_kick")}[name]()
         built[name] = ex
         ex.setdefault("status", "ready")
         (out / ex["id"]).mkdir(parents=True, exist_ok=True)

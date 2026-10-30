@@ -105,7 +105,7 @@ export function AuroraHero({ latest }: { latest?: string }) {
   );
 }
 
-const STACK = ["SAM 3.1", "MediaPipe", "mink IK", "V-JEPA 2", "PPO", "mjlab", "MuJoCo Warp", "Unitree G1", "ONNX"];
+const STACK = ["SAM 3.1", "SAM 3D Body", "mink IK", "V-JEPA 2", "PPO", "mjlab", "MuJoCo Warp", "Unitree G1", "ONNX"];
 
 /** The models the pipeline runs, scrolling past. */
 export function StackMarquee() {
@@ -229,7 +229,7 @@ export function AuroraFooter({ switcher }: { switcher: ReactNode }) {
           </nav>
         </div>
         <div className="au-footer-base">
-          <span>Video → SAM 3.1 → MediaPipe → mink IK → V-JEPA 2 reward → PPO (mjlab) → Unitree G1</span>
+          <span>Video → SAM 3.1 → SAM 3D Body → mink IK → V-JEPA 2 reward → PPO (mjlab) → Unitree G1</span>
           <span>Meta Global AI Developer Hackathon · Push the Frontier</span>
           {switcher}
         </div>

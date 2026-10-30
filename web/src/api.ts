@@ -186,6 +186,8 @@ export type LiveData = {
   // 2D, 0..1 of the processed frame (x right, y down); null where not detected.
   landmarks: { names: string[]; edges: [number, number][]; frames: (([number, number] | null)[] | null)[] } | null;
   pose_found: number | null;
+  // which 3D pose model ran (server/live_worker.py): "MediaPipe" on the CPU, "SAM 3D Body" in recorded builds
+  pose_model?: string;
   // G1 bodies in metres, world frame, z up.
   robot: { names: string[]; edges: [number, number][]; frames: [number, number, number][][] } | null;
   retarget_error_cm: Record<string, [number, number]> | null;

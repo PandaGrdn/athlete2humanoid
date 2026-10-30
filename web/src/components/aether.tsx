@@ -47,7 +47,7 @@ export function AetherHero({ video, poster, title, to }: { video?: string; poste
           <Link className="btn" to="/live"><Icon name="upload" size={14} />Run your video</Link>
         </div>
         <div className="ae-stack mono">
-          <span>SAM 3.1</span><span>MediaPipe</span><span>mink IK</span><span>V-JEPA 2</span><span>PPO · mjlab</span>
+          <span>SAM 3.1</span><span>SAM 3D Body</span><span>mink IK</span><span>V-JEPA 2</span><span>PPO · mjlab</span>
         </div>
       </div>
       <div className="fade-in">
