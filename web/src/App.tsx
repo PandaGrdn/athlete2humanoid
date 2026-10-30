@@ -3,13 +3,14 @@ import { Link, Navigate, NavLink, Route, Routes, useLocation, useParams } from "
 import { api, type Health } from "./api";
 import { UiSwitch } from "./components/aether";
 import { AuroraFooter, AuroraNav } from "./components/aurora";
+import { PixelFooter, PixelNav } from "./components/pixel";
 import { Icon } from "./components/ui";
 import { ExampleDetail, ExamplesIndex } from "./pages/Examples";
 import Home from "./pages/Home";
 import JobPage from "./pages/JobPage";
 import LivePage, { LiveReplayPage } from "./pages/LivePage";
 import RunPage from "./pages/RunPage";
-import { useUi, type Ui } from "./theme";
+import { UiCtx, useUi } from "./theme";
 
 // three.js only loads with the showcase
 const Showcase = lazy(() => import("./pages/Showcase"));
@@ -23,8 +24,7 @@ function OldExample() {
 
 const HealthCtx = createContext<{ health: Health | null; error: string | null }>({ health: null, error: null });
 export const useHealth = () => useContext(HealthCtx);
-const UiCtx = createContext<Ui>("classic");
-export const useUiMode = () => useContext(UiCtx);
+export { useUiMode } from "./theme";
 
 const REPO_URL = "https://github.com/PandaGrdn/athlete2humanoid";
 
@@ -57,7 +57,7 @@ export default function App() {
   return (
     <HealthCtx.Provider value={{ health, error }}>
       <UiCtx.Provider value={ui}>
-      {ui === "aurora" ? <AuroraNav /> : ui === "aether" ? <AetherNav /> : <header className="nav">
+      {ui === "pixel" ? <PixelNav /> : ui === "aurora" ? <AuroraNav /> : ui === "aether" ? <AetherNav /> : <header className="nav">
         <div className="container nav-inner">
           <Link to="/" className="brand">
             <img src="/favicon.svg" alt="" />
@@ -100,7 +100,8 @@ export default function App() {
           <Route path="*" element={<div className="container section"><h2>Not found</h2><p className="muted" style={{ marginTop: 8 }}><Link to="/">Back to the start</Link></p></div>} />
         </Routes>
       </main>
-      {ui === "aurora" ? <AuroraFooter switcher={<UiSwitch ui={ui} setUi={setUi} />} /> : <footer className="site">
+      {ui === "pixel" ? <PixelFooter switcher={<UiSwitch ui={ui} setUi={setUi} />} />
+        : ui === "aurora" ? <AuroraFooter switcher={<UiSwitch ui={ui} setUi={setUi} />} /> : <footer className="site">
         <div className="container">
           <span>Video → SAM 3.1 → MediaPipe → mink IK → V-JEPA 2 reward → PPO (mjlab) → Unitree G1</span>
           <span>Meta Global AI Developer Hackathon · Push the Frontier</span>

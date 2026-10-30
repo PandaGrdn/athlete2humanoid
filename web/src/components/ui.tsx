@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { url } from "../api";
+import { useUiMode } from "../theme";
 
-type IconName = "upload" | "play" | "pause" | "download" | "arrow" | "cube" | "chart" | "file" | "film" | "x" | "check" | "github";
+export type IconName = "upload" | "play" | "pause" | "download" | "arrow" | "cube" | "chart" | "file" | "film" | "x" | "check" | "github";
 
 const PATHS: Record<IconName, string> = {
   upload: "M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5M4 16v2.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V16",
@@ -18,7 +19,53 @@ const PATHS: Record<IconName, string> = {
   github: "M9 19c-4 1.5-4-2-6-2.5m12 5v-3.5a3 3 0 0 0-.9-2.4c2.9-.3 5.9-1.4 5.9-6.4a5 5 0 0 0-1.4-3.5 4.6 4.6 0 0 0-.1-3.5s-1.1-.3-3.6 1.4a12.3 12.3 0 0 0-6.4 0C6.2 2.8 5.1 3.1 5.1 3.1a4.6 4.6 0 0 0-.1 3.5A5 5 0 0 0 3.6 10c0 5 3 6.1 5.9 6.4a3 3 0 0 0-.9 2.4V22",
 };
 
+/** The pixel design's icons: 11 x 11 bitmaps, one row per string, "#" filled. */
+const PIXELS: Record<IconName | "mark" | "menu", string[]> = {
+  upload: [".....#.....", "....###....", "...#####...", ".....#.....", ".....#.....", ".....#.....", ".#...#...#.", ".#.......#.", ".#########."],
+  play: ["...#.......", "...##......", "...###.....", "...####....", "...#####...", "...####....", "...###.....", "...##......", "...#......."],
+  pause: ["..##...##..", "..##...##..", "..##...##..", "..##...##..", "..##...##..", "..##...##..", "..##...##.."],
+  download: [".....#.....", ".....#.....", ".....#.....", "...#####...", "....###....", ".....#.....", ".#.......#.", ".#.......#.", ".#########."],
+  arrow: ["......#....", ".......#...", "........#..", ".#########.", "........#..", ".......#...", "......#...."],
+  cube: ["...#######.", "..#.....##.", ".#######.#.", ".#.....#.#.", ".#.....#.#.", ".#.....#.#.", ".#.....#.#.", ".#.....##..", ".#######..."],
+  chart: [".#.........", ".#.......#.", ".#......#..", ".#.#...#...", ".#..#.#....", ".#...#.....", ".#.........", ".#.........", ".#########."],
+  file: ["..#####....", "..#...##...", "..#...###..", "..#.....#..", "..#.....#..", "..#.....#..", "..#.....#..", "..#.....#..", "..#######.."],
+  film: [".#########.", ".#.#...#.#.", ".###...###.", ".#.#...#.#.", ".###...###.", ".#.#...#.#.", ".###...###.", ".#.#...#.#.", ".#########."],
+  x: ["..#.....#..", "...#...#...", "....#.#....", ".....#.....", "....#.#....", "...#...#...", "..#.....#.."],
+  check: [".........#.", "........#..", ".......#...", ".#....#....", "..#..#.....", "...##......"],
+  github: [".#.......#.", ".##.....##.", ".#########.", "###########", "###.###.###", "###########", ".#########.", "...#...#...", "...#...#..."],
+  menu: [".#########.", "...........", "...........", ".#########.", "...........", "...........", ".#########."],
+  // a person mid-jump, arms out: the wordmark's glyph
+  mark: ["....###....", "....###....", "...........", ".#########.", ".....#.....", ".....#.....", "....###....", "...#...#...", "..#.....#..", "..#.....#.."],
+};
+
+/** Bitmap rows to one path of unit squares, vertically centred in the 11 x 11 box. */
+function pixelPath(rows: string[]) {
+  const top = Math.floor((11 - rows.length) / 2);
+  let d = "";
+  rows.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) {
+      if (row[x] !== "#") continue;
+      let n = 1;
+      while (row[x + n] === "#") n++;
+      d += `M${x} ${y + top}h${n}v1h-${n}z`;
+      x += n - 1;
+    }
+  });
+  return d;
+}
+const PIXEL_PATHS = Object.fromEntries(Object.entries(PIXELS).map(([k, rows]) => [k, pixelPath(rows)])) as Record<IconName | "mark" | "menu", string>;
+
+export function PixelIcon({ name, size = 18 }: { name: IconName | "mark" | "menu"; size?: number }) {
+  return (
+    <svg className="px-icon" width={size} height={size} viewBox="0 0 11 11" fill="currentColor" shapeRendering="crispEdges" aria-hidden="true">
+      <path d={PIXEL_PATHS[name]} />
+    </svg>
+  );
+}
+
 export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
+  const ui = useUiMode();
+  if (ui === "pixel") return <PixelIcon name={name} size={size} />;
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}
       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

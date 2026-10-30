@@ -1,16 +1,21 @@
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 
-/** Three designs over the same pages: "aurora" (the default: midnight, electric blue and cantaloupe, editorial
- *  serif headings and mono labels), "aether" (black and white, after Nous Research's Hermes Agent) and "classic"
- *  (the original). Any can be picked from the footer, or with ?ui=aurora / ?ui=aether / ?ui=classic; the choice
- *  is remembered per browser. Classic stays the fallback: anything a design doesn't restyle looks as it always
- *  did. VITE_DEFAULT_UI=aether or classic builds with that one as the default instead. */
-export type Ui = "classic" | "aether" | "aurora";
-// v2: a choice saved before aurora existed (aether was the default then) no longer overrides it
-const KEY = "a2h-ui-v2";
-const isUi = (v: unknown): v is Ui => v === "classic" || v === "aether" || v === "aurora";
-const DEFAULT: Ui = isUi(import.meta.env.VITE_DEFAULT_UI) ? import.meta.env.VITE_DEFAULT_UI : "aurora";
-const THEME_COLOR: Record<Ui, string> = { classic: "#0a0c0f", aether: "#000000", aurora: "#02070A" };
+/** Four designs over the same pages: "pixel" (the default: white paper, black ink, dot-matrix headings, a glyph
+ *  field in the hero, after Sequoia's bot tournament page), "aurora" (midnight, electric blue and cantaloupe,
+ *  editorial serif headings), "aether" (black and white, after Nous Research's Hermes Agent) and "classic" (the
+ *  original). Any can be picked from the footer, or with ?ui=pixel / ?ui=aurora / ?ui=aether / ?ui=classic; the
+ *  choice is remembered per browser. Classic stays the fallback: anything a design doesn't restyle looks as it
+ *  always did. VITE_DEFAULT_UI=aurora (or another) builds with that one as the default instead. */
+export type Ui = "classic" | "aether" | "aurora" | "pixel";
+// v3: a choice saved before pixel existed (aurora was the default then) no longer overrides it
+const KEY = "a2h-ui-v3";
+const isUi = (v: unknown): v is Ui => v === "classic" || v === "aether" || v === "aurora" || v === "pixel";
+const DEFAULT: Ui = isUi(import.meta.env.VITE_DEFAULT_UI) ? import.meta.env.VITE_DEFAULT_UI : "pixel";
+const THEME_COLOR: Record<Ui, string> = { classic: "#0a0c0f", aether: "#000000", aurora: "#02070A", pixel: "#FFFFFF" };
+
+/** The design in use, for components that render differently per design (App provides it). */
+export const UiCtx = createContext<Ui>("classic");
+export const useUiMode = () => useContext(UiCtx);
 
 function initial(): Ui {
   const q = new URLSearchParams(window.location.search).get("ui");

@@ -4,6 +4,7 @@ import { api, fmt, policyColor, url, type FileRef, type Policy, type Robust, typ
 import { BarChart, LineChart } from "../components/charts";
 import { EnvironmentPanel } from "../components/environment";
 import { Icon, LoopVideo } from "../components/ui";
+import { Typed } from "../components/pixel";
 
 const NEUTRAL = "#4a5562";
 
@@ -50,7 +51,7 @@ export default function RunPage() {
       <div className="run-head">
         <div>
           <div className="eyebrow"><Link to="/#gallery">Gallery</Link> / {run.id}</div>
-          <h1 style={{ marginTop: 6 }}>{run.title}</h1>
+          <h1 style={{ marginTop: 6 }}><Typed text={run.title} when="load" /></h1>
           <div className="meta">
             {run.target && <span className="pill">target clip: {run.target}</span>}
             {run.iterations && <span className="pill mono">{run.iterations.toLocaleString()} PPO iterations</span>}

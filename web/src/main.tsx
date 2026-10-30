@@ -11,10 +11,13 @@ import "@fontsource/instrument-serif/400.css";
 import "@fontsource/instrument-serif/400-italic.css";
 import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
+import "@fontsource-variable/doto/full.css";
+import "@fontsource-variable/martian-mono/wdth.css";
 import App from "./App";
 import "./styles.css";
 import "./styles-aether.css";
 import "./styles-aurora.css";
+import "./styles-pixel.css";
 import { applyInitialUi } from "./theme";
 
 applyInitialUi();

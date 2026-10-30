@@ -15,7 +15,7 @@ const LINKS = [
   { to: "/research", label: "Research" },
 ];
 
-function useApiStatus() {
+export function useApiStatus() {
   const { health, error } = useHealth();
   const label = health?.runners.includes("colab") ? "A100 online" : health ? "API online" : error ? "Offline demo" : "Connecting";
   const title = error && !health ? `The pipeline API isn't reachable (${error}). The showcase and research pages work without it.`
