@@ -746,6 +746,29 @@ for task, cfg in (("A2H-TrackingL-Flat-Unitree-G1", lambda play=False: unitree_g
                         rl_cfg=bigger_network(unitree_g1_tracking_ppo_runner_cfg()), runner_cls=MotionTrackingOnPolicyRunner)
 
 
+# World model (experiments/worldmodel_policy.py, docs/FRONTIER_WORLD_MODEL.md)
+PREDICTED = 2  # predicted latents per step (latent/world_model.py HORIZONS: ~0.5 s and 1 s ahead)
+
+
+def video_latent_predicted(env, command_name="motion"):
+    """A2H-TrackingVJPred: A2H-TrackingVJCausal's input (the causal latent now and 0.5 s ago) plus what
+    V-JEPA 2's predictor imagines, from the video so far, the latent will be ~0.5 s and 1 s on.
+    A2H_VIDEO_LATENT holds (T, K * (1 + PREDICTED)) per motion step: the causal latent, then the
+    predictions made at that step; every column is read at or before the current step."""
+    cmd = env.command_manager.get_term(command_name)
+    K = video_condition.K
+    lat = video_latent_table(env, cmd.motion.time_step_total, causal=True)
+    if lat is None:
+        return torch.zeros(env.num_envs, K * (len(video_condition.CAUSAL_OFFSETS_S) + PREDICTED), device=env.device)
+    past = [lat[_ahead(cmd, round(o / env.step_dt)), :K] for o in video_condition.CAUSAL_OFFSETS_S]
+    return torch.cat([*past, lat[_ahead(cmd, 0), K:K * (1 + PREDICTED)]], -1)
+
+
+register_mjlab_task(task_id="A2H-TrackingVJPred-Flat-Unitree-G1",
+                    env_cfg=use_variants(conditioned_tracking_cfg("video_latent", video_latent_predicted)),
+                    play_env_cfg=use_variants(conditioned_tracking_cfg("video_latent", video_latent_predicted, play=True)),
+                    rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
+
 if __name__ == "__main__":
     import policy_weights
     from mjlab.scripts.train import main
