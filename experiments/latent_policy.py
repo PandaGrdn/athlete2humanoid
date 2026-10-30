@@ -51,6 +51,8 @@ TASKS = {"tracking": "Mjlab-Tracking-Flat-Unitree-G1", "hybrid": "A2H-Hybrid-Fla
          "multi_future": "A2H-TrackingFuture-Flat-Unitree-G1",
          "multi_vjc": "A2H-TrackingVJCausal-Flat-Unitree-G1"}  # the latent of the video so far only
 TASKS["multi_vjp"] = TASKS["multi_vjl"] = "A2H-TrackingVJPred-Flat-Unitree-G1"  # + the predicted latent ahead (experiments/worldmodel_policy.py)
+# experiments/agent_round.py's arms: the task policy under Muse's reward settings, and its untouched control
+TASKS |= {f"task_{arm}": TASKS["task"] for arm in ("start", "agent", "base")}
 TASK_FIRST = ("task", "taskphase", "taskcmd", "taskhybrid", "taskhybrid_var")  # trained on the semantic task spec (skill/task.py)
 
 

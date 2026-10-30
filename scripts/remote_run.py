@@ -59,6 +59,12 @@ def job_spec(a):
         out = f"{REMOTE}/outputs/process" + (f"_{a.tag}" if a.tag else "")
         return ("--with-sam", f"python3 experiments/process_clips.py {{clips}} --out {out}",
                 {"results.tar.gz": f"{out}/results.tar.gz"})
+    if a.job == "agentround":  # experiments/agent_round.py: one round of muse/agent_loop.py (--reuse: its inputs folder)
+        if not a.reuse:
+            raise SystemExit("agentround needs --reuse <the round's inputs folder, from muse/agent_loop.py>")
+        out, inp = f"{REMOTE}/outputs/agentround" + (f"_{a.tag}" if a.tag else ""), f"{REMOTE}/inputs"
+        return ("--with-main", f"python3 experiments/agent_round.py --inputs {inp} --out {out} --target {a.target} "
+                f"--iters {a.iters} {a.args}", {"results.tar.gz": f"{out}/results.tar.gz"})
     if a.job == "probe":
         out = f"{REMOTE}/outputs/cross_embodiment"
         return ("--with-sam", f"python3 experiments/cross_embodiment_probe.py {{clips}} --out {out}",
@@ -177,6 +183,15 @@ def pack_reuse(src, policies=False, checkpoints=None, script=None):
             for name in ("eval.json", "task_spec.json", "importance.json"):  # task-first policies need the spec
                 if (src / name).exists():
                     tar.add(src / name, name)
+    return f
+
+
+def pack_dir(src):
+    """A folder as is (agentround: muse/agent_loop.py lays out the round's inputs itself)."""
+    f = OUT / "inputs.tar.gz"
+    with tarfile.open(f, "w:gz") as tar:
+        for q in sorted(Path(src).iterdir()):
+            tar.add(q, q.name)
     return f
 
 
@@ -396,7 +411,8 @@ def main(a):
     found = [] if a.smoke or (a.reuse and a.job != "pro") else wait_for_clips(a.min_clips, a.max_wait_h)
     if a.job in ("robust", "relevance", "pushes") and not a.reuse:
         raise SystemExit(f"{a.job} needs --reuse <a latent run's results folder>")
-    inputs = (pack_reuse(a.reuse, policies=a.job in ("robust", "pushes") or a.with_weights,
+    inputs = (pack_dir(a.reuse) if a.job == "agentround" else
+              pack_reuse(a.reuse, policies=a.job in ("robust", "pushes") or a.with_weights,
                          script=REPO / "experiments/push_showcase.py" if a.job == "pushes" else None) if a.reuse
               else pack_weights(a.init_weights) if a.init_weights else None)
     if found:
@@ -444,7 +460,8 @@ def main(a):
 
 def parser():
     ap = argparse.ArgumentParser()
-    ap.add_argument("job", choices=["probe", "latent", "robust", "relevance", "variants", "multiclip", "process", "pro", "pushes"])
+    ap.add_argument("job", choices=["probe", "latent", "robust", "relevance", "variants", "multiclip", "process", "pro", "pushes",
+                                        "agentround"])
     ap.add_argument("--min-clips", type=int, default=6)
     ap.add_argument("--clips-dir", default=str(REPO / "clips"), help="where the videos to upload are (default clips/)")
     ap.add_argument("--max-wait-h", type=float, default=8)
