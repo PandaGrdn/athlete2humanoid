@@ -4,6 +4,7 @@ import { api, checkVideo, fmt, policyColor, type RunSummary } from "../api";
 import { useHealth, useUiMode } from "../App";
 import { AetherHero } from "../components/aether";
 import { AuroraHero, Figures, MethodTimeline, StackMarquee, Statement } from "../components/aurora";
+import { MethodTable, PixelHero, PixelStatement, Readout, Typed } from "../components/pixel";
 import { Icon, LoopVideo } from "../components/ui";
 import { exUrl } from "../examples";
 import { useExampleIndex } from "./Examples";
@@ -11,7 +12,7 @@ import { startLiveBuild } from "./LivePage";
 
 const PIPELINE = [
   { title: "Silhouette", text: "Segment and track the person through every frame.", model: "SAM 3.1" },
-  { title: "Pose", text: "3D body landmarks per frame, lifted to world space.", model: "SAM 3D Body" },
+  { title: "Pose", text: "3D body keypoints per frame in world space; MediaPipe as the fallback.", model: "SAM 3D Body" },
   { title: "Retarget", text: "Inverse kinematics onto a 29-DoF Unitree G1.", model: "mink IK" },
   { title: "Task environment", text: "Key moments, contacts and the reward machine, from the retarget.", model: "key poses" },
   { title: "Latent reward", text: "Embed video and robot renders; distill a reward net.", model: "V-JEPA 2" },
@@ -28,6 +29,9 @@ const FIGURES = [
   { v: "78%", k: "Held-out variants", sub: "Squat-jump variants the policy never trained on, completed." },
 ];
 
+const STATEMENT = "The robot is rewarded for looking like the clip, not only for matching its joint angles. The judge is Meta's V-JEPA 2, a model that learned how the world moves by watching video.";
+const FIGURES_LEDE = "Each upload goes through segmentation, pose, retargeting and a learned reward before PPO trains the G1. These are the numbers behind one run.";
+
 export default function Home() {
   const [runs, setRuns] = useState<RunSummary[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -43,9 +47,11 @@ export default function Home() {
   const offline = !!apiError && !health;
   const ui = useUiMode();
   const aurora = ui === "aurora";
+  const pixel = ui === "pixel";
 
   return (
     <>
+    {pixel && <PixelHero latest={featured?.id} />}
     {aurora && <>
       <div className="container"><AuroraHero latest={featured?.id} /></div>
       <StackMarquee />
@@ -96,12 +102,12 @@ export default function Home() {
       </section>
 
       </div>
-      {aurora && <Statement eyebrow="The idea"
-        text="The robot is rewarded for looking like the clip, not only for matching its joint angles. The judge is Meta's V-JEPA 2, a model that learned how the world moves by watching video." />}
+      {aurora && <Statement eyebrow="The idea" text={STATEMENT} />}
+      {pixel && <PixelStatement text={STATEMENT} />}
       <div className="container">
-      {aurora && <Figures title="One clip, a whole training run" items={FIGURES}
-        lede="Each upload goes through segmentation, pose, retargeting and a learned reward before PPO trains the G1. These are the numbers behind one run." />}
-      {aurora ? <MethodTimeline steps={PIPELINE} /> : <section className="section" id="how">
+      {aurora && <Figures title="One clip, a whole training run" items={FIGURES} lede={FIGURES_LEDE} />}
+      {pixel && <Readout title="One clip, a whole training run" items={FIGURES} lede={FIGURES_LEDE} />}
+      {pixel ? <MethodTable steps={PIPELINE} /> : aurora ? <MethodTimeline steps={PIPELINE} /> : <section className="section" id="how">
         <div className="section-head">
           <div>
             <div className="eyebrow">Pipeline</div>
@@ -124,7 +130,7 @@ export default function Home() {
         <div className="section-head">
           <div>
             <div className="eyebrow">Run</div>
-            <h2 style={{ marginTop: 6 }}>Start a job</h2>
+            <h2 style={{ marginTop: 6 }}><Typed text="Start a job" /></h2>
             <p>Upload a clip of one person, full body in frame, or replay one of the finished runs below.</p>
           </div>
         </div>
@@ -171,7 +177,7 @@ export default function Home() {
         <div className="section-head">
           <div>
             <div className="eyebrow">Gallery</div>
-            <h2 style={{ marginTop: 6 }}>Finished runs</h2>
+            <h2 style={{ marginTop: 6 }}><Typed text="Finished runs" /></h2>
             <p>Each was trained on a Colab A100 from ordinary video clips. Open one for the full results.</p>
           </div>
         </div>
@@ -199,7 +205,7 @@ function ShowcaseTeaser({ more }: { more: number | null }) {
       </Link>
       <div className="home-sc-body">
         <div className="eyebrow">Showcase</div>
-        <h2>Push the robot</h2>
+        <h2><Typed text="Push the robot" /></h2>
         <p>
           The squat-jump policy in 3D, next to the phone video it learned from. Orbit it, zoom in, and click it: it
           plays the trained policy's recorded response to a shove from that side.

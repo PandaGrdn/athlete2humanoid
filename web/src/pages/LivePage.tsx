@@ -5,6 +5,7 @@ import { useHealth } from "../App";
 import { EnvironmentPanel } from "../components/environment";
 import { PoseOverlay, RewardBox, RobotView, TaskBreakdown } from "../components/live";
 import { Icon, StatusPill } from "../components/ui";
+import { Typed } from "../components/pixel";
 
 const STEPS = [
   { key: "video", label: "Video check", model: "ffmpeg" },
@@ -127,7 +128,7 @@ function LiveStart({ onFile, err }: { onFile: (f: File) => void; err: string | n
     <div className="container">
       <div className="ex-intro">
         <div className="eyebrow">Live demo</div>
-        <h1>Watch a video become an RL environment</h1>
+        <h1><Typed text="Watch a video become an RL environment" when="load" /></h1>
         <p className="lede">
           Upload any athletic movement. Your clip plays on the left with its pose landmarks; on the right, the
           Unitree G1 retarget, the key moments and the reward the robot will train against appear as each stage
@@ -275,7 +276,7 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
       <div className="job-head">
         <div style={{ flex: 1, minWidth: 240 }}>
           <div className="eyebrow">{source ? source.title : <>Live build{job && <> · job {job.id}</>}</>}</div>
-          <h1 style={{ marginTop: 4 }}>{title}</h1>
+          <h1 style={{ marginTop: 4 }}><Typed text={title} when="load" /></h1>
         </div>
         {job && <StatusPill status={job.status} />}
         {job && <span className="mono muted" style={{ fontSize: 14 }}>{clock(Math.max(0, elapsed))}</span>}

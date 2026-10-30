@@ -4,6 +4,7 @@ import { api, fmt, policyColor, url, watchJob, type Job, type RunSummary, type T
 import { LineChart } from "../components/charts";
 import { EnvironmentPanel } from "../components/environment";
 import { Icon, LoopVideo, StatusPill } from "../components/ui";
+import { Typed } from "../components/pixel";
 
 const MODEL: Record<string, string> = {
   silhouette: "SAM 3.1", pose: "SAM 3D Body", retarget: "mink", environment: "key poses", latent: "V-JEPA 2", train: "mjlab PPO", eval: "V-JEPA 2",
@@ -82,7 +83,7 @@ export default function JobPage() {
         <div style={{ flex: 1, minWidth: 260 }}>
           <div className="eyebrow">Job {job.id}</div>
           <h1 style={{ marginTop: 4 }}>
-            {job.status === "succeeded" ? "Policy trained" : job.status === "failed" ? "Job failed" : job.status === "cancelled" ? "Job cancelled" : stageLabel ? `${stageLabel}…` : "Queued…"}
+            <Typed when="load" text={job.status === "succeeded" ? "Policy trained" : job.status === "failed" ? "Job failed" : job.status === "cancelled" ? "Job cancelled" : stageLabel ? `${stageLabel}…` : "Queued…"} />
           </h1>
         </div>
         <StatusPill status={job.status} />
