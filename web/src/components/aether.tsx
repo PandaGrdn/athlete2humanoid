@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import type { Ui } from "../theme";
 import { Icon, LoopVideo } from "./ui";
 
 /** The aether design's own pieces (theme.ts). Everything else is the shared pages, restyled by styles-aether.css. */
@@ -61,12 +62,15 @@ export function AetherHero({ video, poster, title, to }: { video?: string; poste
   );
 }
 
-export function UiSwitch({ ui, setUi }: { ui: string; setUi: (ui: "classic" | "aether") => void }) {
+const UIS: { ui: Ui; label: string }[] = [{ ui: "aurora", label: "Aurora" }, { ui: "aether", label: "Aether" }, { ui: "classic", label: "Classic" }];
+
+export function UiSwitch({ ui, setUi }: { ui: Ui; setUi: (ui: Ui) => void }) {
   return (
     <span className="ui-switch" role="group" aria-label="Interface">
       <span className="faint">Interface</span>
-      <button className={ui === "aether" ? "on" : ""} onClick={() => setUi("aether")} aria-pressed={ui === "aether"}>Aether</button>
-      <button className={ui === "classic" ? "on" : ""} onClick={() => setUi("classic")} aria-pressed={ui === "classic"}>Classic</button>
+      {UIS.map((u) => (
+        <button key={u.ui} className={ui === u.ui ? "on" : ""} onClick={() => setUi(u.ui)} aria-pressed={ui === u.ui}>{u.label}</button>
+      ))}
     </span>
   );
 }

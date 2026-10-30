@@ -2,6 +2,7 @@ import { createContext, lazy, Suspense, useContext, useEffect, useState } from "
 import { Link, Navigate, NavLink, Route, Routes, useLocation, useParams } from "react-router";
 import { api, type Health } from "./api";
 import { UiSwitch } from "./components/aether";
+import { AuroraFooter, AuroraNav } from "./components/aurora";
 import { Icon } from "./components/ui";
 import { ExampleDetail, ExamplesIndex } from "./pages/Examples";
 import Home from "./pages/Home";
@@ -56,7 +57,7 @@ export default function App() {
   return (
     <HealthCtx.Provider value={{ health, error }}>
       <UiCtx.Provider value={ui}>
-      {ui === "aether" ? <AetherNav /> : <header className="nav">
+      {ui === "aurora" ? <AuroraNav /> : ui === "aether" ? <AetherNav /> : <header className="nav">
         <div className="container nav-inner">
           <Link to="/" className="brand">
             <img src="/favicon.svg" alt="" />
@@ -99,13 +100,13 @@ export default function App() {
           <Route path="*" element={<div className="container section"><h2>Not found</h2><p className="muted" style={{ marginTop: 8 }}><Link to="/">Back to the start</Link></p></div>} />
         </Routes>
       </main>
-      <footer className="site">
+      {ui === "aurora" ? <AuroraFooter switcher={<UiSwitch ui={ui} setUi={setUi} />} /> : <footer className="site">
         <div className="container">
           <span>Video → SAM 3.1 → MediaPipe → mink IK → V-JEPA 2 reward → PPO (mjlab) → Unitree G1</span>
           <span>Meta Global AI Developer Hackathon · Push the Frontier</span>
           <UiSwitch ui={ui} setUi={setUi} />
         </div>
-      </footer>
+      </footer>}
       </UiCtx.Provider>
     </HealthCtx.Provider>
   );

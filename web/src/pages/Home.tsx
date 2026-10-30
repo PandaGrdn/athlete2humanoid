@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router";
 import { api, checkVideo, fmt, policyColor, type RunSummary } from "../api";
 import { useHealth, useUiMode } from "../App";
 import { AetherHero } from "../components/aether";
+import { AuroraHero, Figures, MethodTimeline, StackMarquee, Statement } from "../components/aurora";
 import { Icon, LoopVideo } from "../components/ui";
 import { exUrl } from "../examples";
 import { useExampleIndex } from "./Examples";
@@ -20,6 +21,13 @@ const PIPELINE = [
 
 const AETHER_HERO = "squat-jump-variants/policy_tracking_var.mp4";
 
+const FIGURES = [
+  { v: "7", k: "Stages", sub: "From the first frame of video to an evaluated policy, all automatic." },
+  { v: "29", k: "Degrees of freedom", sub: "Every joint of the Unitree G1 is driven by the trained network." },
+  { v: "4,096", k: "Simulated robots", sub: "G1s learning in parallel in mjlab on one GPU." },
+  { v: "78%", k: "Held-out variants", sub: "Squat-jump variants the policy never trained on, completed." },
+];
+
 export default function Home() {
   const [runs, setRuns] = useState<RunSummary[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -34,13 +42,19 @@ export default function Home() {
   const lead = exIdx.items?.find((e) => e.status === "ready" && e.video);
   const offline = !!apiError && !health;
   const ui = useUiMode();
+  const aurora = ui === "aurora";
 
   return (
+    <>
+    {aurora && <>
+      <div className="container"><AuroraHero latest={featured?.id} /></div>
+      <StackMarquee />
+    </>}
     <div className="container">
       {/* aether: the robot alone at the centre of the halo, the best policy's own rollout (static, so it shows offline) */}
       {ui === "aether" && <AetherHero video={exUrl(AETHER_HERO)} poster={exUrl(AETHER_HERO.replace(/mp4$/, "jpg"))}
         title="The G1 squat-jumping: the policy trained on variants of one clip" to="/showcase" />}
-      {ui !== "aether" && <section className="hero">
+      {ui === "classic" && <section className="hero">
         <div className="fade-in">
           <div className="models">
             <span className="pill accent">Meta V-JEPA 2</span>
@@ -81,7 +95,13 @@ export default function Home() {
         <ShowcaseTeaser more={exIdx.items?.filter((e) => e.status === "ready").length ?? null} />
       </section>
 
-      <section className="section" id="how">
+      </div>
+      {aurora && <Statement eyebrow="The idea"
+        text="The robot is rewarded for looking like the clip, not only for matching its joint angles. The judge is Meta's V-JEPA 2, a model that learned how the world moves by watching video." />}
+      <div className="container">
+      {aurora && <Figures title="One clip, a whole training run" items={FIGURES}
+        lede="Each upload goes through segmentation, pose, retargeting and a learned reward before PPO trains the G1. These are the numbers behind one run." />}
+      {aurora ? <MethodTimeline steps={PIPELINE} /> : <section className="section" id="how">
         <div className="section-head">
           <div>
             <div className="eyebrow">Pipeline</div>
@@ -98,7 +118,7 @@ export default function Home() {
             </div>
           ))}
         </div>
-      </section>
+      </section>}
 
       <section className="section" id="run">
         <div className="section-head">
@@ -165,6 +185,7 @@ export default function Home() {
         {runs && runs.length > 0 && <div className="gallery">{runs.map((r) => <RunCard key={r.id} run={r} />)}</div>}
       </section>
     </div>
+    </>
   );
 }
 
