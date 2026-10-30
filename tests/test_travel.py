@@ -139,14 +139,12 @@ def test_synced_holds_keep_a_travelling_variant(g1):
     from skill import travel_variants as TV
     from skill import variations as V
     lunge = np.load(DATA / "qpos_lunge.npy").astype(np.float64)
-    grid = [(False, 1.33, 1.0, 0.0)]  # the lunge 1.33x as fast: its reference fails its own stock spec
+    grid = [(False, 1.33, 1.0, 0.0)]  # the lunge 1.33x as fast: stock specs used to fail their own reference here
     stock = V.generate(lunge, 30.0, grid, 0, g1, log=lambda *a: None)[0]
-    assert not stock["ok"] and "its own reference completes" in stock["why"]
+    # keypose's tempo-relative holds (PIPELINE_ACCURACY.md, fix 2) now keep it, so the travel wrapper has nothing to do
+    assert stock["ok"] and stock["spec"]["self_check"]["success"]
     synced = TV.generate(lunge, 30.0, grid, 0, g1, log=lambda *a: None)[0]
-    assert synced["ok"] and synced["synced"] and synced["spec"]["self_check"]["success"]
-    a, b = stock["spec"]["stages"], synced["spec"]["stages"]
-    assert [s.get("goal") for s in a] == [s.get("goal") for s in b]  # only holds change
-    assert any(x.get("hold_s") != y.get("hold_s") for x, y in zip(a, b))
+    assert synced["ok"] and not synced.get("synced") and synced["spec"] == stock["spec"]
 
 
 def test_synced_holds_leave_kept_variants_alone(g1):

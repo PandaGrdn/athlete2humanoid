@@ -175,7 +175,7 @@ Both Modal workspaces hit their spend limits during this work: the first mid-run
 - **The policy stayed in place because nothing in mjlab's tracking task made it move.** The root position term saturates by half a metre, nothing scores the root's velocity, and the anchor termination is height-only. Adaptive sampling, driven by failures, therefore never visits the travel phase.
 - **Each fix alone makes the shot put glide.** Together (`A2H-Travel-Flat-Unitree-G1`), the shot put goes from 0–8% to 100% task success: 0.09 m torso error, 96% of the 1.1 m glide, 94% under 1 m/s pushes.
 - **The lunge isn't a travel problem.** It stalls at a required 0.32 m forward weight shift that no policy makes, travel task or not. That is the next thing to look at, in the spec or in what the G1 can do.
-- **The lunge filter was dropping 9 valid variants.** Those were false rejections from a hold/anchor mismatch on root-moving stages. `skill/travel_variants.py` keeps them without changing any spec's goals.
+- **The lunge filter was dropping 9 valid variants.** Those were false rejections from a hold/anchor mismatch on root-moving stages. `skill/travel_variants.py` keeps them without changing any spec's goals. Since fix 2 of `docs/PIPELINE_ACCURACY.md` (tempo-relative holds) is on main, the stock filter keeps the same 24 lunge variants, so `travel_variants.py` is a no-op fallback there.
 - **On an in-place clip (squat jump), `A2H-Travel`:**
   - doesn't hurt the clip;
   - raises held-out variants from 77% to 93%;
