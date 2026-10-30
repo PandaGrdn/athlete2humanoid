@@ -7,6 +7,7 @@ import {
 import { useWidth } from "../components/charts";
 import { SyncControls, stageAt, useSyncGroup, type SyncGroup } from "../components/synced";
 import { Icon, LoopVideo } from "../components/ui";
+import { Typed } from "../components/pixel";
 
 // --- index ---------------------------------------------------------------------------------------
 
@@ -59,7 +60,7 @@ export function ExamplesIndex() {
     <div className="container">
       <section className="ex-intro">
         <div className="eyebrow">Research</div>
-        <h1>What the robot was shown, what it learned, and how we know</h1>
+        <h1><Typed text="What the robot was shown, what it learned, and how we know" when="load" /></h1>
         <p className="lede">
           Recorded results from the full pipeline: phone videos in, simulated Unitree G1 policies out. Every number
           is read from the runs' own evaluation files. These pages need no server, so they work even when the live
@@ -184,7 +185,7 @@ function StoryHead({ ex }: { ex: Example }) {
   return (
     <header className="story-head">
       <div className="eyebrow">{ex.kicker}</div>
-      <h1>{ex.title}</h1>
+      <h1><Typed text={ex.title} when="load" /></h1>
       <p className="lede">{ex.tagline}</p>
     </header>
   );

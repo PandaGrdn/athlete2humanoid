@@ -62,7 +62,7 @@ export function AetherHero({ video, poster, title, to }: { video?: string; poste
   );
 }
 
-const UIS: { ui: Ui; label: string }[] = [{ ui: "aurora", label: "Aurora" }, { ui: "aether", label: "Aether" }, { ui: "classic", label: "Classic" }];
+const UIS: { ui: Ui; label: string }[] = [{ ui: "pixel", label: "Pixel" }, { ui: "aurora", label: "Aurora" }, { ui: "aether", label: "Aether" }, { ui: "classic", label: "Classic" }];
 
 export function UiSwitch({ ui, setUi }: { ui: Ui; setUi: (ui: Ui) => void }) {
   return (

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { Icon } from "../components/ui";
+import { Typed } from "../components/pixel";
 import { examples, type Example, type Stage } from "../examples";
 import { BASE, loadIndex, loadShowcase, type ClipEntry, type Loaded } from "../showcase/data";
 import { ShowcasePlayer, type PlayerState, type PushState } from "../showcase/scene";
@@ -95,7 +96,7 @@ export default function Showcase() {
         {entry && (
           <div className="sc-head" key={entry.id}>
             <div className="sc-kicker mono">Showcase · {entry.kicker}</div>
-            <h1>{entry.title[0]}<br />{entry.title[1]}</h1>
+            <h1><Typed text={entry.title.join("\n")} when="load" /></h1>
             {entry.caveat && <div className="sc-caveat mono">{entry.caveat}</div>}
             <p className="sc-lede">{entry.lede}</p>
           </div>
