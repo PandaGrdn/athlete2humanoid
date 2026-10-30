@@ -268,3 +268,240 @@ def test_one_machine_scores_each_env_against_its_own_variant():
             assert torch.allclose(r[i], ri[0], atol=1e-4) and torch.allclose(r[i + 3], ri[0], atol=1e-4), (t, i)
     assert [int(c) for c in m.completed[:3]] == [int(s.completed[0]) for s in singles]
     assert m.S == max(len(s["stages"]) for s in specs) and list(m.n_stages[:3]) == [len(s["stages"]) for s in specs]
+
+
+def resampled(pos, speed):
+    """The motion played `speed` times as fast (linear interpolation, same frame rate)."""
+    t = np.arange(0, len(pos) - 1, speed)
+    i0 = np.minimum(np.floor(t).astype(int), len(pos) - 2)
+    w = (t - i0)[:, None, None]
+    return (pos[i0] * (1 - w) + pos[i0 + 1] * w).astype(np.float32)
+
+
+def held_kick(seconds=4.0):
+    """The right foot kicked up by 1.4 s, held there to 2.6 s, down by 3.0 s: a key pose with a long hold (HOLD_MAX)."""
+    t = np.arange(int(seconds * FPS)) / FPS
+    pos = np.repeat(REST[None], len(t), 0).copy()
+    pos += np.random.default_rng(0).normal(0, 0.003, pos.shape).astype(np.float32)
+    up = 0.5 * (1 - np.cos(np.pi * np.clip((t - 1.0) / 0.4, 0, 1) * np.clip((3.0 - t) / 0.4, 0, 1)))
+    for b, dx, dz in ((6, 0.55, 0.45), (5, 0.3, 0.2)):
+        pos[:, b, 0] += dx * up
+        pos[:, b, 2] += dz * up
+    return pos, up
+
+
+@pytest.mark.parametrize("every", [6, 5, 2])
+def test_one_step_out_of_tolerance_does_not_reset_a_hold(every):
+    """A hold counts HOLD_FILL of the steps in its window: the held kick with the foot snapping back to rest for one
+    frame in five or six still passes (the old counter reset on each, so it never made its 0.4 s in a row); out
+    every other frame fails."""
+    pos, up = held_kick()
+    spec = self_spec(K.compile_keypose_spec(pos, FPS))
+    assert [s["hold_s"] for s in spec["stages"] if s["kind"] == "pose"] == [K.HOLD_MAX, K.HOLD_MAX]
+    flicker = pos.copy()
+    flicker[np.nonzero(up > 0.3)[0][::every]] = pos[0]
+    r = T.evaluate(spec, flicker, FPS)
+    assert r["success"] == (every != 2), r["abandoned"]
+
+
+@pytest.mark.parametrize("kind,speed", [(k, s) for k in ("squat", "kick", "punch", "jump") for s in (0.7, 1.4)]
+                         + [(k, 1.8) for k in ("squat", "kick", "punch")])
+def test_the_reference_faster_or_slower_passes_its_own_spec(kind, speed):
+    """Holds are a share of the stage's own duration and scale with the rollout's tempo: timing is free both ways.
+    (Not a jump at 1.8x: its airtime is physics, not tempo, and isn't scaled.)"""
+    pos = motion(kind)
+    spec = self_spec(K.compile_keypose_spec(pos, FPS))
+    r = T.evaluate(spec, resampled(pos, speed), FPS)
+    assert r["success"], (kind, speed, r["stages_completed"], r["abandoned"])
+
+
+def test_holds_scale_with_the_rollouts_tempo(monkeypatch):
+    """A hold is at most HOLD_STAGE_FRAC of its stage's reference duration, and the machine shortens it by the
+    rollout's tempo (down to TEMPO_MIN of hold_s): the punches twice as fast pass, and without the tempo scaling
+    they don't. (test_a_key_pose_must_be_held: a flick at the reference's own tempo still fails.)"""
+    pos = motion("punch")
+    spec = self_spec(K.compile_keypose_spec(pos, FPS))
+    for s in spec["stages"]:
+        if s["kind"] == "pose":
+            assert s["hold_s"] <= K.HOLD_STAGE_FRAC * (s["end_s"] - s["start_s"]) + 1e-3
+    fast = resampled(pos, 2.0)
+    assert T.evaluate(spec, fast, FPS)["success"]
+    monkeypatch.setattr(K, "TEMPO_MIN", 1.0)
+    assert not T.evaluate(spec, fast, FPS)["success"]
+
+
+def test_arriving_far_too_early_is_not_a_faster_tempo(monkeypatch):
+    """Already in the key pose at the start (5x "early"), for less than its hold: not the motion at another tempo,
+    so the hold counts in full and it fails (the punches policies sat in the arms clip's one key pose this way)."""
+    pos, _ = held_kick()
+    spec = self_spec(K.compile_keypose_spec(pos, FPS))
+    kick = next(s for s in spec["stages"] if s["kind"] == "pose")
+    early = np.repeat(pos[:1], len(pos), 0)
+    early[:int(0.27 * FPS)] = pos[kick["frame"]]  # kicked for 0.27 s from the first frame, then standing
+    assert T.evaluate(spec, early, FPS)["stages_completed"] <= 1
+    monkeypatch.setattr(K, "TEMPO_CUT", 0.0)
+    assert T.evaluate(spec, early, FPS)["stages_completed"] >= 2
+
+
+def test_tracking_rms_and_the_calibrated_floor():
+    pos = motion("punch")
+    spec = K.compile_keypose_spec(pos, FPS)
+    feats = spec["features"]
+    assert np.allclose(K.tracking_rms(pos, pos, spec["foot0"], fps=FPS), 0, atol=1e-6)
+    off = pos.copy()
+    off[:, 13, 2] += 0.03  # the right hand 3 cm high throughout
+    rms = K.tracking_rms(off, pos, spec["foot0"], fps=FPS)
+    assert rms[feats.index("right wrist z")] == pytest.approx(0.03, abs=1e-4)
+    assert np.delete(rms, feats.index("right wrist z")).max() < 1e-4
+    cal = K.calibration(rms)
+    floor = np.array(cal["floor_m"])
+    assert floor[feats.index("right wrist z")] == pytest.approx(K.TOL_MIN[feats.index("right wrist z")].item())  # 2 x 3 cm < 10 cm
+    big = K.calibration(np.full(K.D, 0.5))  # a useless "tracker": capped
+    assert np.allclose(big["floor_m"], K.CALIB_MAX * K.TOL_MIN.numpy(), atol=1e-4)
+    rms2 = np.zeros(K.D)
+    rms2[feats.index("right wrist z")] = 0.08
+    cal2 = K.calibration(rms2)
+    spec2 = K.calibrate(spec, cal2)
+    for a, b in zip(spec["stages"], spec2["stages"]):
+        if a["kind"] == "pose":
+            assert all(y >= x - 1e-6 for x, y in zip(a["tol"], b["tol"]))  # floors only raise tolerances
+            i = feats.index("right wrist z")
+            w = max(a["relevance"][i], 1e-3)
+            assert b["tol"][i] == pytest.approx(min(max(a["tol"][i], 0.16 / np.sqrt(w)), 9.99), abs=1e-3)
+            assert b["relevance"] == a["relevance"] and b["goal"] == a["goal"] and b["hold_s"] == a["hold_s"]
+    assert K.calibrate(spec2, cal2)["stages"] == spec2["stages"]  # re-calibrating starts from tol_base
+    assert spec2["calibration"]["floor_m"] == cal2["floor_m"]
+
+
+def test_a_floor_lets_a_good_tracker_pass_and_still_rejects_a_wrong_move():
+    """A tracker whose right hand sits 15 cm low throughout fails uncalibrated (beyond the punch's wrist tolerance);
+    with the clip calibrated from it (floor 2 x its RMS, capped) it passes; standing still and punching with the
+    other hand still fail, even at the floors' cap."""
+    pos = motion("punch")
+    spec = self_spec(K.compile_keypose_spec(pos, FPS))
+    short = pos.copy()
+    short[:, 13, 2] -= 0.15
+    assert not T.evaluate(spec, short, FPS)["success"]
+    cal = K.calibration(K.tracking_rms(short, pos, spec["foot0"], fps=FPS))
+    assert T.evaluate(K.calibrate(spec, cal), short, FPS)["success"]
+    capped = K.calibrate(spec, K.calibration(np.full(K.D, 1.0)))
+    still = np.repeat(pos[:1], len(pos), 0)
+    other = pos.copy()  # the left hand punches instead of the right
+    other[:, 10, 0] += pos[:, 13, 0] - pos[:1, 13, 0]
+    other[:, 10, 2] += pos[:, 13, 2] - pos[:1, 13, 2]
+    other[:, [12, 13]] = pos[:1, [12, 13]]
+    for wrong in (still, other):
+        assert not T.evaluate(capped, wrong, FPS)["success"]
+
+
+def test_evaluate_names_the_feature_that_failed():
+    pos = motion("punch")
+    spec = self_spec(K.compile_keypose_spec(pos, FPS))
+    weak = pos.copy()
+    weak[:, 13] = pos[:1, 13] + 0.3 * (pos[:, 13] - pos[:1, 13])  # the punch only a third of the way
+    r = T.evaluate(spec, weak, FPS)
+    assert not r["success"]
+    last = r["abandoned"][-1]
+    assert last["why"] == "clip ended" and last["kind"] == "pose" and last["stage"] == r["stages_completed"]
+    assert last["feature"].startswith("right wrist") and last["error_tol"] > 1 and not last["reached"]
+    assert all(a["why"] == "skipped" for a in T.evaluate(spec, pos, FPS)["abandoned"])  # only optional details
+
+
+def test_upright_is_the_torso_not_the_pelvis_link():
+    """Upright reads pelvis -> shoulder midpoint: 2 cm of noise on every body is not a fall (it was, on the 4.4 cm
+    pelvis -> torso_link vector); an 85 deg lean is, and a squat-like 50 deg forward lean is not."""
+    g1 = np.repeat(REST[None], 200, 0).copy()
+    g1[:, 7] = g1[:, 0] + [0, 0, 0.044]  # the G1's torso_link sits 4.4 cm above the pelvis
+    noisy = g1 + np.random.default_rng(0).normal(0, 0.02, g1.shape).astype(np.float32)
+    assert not T.fallen(noisy).any()
+
+    def lean(deg):
+        a = np.radians(deg)
+        out = REST.copy()
+        rel = REST - REST[0]
+        upper = [7, 8, 9, 10, 11, 12, 13]
+        out[upper, 0] = REST[0, 0] + np.cos(a) * rel[upper, 0] + np.sin(a) * rel[upper, 2]
+        out[upper, 2] = REST[0, 2] - np.sin(a) * rel[upper, 0] + np.cos(a) * rel[upper, 2]
+        return out[None]
+    assert T.fallen(lean(85))[0] and not T.fallen(lean(50))[0]
+    assert float(T.upright_gate(T.features(lean(50), 0.0)[3])[0]) == 1.0  # a squatter's lean keeps its progress
+    assert float(T.upright_gate(T.features(lean(78), 0.0)[3])[0]) == 0.0
+
+
+def test_a_clip_cut_mid_motion_does_not_end_on_its_last_frame():
+    """The punches clip ends as the athlete steps out of frame: its last frame is a pose nobody holds, so a tracker
+    a few frames behind could never finish. The goals end before that burst; a 3-frame lag passes."""
+    pos = motion("punch")
+    n = 4
+    step = np.linspace(0, 1, n + 1)[1:] ** 2
+    pos[-n:, 6, 2] += 0.2 * step  # the right foot lifts fast over the last frames
+    pos[-n:, 6, 0] += 0.25 * step
+    pos[-n:, 0, 0] += 0.1 * step
+    spec = self_spec(K.compile_keypose_spec(pos, FPS))
+    assert spec["goals_end_s"] < spec["duration_s"] and spec["warnings"]
+    assert T.evaluate(spec, pos, FPS)["success"]
+    lag = np.concatenate([np.repeat(pos[:1], 3, 0), pos[:-3]])
+    assert T.evaluate(spec, lag, FPS)["success"]
+    calm = K.compile_keypose_spec(motion("punch"), FPS)  # a clip that ends at rest is compiled as before
+    assert "goals_end_s" not in calm and not calm["warnings"]
+
+
+def test_a_clip_that_ends_in_the_air_asks_for_no_landing():
+    """The hurdles clip ends over the hurdle: its spec ends with the flight (no landing, no finish the video doesn't
+    show), and the reference passes it; standing still and a body that never leaves the floor still fail."""
+    pos = motion("jump")
+    t = np.arange(len(pos)) / FPS
+    cut = pos[: int(np.searchsorted(t, 8.0 / 3 + 0.1))]  # the clip ends just past the second flight's apex
+    spec = self_spec(K.compile_keypose_spec(cut, FPS))
+    assert spec["stages"][-1]["kind"] == "flight" and spec["warnings"]
+    assert [s["kind"] for s in spec["stages"]].count("flight") == 2
+    assert T.evaluate(spec, cut, FPS)["success"]
+    assert not T.evaluate(spec, np.repeat(cut[:1], len(cut), 0), FPS)["success"]
+    grounded = motion("squat")[: len(cut)]
+    assert not T.evaluate(spec, grounded, FPS)["success"]
+    full = K.compile_keypose_spec(pos, FPS)  # one that lands keeps its landings and finish
+    assert full["stages"][-1]["kind"] != "flight" and not full["warnings"]
+    assert T.compile_spec(cut, FPS)["stages"][-1]["kind"] == "jump"  # the stand/squat/jump spec too
+
+
+def test_the_next_root_goal_is_measured_from_the_closest_approach():
+    """_compile measures a stage's root goal from the reference's previous key frame; the machine anchors it where
+    the rollout came closest to that key pose, which for the reference itself is the key frame, at any tempo."""
+    pos = motion("squat")
+    pos[:, :, 0] += np.linspace(0, 0.8, len(pos))[:, None]  # travelling forward through the squats
+    spec = self_spec(K.compile_keypose_spec(pos, FPS))
+    poses = [i for i, s in enumerate(spec["stages"]) if s["kind"] == "pose"]
+    for speed in (1.0, 1.4):
+        p = torch.as_tensor(resampled(pos, speed))
+        m = T.machine(spec, 1, dt=1 / FPS)
+        m.reset(torch.tensor([0]), 0.0, p[:1])
+        anchors = {}
+        for t in range(1, len(p)):
+            before = int(m.stage[0])
+            m.step(p[t:t + 1])
+            if int(m.stage[0]) != before:
+                anchors[before] = float(m.anchor_xy[0, 0])
+        assert bool(m.done[0]), speed
+        for i in poses[:-1]:
+            if i in anchors and not spec["stages"][i].get("optional"):
+                key_x = float(pos[spec["stages"][i]["frame"], K.PELVIS, 0])
+                assert abs(anchors[i] - key_x) < 0.8 / len(pos) * speed * 3 + 1e-3, (speed, i, anchors[i], key_x)
+
+
+def test_a_spin_is_judged_by_the_turn_it_measures():
+    """A discus-like spin past a full turn: the root-turn tolerance is a share of the wrapped turn the goal measures,
+    not of the unwrapped spin (that allowed 2.2 rad either way on the discus), and the reference still passes."""
+    pos = motion("squat", reps=1)
+    n = len(pos)
+    yaw = np.clip((np.arange(n) / FPS - 1.0) / 2.0, 0, 1) * (2 * np.pi + 0.8)  # 1 turn and 0.8 rad, from 1 s to 3 s
+    rel = pos - pos[:, :1]
+    c, s = np.cos(yaw)[:, None], np.sin(yaw)[:, None]
+    spun = pos.copy()
+    spun[..., 0], spun[..., 1] = pos[:, :1, 0] + c * rel[..., 0] - s * rel[..., 1], pos[:, :1, 1] + s * rel[..., 0] + c * rel[..., 1]
+    spec = self_spec(K.compile_keypose_spec(spun, FPS))
+    i = spec["features"].index("root turn")
+    for st in spec["stages"]:
+        if st["kind"] == "pose" and st["relevance"][i] > 0:
+            wrapped = abs(st["goal"][i])
+            assert st["tol"][i] <= max(K.TOL_MIN[i].item(), K.TOL_FRAC * wrapped) / np.sqrt(st["relevance"][i]) + 1e-3
+    assert T.evaluate(spec, spun, FPS)["success"]

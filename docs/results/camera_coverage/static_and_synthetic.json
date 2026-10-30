@@ -1,0 +1,539 @@
+[
+ {
+  "clip": "squat_jump",
+  "frames": 271,
+  "size": [
+   1080,
+   1920
+  ],
+  "height": {
+   "height_px": 1377,
+   "min_px": 400,
+   "ok": true
+  },
+  "static": {
+   "static": true,
+   "max_shift_px": 0.443,
+   "max_zoom": 1.001,
+   "failed": [],
+   "cuts": [],
+   "root_change_cm_max": 0.0,
+   "estimate_s": 3.6
+  },
+  "synthetic": {
+   "crop": 0.9,
+   "pose_found": 1.0,
+   "camera_motion_px_max": 59,
+   "zoom_max": 1.1,
+   "camera_err_px_mean_max": [
+    0.13,
+    0.62
+   ],
+   "detected_static": false,
+   "cuts": [],
+   "failed": 0,
+   "root_vs_static_cm_mean_max": {
+    "uncompensated": [
+     4.9,
+     7.1
+    ],
+    "compensated": [
+     0.7,
+     2.0
+    ],
+    "true_camera": [
+     0.7,
+     2.0
+    ]
+   }
+  }
+ },
+ {
+  "clip": "squat",
+  "frames": 306,
+  "size": [
+   1080,
+   1920
+  ],
+  "height": {
+   "height_px": 1361,
+   "min_px": 400,
+   "ok": true
+  },
+  "static": {
+   "static": true,
+   "max_shift_px": 0.223,
+   "max_zoom": 1.001,
+   "failed": [],
+   "cuts": [],
+   "root_change_cm_max": 0.0,
+   "estimate_s": 5.6
+  },
+  "synthetic": {
+   "crop": 0.9,
+   "pose_found": 1.0,
+   "camera_motion_px_max": 53,
+   "zoom_max": 1.1,
+   "camera_err_px_mean_max": [
+    0.08,
+    0.33
+   ],
+   "detected_static": false,
+   "cuts": [],
+   "failed": 0,
+   "root_vs_static_cm_mean_max": {
+    "uncompensated": [
+     5.3,
+     7.3
+    ],
+    "compensated": [
+     0.8,
+     1.7
+    ],
+    "true_camera": [
+     0.8,
+     1.7
+    ]
+   }
+  }
+ },
+ {
+  "clip": "lunge",
+  "frames": 297,
+  "size": [
+   1080,
+   1920
+  ],
+  "height": {
+   "height_px": 1078,
+   "min_px": 400,
+   "ok": true
+  },
+  "static": {
+   "static": true,
+   "max_shift_px": 0.445,
+   "max_zoom": 1.001,
+   "failed": [],
+   "cuts": [],
+   "root_change_cm_max": 0.0,
+   "estimate_s": 5.5
+  },
+  "synthetic": {
+   "crop": 0.71,
+   "pose_found": 1.0,
+   "camera_motion_px_max": 192,
+   "zoom_max": 1.1,
+   "camera_err_px_mean_max": [
+    0.45,
+    0.9
+   ],
+   "detected_static": false,
+   "cuts": [],
+   "failed": 0,
+   "root_vs_static_cm_mean_max": {
+    "uncompensated": [
+     17.6,
+     31.2
+    ],
+    "compensated": [
+     3.1,
+     7.1
+    ],
+    "true_camera": [
+     3.1,
+     7.1
+    ]
+   }
+  }
+ },
+ {
+  "clip": "arms",
+  "frames": 102,
+  "size": [
+   1080,
+   1920
+  ],
+  "height": {
+   "height_px": 1127,
+   "min_px": 400,
+   "ok": true
+  },
+  "static": {
+   "static": true,
+   "max_shift_px": 0.119,
+   "max_zoom": 1.0,
+   "failed": [],
+   "cuts": [],
+   "root_change_cm_max": 0.0,
+   "estimate_s": 1.8
+  },
+  "synthetic": {
+   "crop": 0.74,
+   "pose_found": 1.0,
+   "camera_motion_px_max": 100,
+   "zoom_max": 1.1,
+   "camera_err_px_mean_max": [
+    0.11,
+    0.46
+   ],
+   "detected_static": false,
+   "cuts": [],
+   "failed": 0,
+   "root_vs_static_cm_mean_max": {
+    "uncompensated": [
+     10.8,
+     15.5
+    ],
+    "compensated": [
+     0.6,
+     1.3
+    ],
+    "true_camera": [
+     0.6,
+     1.3
+    ]
+   }
+  }
+ },
+ {
+  "clip": "front_kick",
+  "frames": 167,
+  "size": [
+   1080,
+   1920
+  ],
+  "height": {
+   "height_px": 1027,
+   "min_px": 400,
+   "ok": true
+  },
+  "static": {
+   "static": true,
+   "max_shift_px": 0.267,
+   "max_zoom": 1.001,
+   "failed": [],
+   "cuts": [],
+   "root_change_cm_max": 0.0,
+   "estimate_s": 3.0
+  },
+  "synthetic": {
+   "crop": 0.68,
+   "pose_found": 1.0,
+   "camera_motion_px_max": 132,
+   "zoom_max": 1.1,
+   "camera_err_px_mean_max": [
+    0.21,
+    0.51
+   ],
+   "detected_static": false,
+   "cuts": [],
+   "failed": 0,
+   "root_vs_static_cm_mean_max": {
+    "uncompensated": [
+     12.9,
+     21.7
+    ],
+    "compensated": [
+     2.1,
+     2.8
+    ],
+    "true_camera": [
+     2.1,
+     2.7
+    ]
+   }
+  }
+ },
+ {
+  "clip": "jumping_jacks",
+  "frames": 159,
+  "size": [
+   1080,
+   1920
+  ],
+  "height": {
+   "height_px": 1313,
+   "min_px": 400,
+   "ok": true
+  },
+  "static": {
+   "static": true,
+   "max_shift_px": 0.316,
+   "max_zoom": 1.0,
+   "failed": [],
+   "cuts": [],
+   "root_change_cm_max": 0.0,
+   "estimate_s": 2.8
+  },
+  "synthetic": {
+   "crop": 0.87,
+   "pose_found": 1.0,
+   "camera_motion_px_max": 70,
+   "zoom_max": 1.1,
+   "camera_err_px_mean_max": [
+    0.16,
+    0.33
+   ],
+   "detected_static": false,
+   "cuts": [],
+   "failed": 0,
+   "root_vs_static_cm_mean_max": {
+    "uncompensated": [
+     7.7,
+     10.3
+    ],
+    "compensated": [
+     0.5,
+     1.1
+    ],
+    "true_camera": [
+     0.5,
+     1.1
+    ]
+   }
+  }
+ },
+ {
+  "clip": "punches",
+  "frames": 168,
+  "size": [
+   1080,
+   1920
+  ],
+  "height": {
+   "height_px": 1316,
+   "min_px": 400,
+   "ok": true
+  },
+  "static": {
+   "static": true,
+   "max_shift_px": 0.147,
+   "max_zoom": 1.0,
+   "failed": [],
+   "cuts": [],
+   "root_change_cm_max": 0.0,
+   "estimate_s": 3.0
+  },
+  "synthetic": {
+   "crop": 0.87,
+   "pose_found": 1.0,
+   "camera_motion_px_max": 95,
+   "zoom_max": 1.1,
+   "camera_err_px_mean_max": [
+    0.07,
+    0.3
+   ],
+   "detected_static": false,
+   "cuts": [],
+   "failed": 0,
+   "root_vs_static_cm_mean_max": {
+    "uncompensated": [
+     7.4,
+     13.5
+    ],
+    "compensated": [
+     1.0,
+     1.6
+    ],
+    "true_camera": [
+     1.0,
+     1.6
+    ]
+   }
+  }
+ },
+ {
+  "clip": "shot_put",
+  "frames": 107,
+  "size": [
+   1840,
+   1010
+  ],
+  "height": {
+   "height_px": 699,
+   "min_px": 400,
+   "ok": true
+  },
+  "static": {
+   "static": true,
+   "max_shift_px": 11.914,
+   "max_zoom": 1.003,
+   "failed": [
+    3,
+    6,
+    9,
+    13,
+    16,
+    19,
+    23,
+    26,
+    29,
+    33,
+    36,
+    39,
+    49,
+    53,
+    56,
+    59,
+    63,
+    66,
+    69,
+    73,
+    76,
+    79,
+    83,
+    86,
+    93,
+    96,
+    99,
+    103,
+    106
+   ],
+   "cuts": [],
+   "root_change_cm_max": 0.0,
+   "estimate_s": 2.4
+  },
+  "synthetic": {
+   "crop": 0.88,
+   "pose_found": 1.0,
+   "camera_motion_px_max": 203,
+   "zoom_max": 1.1,
+   "camera_err_px_mean_max": [
+    11.06,
+    18.69
+   ],
+   "detected_static": false,
+   "cuts": [],
+   "failed": 17,
+   "root_vs_static_cm_mean_max": {
+    "uncompensated": [
+     29.3,
+     56.9
+    ],
+    "compensated": [
+     7.3,
+     9.9
+    ],
+    "true_camera": [
+     2.9,
+     4.6
+    ]
+   }
+  }
+ },
+ {
+  "clip": "discus",
+  "frames": 84,
+  "size": [
+   1912,
+   1012
+  ],
+  "height": {
+   "height_px": 685,
+   "min_px": 400,
+   "ok": true
+  },
+  "static": {
+   "static": true,
+   "max_shift_px": 16.787,
+   "max_zoom": 1.006,
+   "failed": [
+    4,
+    9,
+    14,
+    19,
+    24,
+    39,
+    49,
+    59,
+    64,
+    69,
+    74,
+    79
+   ],
+   "cuts": [],
+   "root_change_cm_max": 0.0,
+   "estimate_s": 1.7
+  },
+  "synthetic": {
+   "crop": 0.86,
+   "pose_found": 1.0,
+   "camera_motion_px_max": 139,
+   "zoom_max": 1.1,
+   "camera_err_px_mean_max": [
+    59.32,
+    92.9
+   ],
+   "detected_static": false,
+   "cuts": [],
+   "failed": 3,
+   "root_vs_static_cm_mean_max": {
+    "uncompensated": [
+     19.3,
+     40.4
+    ],
+    "compensated": [
+     16.8,
+     26.3
+    ],
+    "true_camera": [
+     9.2,
+     16.1
+    ]
+   }
+  }
+ },
+ {
+  "clip": "hurdles",
+  "frames": 73,
+  "size": [
+   1920,
+   1000
+  ],
+  "height": {
+   "height_px": 416,
+   "min_px": 400,
+   "ok": true
+  },
+  "static": {
+   "static": true,
+   "max_shift_px": 32.285,
+   "max_zoom": 1.001,
+   "failed": [
+    6,
+    33,
+    39
+   ],
+   "cuts": [],
+   "root_change_cm_max": 0.0,
+   "estimate_s": 1.4
+  },
+  "synthetic": {
+   "crop": 0.6,
+   "pose_found": 1.0,
+   "camera_motion_px_max": 463,
+   "zoom_max": 1.1,
+   "camera_err_px_mean_max": [
+    10.54,
+    17.62
+   ],
+   "detected_static": false,
+   "cuts": [],
+   "failed": 1,
+   "root_vs_static_cm_mean_max": {
+    "uncompensated": [
+     94.9,
+     207.6
+    ],
+    "compensated": [
+     6.9,
+     11.3
+    ],
+    "true_camera": [
+     6.1,
+     8.8
+    ]
+   }
+  }
+ }
+]

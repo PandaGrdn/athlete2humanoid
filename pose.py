@@ -57,7 +57,39 @@ def fill_and_smooth(x, window=9):
     return flat.reshape(x.shape)
 
 
-def human_trajectory(world, image_xy, boxes, return_view=False):
+def landmark_pixels(image_xy, boxes):
+    """Crop-normalised landmarks (T, 33, 2) -> full-frame pixels, given the crops' (x0, y0, side)."""
+    x0, y0, side = boxes[:, 0:1], boxes[:, 1:2], boxes[:, 2:3]
+    return np.stack([x0 + image_xy[..., 0] * side, y0 + image_xy[..., 1] * side], -1)
+
+
+# Below this many pixels of athlete height the pose is unreliable (noise grows as 1 / height: the
+# 1900 films at ~550 px have 2-3x the phone clips' noise at 850-1080 px; docs/PIPELINE_ACCURACY.md).
+MIN_HEIGHT_PX = 400
+HEAD_TOP = 1.12  # nose-to-heel spans about 89% of standing height
+
+
+def athlete_height_px(px):
+    """The athlete's height in source pixels: the 90th percentile over frames of the nose-to-lowest-heel
+    extent of the landmarks (full-frame pixels, (T, 33, 2)), scaled up for the top of the head. The
+    upper percentile reads the standing frames of a clip that also crouches or flies."""
+    ext = np.nanmax(px[:, 27:33, 1], axis=1) - px[:, NOSE, 1]
+    ext = ext[np.isfinite(ext)]
+    return float(np.percentile(ext, 90) * HEAD_TOP) if len(ext) else 0.0
+
+
+def height_check(px, min_px=MIN_HEIGHT_PX):
+    """The pixel-height intake check: {"height_px", "min_px", "ok"} plus a warning when the athlete is
+    too small in the frame for reliable pose."""
+    h = athlete_height_px(px)
+    out = {"height_px": round(h), "min_px": min_px, "ok": h >= min_px}
+    if not out["ok"]:
+        out["warning"] = (f"athlete is {h:.0f} px tall (< {min_px}): pose noise grows as 1 / height; "
+                          "use a closer or higher-resolution clip")
+    return out
+
+
+def human_trajectory(world, image_xy, boxes, return_view=False, camera=None):
     """Combine hip-centred 3D pose with the hips' 2D image motion -> (T, 33, 3) metres,
     z-up, ground not yet set, athlete facing +x. With return_view, also the video camera's
     viewing direction as a MuJoCo camera azimuth (degrees) in that athlete-facing frame, so the
@@ -67,11 +99,19 @@ def human_trajectory(world, image_xy, boxes, return_view=False):
     so a jump would vanish. We recover root motion in the image plane from the 2D hip track,
     converted to metres with the torso length as a ruler. Depth motion is assumed zero, so
     side-view clips work best.
+
+    camera: optional (T, 3, 3) homographies from `camera.estimate` (frame-t pixels -> frame-0
+    pixels). The landmarks are mapped through them first, so a pan or zoom is not read as the
+    athlete moving and the torso ruler is measured in one image plane. None or all-identity
+    (a static camera) leaves the result unchanged.
     """
     world = fill_and_smooth(world)
     image_xy = fill_and_smooth(image_xy)
-    x0, y0, side = boxes[:, 0:1], boxes[:, 1:2], boxes[:, 2:3]
-    px = np.stack([x0 + image_xy[..., 0] * side, y0 + image_xy[..., 1] * side], -1)  # full-frame pixels
+    px = landmark_pixels(image_xy, boxes)  # full-frame pixels
+    if camera is not None:
+        import camera as camera_model
+
+        px = camera_model.apply(camera, px)
 
     hip_px = px[:, [L_HIP, R_HIP]].mean(1)
     torso_px = np.linalg.norm(px[:, [L_SHOULDER, R_SHOULDER]].mean(1) - hip_px, axis=-1)

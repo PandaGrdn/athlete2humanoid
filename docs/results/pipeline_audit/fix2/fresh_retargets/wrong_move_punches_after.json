@@ -1,0 +1,62 @@
+{
+ "multi_1500": {
+  "rollouts": 16,
+  "own_spec": 1.0,
+  "left_arm_still": 0.0,
+  "right_arm_still": 0.0,
+  "other_specs": {
+   "arms": 0.0,
+   "front_kick": 0.0,
+   "jumping_jacks": 0.0,
+   "shot_put": 0.0,
+   "discus": 0.0
+  },
+  "other_specs_floors_at_cap": {
+   "arms": 0.0,
+   "front_kick": 0.0,
+   "jumping_jacks": 0.0,
+   "shot_put": 0.0,
+   "discus": 0.0
+  }
+ },
+ "scratch_1500": {
+  "rollouts": 16,
+  "own_spec": 1.0,
+  "left_arm_still": 0.0,
+  "right_arm_still": 0.0,
+  "other_specs": {
+   "arms": 0.0,
+   "front_kick": 0.0,
+   "jumping_jacks": 0.0,
+   "shot_put": 0.0,
+   "discus": 0.0
+  },
+  "other_specs_floors_at_cap": {
+   "arms": 0.0,
+   "front_kick": 0.0,
+   "jumping_jacks": 0.0,
+   "shot_put": 0.0,
+   "discus": 0.0
+  }
+ },
+ "specialist_1500": {
+  "rollouts": 16,
+  "own_spec": 1.0,
+  "left_arm_still": 0.0,
+  "right_arm_still": 0.0,
+  "other_specs": {
+   "arms": 0.0,
+   "front_kick": 0.0,
+   "jumping_jacks": 0.0,
+   "shot_put": 0.0,
+   "discus": 0.0
+  },
+  "other_specs_floors_at_cap": {
+   "arms": 0.0,
+   "front_kick": 0.0,
+   "jumping_jacks": 0.0,
+   "shot_put": 0.0,
+   "discus": 0.0
+  }
+ }
+}

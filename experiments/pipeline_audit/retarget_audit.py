@@ -41,37 +41,36 @@ def sole_heights(model, qpos):
 
 
 def contact_report(P, rt, fps):
-    """proportional_motion's contact steps, one by one, to see what ground_phantom_flights decided and why."""
-    seg = lambda a, b: np.linalg.norm(P[:, a] - P[:, b], axis=-1)
-    human_leg = np.median(np.concatenate([seg(23, 25) + seg(25, 27), seg(24, 26) + seg(26, 28)]))
-    scale = (rt.bones["thigh"] + rt.bones["shin"]) / human_leg
-    J = retarget.rescale_bones(P, rt.bones)
-    root = P[:, [23, 24]].mean(1) * scale
-    ankles = np.stack([J["left_ankle"], J["right_ankle"]], 1)
-    root[:, 2] += rt.sole_height - np.percentile((root[:, None] + ankles)[..., 2].min(1), 5)
-    stance = retarget.stance_mask(root[:, None] + ankles, fps)
-    J = retarget.level_feet(J, stance)
-    ankles = np.stack([J["left_ankle"], J["right_ankle"]], 1)
-    floor = np.full(stance.shape, rt.sole_height)  # flat feet; proportional_motion raises a lifted heel's floor
-    root1, feet, foot_fix = retarget.plant_feet(root, ankles, stance, floor)
-    root2, _ = retarget.ground_phantom_flights(root1, feet, stance, floor, fps)
-    above = (feet[..., 2] - floor).min(1)
-    up = ~stance.any(1) & (above > 0.01)
-    stretches = []
-    for a, b in retarget._runs(up):
-        T = (b - a + 1) / fps
-        ends = root1[[max(a - 1, 0), min(b, len(root1) - 1)], 2].mean()
-        rise = root1[a:b, 2].max() - ends
-        need = retarget.FLIGHT_RISE_FRAC * retarget.GRAVITY * T ** 2 / 8
-        stretches.append(dict(start_s=round(a / fps, 2), dur_s=round(T, 2), rise_cm=round(100 * rise, 1), need_cm=round(100 * need, 1),
-                              ballistic_rise_cm=round(100 * retarget.GRAVITY * T ** 2 / 8, 1), grounded=bool(rise < need),
-                              lowered_cm=round(100 * float(above[a:b].mean()), 1)))
-    shift = np.linalg.norm(root1 - root, axis=-1)
-    return dict(scale=round(float(scale), 3), stance_frac=[round(float(stance[:, f].mean()), 2) for f in range(2)],
+    """proportional_motion's contact steps: the root shift plant_feet applies (also without its constant part, a
+    floor / start reference that does not change the output), what ground_phantom_flights lowered and why, the
+    pelvis rise it kept, and the root's horizontal travel."""
+    m = retarget.proportional_motion(P, rt, fps)
+    if "root_pose" in m:
+        stance, root0, root1, root2 = m["stance"], m["root_pose"], m["root_planted"], m["joints"]["hip_mid"]
+    else:  # a retarget.py from before fix 1 (for before / after tables): redo its steps
+        J = retarget.rescale_bones(P, rt.bones)
+        root0 = P[:, [23, 24]].mean(1) * m["scale"]
+        ankles = np.stack([J["left_ankle"], J["right_ankle"]], 1)
+        root0[:, 2] += rt.sole_height - np.percentile((root0[:, None] + ankles)[..., 2].min(1), 5)
+        stance = m["stance"]
+        J = retarget.level_feet(J, stance)
+        ankles = np.stack([J["left_ankle"], J["right_ankle"]], 1)
+        floor = rt.ankle_clearance(m["foot_rot"])
+        root1, feet, _ = retarget.plant_feet(root0, ankles, stance, floor)
+        root2, _ = retarget.ground_phantom_flights(root1, feet, stance, floor, fps)
+        m |= {"airborne": None, "warnings": None}
+    s = root1 - root0
+    shift, varying = np.linalg.norm(s, axis=-1), np.linalg.norm(s - s.mean(0), axis=-1)
+    travel = lambda r: round(100 * float(np.linalg.norm(r[:, :2] - r[0, :2], axis=-1).max()), 1)
+    return dict(scale=round(float(m["scale"]), 3), stance_frac=[round(float(stance[:, f].mean()), 2) for f in range(2)],
                 no_contact_frac=round(float((~stance.any(1)).mean()), 2),
-                foot_fix_cm=dict(mean=round(100 * float(np.linalg.norm(foot_fix, axis=-1).mean()), 2), max=round(100 * float(np.linalg.norm(foot_fix, axis=-1).max()), 2)),
-                root_shift_cm=dict(mean=round(100 * float(shift.mean()), 2), max=round(100 * float(shift.max()), 2)),
-                phantom_lowering_cm_max=round(100 * float(np.abs(root2[:, 2] - root1[:, 2]).max()), 2), stretches=stretches)
+                root_shift_cm=dict(mean=round(100 * float(shift.mean()), 2), max=round(100 * float(shift.max()), 2),
+                                   varying_mean=round(100 * float(varying.mean()), 2)),
+                phantom_lowering_cm_max=round(100 * float(np.abs(root2[:, 2] - root1[:, 2]).max()), 2),
+                pelvis_rise_cm=dict(pose=round(100 * float(root0[:, 2].max() - np.percentile(root0[:, 2], 5)), 1),
+                                    final=round(100 * float(root2[:, 2].max() - np.percentile(root2[:, 2], 5)), 1)),
+                travel_cm=dict(pose=travel(root0), final=travel(root2)),
+                stretches=m["airborne"], warnings=m["warnings"])
 
 
 def audit(P, fps, stored=None, save_qpos=None):
@@ -111,8 +110,11 @@ def audit(P, fps, stored=None, save_qpos=None):
         tracking_cm=track,
         joint_speed=dict(max_rad_s=round(float(speed.max()), 1), p99_rad_s=round(float(np.percentile(speed, 99)), 1),
                          frames_any_joint_at_cap=int(at_cap.any(1).sum()),
+                         hand_err_at_cap_cm_max=round(float(max([max(errs[h][t], errs[h][t + 1]) for h in ("left_hand", "right_hand")
+                                                                 for t in np.flatnonzero(at_cap.any(1))], default=0.0)), 1),
                          cap_joints={hnames[i]: int(at_cap[:, i].sum()) for i in np.argsort(-at_cap.sum(0))[:4] if at_cap[:, i].any()}),
         limits=dict(frames_any=round(float(hit.any(1).mean()), 3),
+                    ankle_roll=round(float(hit[:, [hnames.index(f"{s}_ankle_roll_joint") for s in ("left", "right")]].any(1).mean()), 3),
                     worst={hnames[i]: round(float(hit[:, i].mean()), 3) for i in np.argsort(-hit.mean(0))[:4] if hit[:, i].any()}),
         feet=dict(penetration_max_cm=round(float(max(0, -sole.min()) * 100), 2), penetration_frames_gt1cm=round(float((sole < -0.01).any(1).mean()), 3),
                   stance_float_mean_cm=round(float(np.abs(sole[stance]).mean() * 100), 2) if stance.any() else None,
@@ -138,9 +140,12 @@ def main(argv=None):
         rows[name] = audit(np.load(d / "human.npy"), fps, np.load(d / "qpos.npy") if (d / "qpos.npy").exists() else None,
                            Path(a.save_qpos) / f"{name}_qpos.npy" if a.save_qpos else None)
         r = rows[name]
-        print(f"{name:14s} knees {r['tracking_cm']['left_knee']['mean']}/{r['tracking_cm']['right_knee']['mean']} cm | limits {r['limits']['frames_any']:.0%} {r['limits']['worst']} | "
-              f"cap frames {r['joint_speed']['frames_any_joint_at_cap']} | root shift {r['contacts']['root_shift_cm']} | no contact {r['contacts']['no_contact_frac']:.0%} | "
-              f"phantom lowering {r['contacts']['phantom_lowering_cm_max']} cm | stored diff {r['stored_vs_recomputed_max_diff_rad']} rad")
+        c, tr = r["contacts"], r["tracking_cm"]
+        print(f"{name:14s} knees {tr['left_knee']['mean']}/{tr['right_knee']['mean']} cm | hands {tr['left_hand']['max']}/{tr['right_hand']['max']} cm max | "
+              f"limits {r['limits']['frames_any']:.0%} ankle roll {r['limits']['ankle_roll']:.0%} | cap frames {r['joint_speed']['frames_any_joint_at_cap']} "
+              f"(hand {r['joint_speed']['hand_err_at_cap_cm_max']} cm) | "
+              f"root shift {c['root_shift_cm']} | no contact {c['no_contact_frac']:.0%} | phantom lowering {c['phantom_lowering_cm_max']} cm | "
+              f"pelvis rise {c['pelvis_rise_cm']} | travel {c['travel_cm']} | stored diff {r['stored_vs_recomputed_max_diff_rad']} rad")
     print("->", dump(rows, a.out))
 
 

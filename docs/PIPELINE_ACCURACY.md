@@ -475,3 +475,543 @@ Cost: about 1 GPU hour for inference on three short clips; the time is in the lo
 - The right-knee asymmetry is reported without a settled cause.
 - Pixel height of the SAM crop itself (masks are not kept in `outputs/`), so the "distance" threshold is an
   estimate from the whole-frame heights.
+
+## Fixes applied
+
+### Fix 4: physical variant filter and ballistic re-timing (`skill/variations.py`, 2026-10-30)
+
+Each variant now records the rules it broke (`rules`) and the reasons in words (`why`). The new rules are:
+`speed` (a joint faster than `retarget.MAX_JOINT_SPEED`), `ballistic` (a flight's rise / (g T²/8) outside
+[0.6, 1.5]), `lost flight` (fewer flights than the clip has) and `penetration` (the soles more than 2 cm into the
+floor). The existing rules are `limits`, `self-check` and `spec`. The generator was changed so that it stops making
+the variants the filter would drop for reasons of its own:
+
+- **Ballistic re-timing.** After amplitude scaling, each flight is re-timed to the airtime its new pelvis rise
+  needs, `sqrt(8 rise / g)`. The flight's frames and one frame either side are stretched uniformly, so the
+  time between the threshold crossings scales exactly.
+- **Cap-aware tempo.** A speed-up never takes a joint past the cap: on a stretch already near the cap it plays
+  only as fast as the cap allows. Amplitude above 1 may slow such a stretch to 1/alpha. Flights stay at 1x, so
+  the cap can still be broken in the air and the filter drops those variants.
+- **Resampling keeps the feet on the floor.** Linear blending of two frames whose joints are 0.6 rad apart
+  moves a planted foot along a chord: shot put at tempo 0.75 went 5.3 cm into a floor that neither source frame
+  is in. After resampling, the root height is corrected so the lowest sole sits where the source's sole
+  height interpolates to.
+- **Amplitude re-grounds by the sole, not the ankle.** A scaled ankle pitch tipped the discus thrower's toe
+  3.4 cm into the floor.
+- **Flights are measured between frames.** Airtime is now the time between interpolated threshold crossings.
+  Counting whole frames made a 5-frame hop read ±20% in T and ±40% in rise / ballistic: the jumping-jack hop
+  read 1.25, and is 0.94. The "3 flights at 1.6x" in Stage 4 were mostly this noise. Measured properly,
+  amplitude 1.1 without re-timing gives 1.16 and amplitude 0.85 gives 0.80 (squat jump: 0.72).
+
+Before and after, from `experiments/pipeline_audit/variants_audit.py` on the 36-variant TRAIN grid of all ten
+clips. Both columns use the new between-frames flight measure. The clips are the current retarget (20 rad/s
+cap), run as `retarget_audit.py --save-qpos`, then `variants_audit.py --qpos-dir`. The JSON is in
+`docs/results/pipeline_audit/variants_fix4/`.
+
+| clip | kept, before -> after | dropped after (rule: count; a variant can break several) | max joint speed kept (rad/s) | kept flights' rise / ballistic | kept variants that lost a flight | max penetration kept (cm) |
+|---|---|---|---|---|---|---|
+| squat_jump | 36 -> **36** | - | 11.8 -> 11.8 | 0.72-1.00 -> **0.84-1.02** | 0 -> 0 | 0.9 -> 0.3 |
+| squat | 36 -> **36** | - | 7.9 -> 7.9 | - | - | 0.2 -> 0.1 |
+| lunge | 15 -> **16** | limits 12, self-check 12 | 13.3 -> 13.3 | - | - | 1.3 -> 0.9 |
+| arms | 36 -> **36** | - | 14.2 -> 14.2 | - | - | 0.0 -> 0.0 |
+| front_kick | 36 -> **36** | - | 23.7 -> **20.0** | - | - | 0.2 -> 0.1 |
+| jumping_jacks | 36 -> **12** | lost flight 12, speed 12 | 34.6 -> **20.0** | 0.80-1.16 -> **0.93-1.03** | 14 -> **0** | 0.3 -> 0.1 |
+| punches | 36 -> **36** | - | 14.2 -> 14.2 | - | - | 0.6 -> 0.3 |
+| shot_put | 24 -> **24** | limits 12, self-check 3 | 31.3 -> **20.0** | - | - | 5.3 -> **1.8** |
+| discus | 24 -> **24** | limits 12 | 29.2 -> **20.0** | - | - | 3.5 -> **1.0** |
+| hurdles | 24 -> **24** | limits 12, speed 12 | 24.9 -> **20.0** | - | - | 1.8 -> 0.7 |
+
+On the stored `qpos.npy` the result differs:
+
+- front kick keeps 26 of 36;
+- jumping jacks, shot put and discus keep 0, because the base clip itself runs at 76, 172 and 61 rad/s;
+- hurdles keeps 0, as before (self-check, and the phantom flight at 0.05 x ballistic).
+
+That is the stale-retarget problem from summary point 5. Re-processing those clips (fix 7) is the cure; the
+filter now refuses to train on them in the meantime.
+
+What is still dropped, and why:
+
+- **Lunge, 12 self-check, and shot put, 3: the keypose hold rule (fix 2, `skill/keypose.py`, not changed here).**
+  With every pose hold at 0, all 15 pass. In every case the stage the self-check stops at already has hold 0,
+  because `fit_holds` halved it to 0 and then stopped. The reference sits inside that stage's tolerance for
+  0.2-2.3 s. The culprit is an *earlier* stage's hold, usually stage 2 at 0.3-0.4 s; zeroing that one hold
+  fixes 9 of 12 lunge drops and 3 of 3 shot-put drops.
+  - Example: lunge `o_t1.33_a1.1` completes stage 2 at 4.0 s instead of ~1.4 s, when the next lunge comes back
+    to a similar pose. By then every later stage's window has passed.
+  - Suggested fix in `fit_holds`: when the stuck stage has no hold left, halve the holds of the stages before
+    it, latest first.
+  - The "13 lunge self-check" drops in Stage 4 are now 12, because amplitude re-grounding by the soles changed one
+    variant.
+- **Jumping jacks, 12 `lost flight` (every amplitude-0.85 variant).** The hop keeps its feet above the 10 cm air
+  threshold for 5 frames (0.16 s); scaled to 0.85, it is above it for under `T.MIN_FLIGHT` (0.15 s). The
+  feet still clear 11.6 cm, but the spec no longer sees a flight, so a policy trained on the variant would not
+  be asked to hop. These variants are dropped, not repaired.
+- **Jumping jacks and hurdles, 12 `speed` each (every amplitude-1.1 variant).** The base retarget is at the
+  20 rad/s cap in airborne frames (jumping jacks: 2 of its 7 capped frames), most likely the shoulder handling
+  of fix 5. Flight time is fixed by gravity, so
+  1.1x amplitude means 22 rad/s there. Fix 5 should free these.
+- **Limits, 12 each on lunge, shot put, discus and hurdles (every amplitude-1.1 variant).** These are honest, as
+  Stage 4 says: the retargets already graze the ankle limits.
+- **No variant is dropped for `penetration` or `ballistic` on the current retargets.** The generator no longer
+  makes them; the rules remain as guards.
+
+Tests are in `tests/test_variations.py`:
+
+- the flight measure is exact between frames, and reads 1/4 for a hop with twice its airtime;
+- the time map holds the cap and keeps flights at 1x;
+- a 1.25x hop is re-timed back to ballistic;
+- each physical rule drops a synthetic variant that breaks it;
+- slow tempo keeps the soles on the source's floor.
+
+`tests/data/qpos_front_kick.npy` is now the capped retarget of the same clip. The old one had a frame at
+21.7 rad/s, so its own identity variant was dropped.
+
+**Training check (Colab A100, 2026-10-30).** One run on the physical jumping-jack variants:
+
+- **Setup:** `remote_run.py variants --branch variant-physics`, `tracking_var` for 1,500 iterations, warm-started from
+  `mc_adapt_inputs/policy_multi/model_1999.pt`. It trained on 12 of 36 variants (65 s of motion), built from the
+  capped retarget.
+- **The hop is not learned.** In the clip rollout both feet clear at most 7.7 cm (the reference: 12.6 cm), with
+  no flight.
+- **Spec:** the rollout completes 6 of 13 stages and is stuck at the jump stage.
+- **Comparison:** the earlier jumping-jack adaptation run (`remote_multiclip_adapt_jacks`) used the stale
+  76 rad/s variants and only 300 iterations. Its four policies complete 1 of 13 stages and fall 7-8 times in the
+  same rollout; this one falls 0 times, with joint error 0.12 vs 0.15-0.18 rad. The iteration counts differ, so
+  this does not isolate the filter's effect.
+- **Possible causes:** the hop is short (0.16 s, 3 cm of pelvis rise), and only 12 alpha-1.0 variants carry it.
+  A larger or longer hop in the source clip would give the reward more to work with than more variants would.
+
+### Fixes 1, 5, 7: contacts and flights, retarget IK, fps and version (2026-10-30)
+
+Implemented in `retarget.py` (plus the `meta.json` writer in `pipeline.py` and `experiments/process_clips.py`).
+Measured with `experiments/pipeline_audit/retarget_audit.py` on the same ten `human.npy` files, before (main at
+6c38beb) and after, with the same script for both (it now reads `proportional_motion`'s own intermediates, and
+uses the lifted-heel floor where the original audit used a flat one, so the "before" column differs from the
+Stage 2 table above by a few tenths). JSON: `docs/results/pipeline_audit/retarget_fixes_{before,after}.json`.
+The stored `qpos.npy` files in `outputs/` were not overwritten (other sessions train from them).
+
+What changed:
+
+- **Contacts (`stance_mask`).** Two signals per foot. A *dwell* is the old window (within 10 cm of the
+  foot's floor, slow, at least 4 frames), but the speed threshold is now 0.6 m/s plus half the root's
+  horizontal speed. A *touch-down* is the ankle's lowest point within +-0.1 s (vertical velocity crossing from
+  down to up) near the floor and under the same threshold; it and its lower neighbour count as a 2-frame
+  contact. Frame counts scale with fps.
+- **Phantom flights (`ground_phantom_flights`), per take-off.** Inside a no-contact stretch the lowest
+  foot's near-floor minima are missed touch-downs and split it into candidate flights. Each one is a flight
+  if the pelvis rises at least 0.4 (was 0.25) of g T^2 / 8 for its airtime, or if the clip ends with the
+  pelvis still above its take-off height (never lowered). Non-flights up to 0.5 s are lowered as before. A
+  longer stretch with no flight is not grounded: the floor is interpolated through the touch-downs, and a
+  warning goes to `meta.json`.
+- **Leg IK.** The G1's knee and ankle-pitch axes are parallel, so with the hip and foot pose fixed its knee
+  has *no* freedom. It lies in the plane of the hip-ankle line and the knee axis, and the ankle roll is the
+  hip-ankle line's lean out of the foot's sagittal plane (`ankle_roll`). The old targets asked for a flat foot
+  under the pelvis yaw plus the human's knee, which no G1 leg can do at once, so the IK gave up the knee (5-10 cm)
+  and parked the ankle roll at its limit. Now:
+  - the foot's yaw follows the plane the human's leg bends in (`leg_heading`; a planted foot keeps its
+    contact's mean, or turns with the leg if the contact turns more than 90 degrees, as in the discus spin);
+  - the knee target keeps only its in-plane part (`knee_in_leg_plane`);
+  - roll beyond the ankle's range less 4 degrees rolls the foot target onto its edge, raised to clear the
+    floor.
+
+  The audit asked for the pelvis roll to absorb the excess. On a wide stance a pelvis roll moves the hip a few
+  cm and cannot remove a 25-40 degree hip-ankle lean, so the foot takes it instead.
+- **Arm IK.** Arm joints are pulled toward the previous frame's (cost 0.2), and the clip is also solved
+  backwards. Each run of frames where an arm misses its elbow + hand targets by over 5 cm is re-solved from the
+  arm pose of the best-tracked frame with the most similar target, and each arm keeps the candidate that tracks
+  better, spliced where they agree. The worst case was a local minimum, not the speed cap. In the first jumping
+  jack the forward solve took the roll branch of the shoulder, pinned roll at its 2.25 rad limit, and left the
+  hand 13 cm off for 9 frames, while the same frames solve to 1.7 cm from a later rep's arm pose. The cap frames
+  that remain are the arm passing the shoulder's gimbal point (straight out to the side), with the hand within
+  2 cm.
+- **Hygiene.** `pipeline.video_fps` reads the frame rate from the decoded frames' timestamps. `meta.json` now
+  has `video_timing` (real fps, header fps, frame gaps), `retarget_version` (`retarget.code_version()`: the
+  version string, git commit, whether `retarget.py` was modified, and the parameters), `retarget_warnings` and
+  `stance_frac`. `process_clips.py` adds `source_video` with the source file's own timing before the 30 fps
+  resample.
+
+Contacts and flights:
+
+| clip | no-contact frames | phantom lowering max (cm) | root shift mean (time-varying part) (cm) | pelvis rise kept / in the pose (cm) | root travel (cm) |
+|---|---|---|---|---|---|
+| squat_jump | 14% → **13%** | 0 | 9.4 (5.4) → **9.5 (5.4)** | 58/57 → **57/57** | 19 |
+| squat | 0% | 0 | 9.7 (4.9) | 20/24 | 20 |
+| lunge | 4% → **0%** | 0 | 8.5 (5.7) → **9.6 (6.5)** | 36/34 → **37/34** | 42 → **37** |
+| arms | 0% | 0 | 1.7 (0.9) | 1/1 | 5 |
+| front_kick | 0% | 0 | 6.0 (3.9) → **6.1 (3.9)** | 5/2 | 18 → **19** |
+| jumping_jacks | 49% → **41%** | 0 | 6.3 (4.6) → **5.5 (3.6)** | 16/16 | 20 → **11** |
+| punches | 0% | 0 | 4.3 (2.7) | 6/4 | 29 |
+| shot_put | 58% | 9 → **5** | 13.6 (5.7) → **14.4 (5.5)** | 20/26 → **23/26** | 123 |
+| discus | 2% | 0 | 10.2 (6.6) | 7/16 → **8/16** | 98 → **91** |
+| hurdles | 88% → **65%** | 62 → **0** | 4.5 (3.3) → **6.8 (5.5)** | 26/51 → **51/51** | 319 → **316** |
+
+IK:
+
+| clip | knee IK error L/R (cm) | ankle roll at limit | any joint at limit | frames at 20 rad/s (worst hand error there, cm) | hand IK error max (cm) | knee angle error (deg) | hip angle error (deg) |
+|---|---|---|---|---|---|---|---|
+| squat_jump | 1.1/5.5 → **0.5/1.6** | 4% → **0%** | 5% → **1%** | 0 (0) | 0.2 | 2.3 → **2.0** | 4.9 → **5.2** |
+| squat | 1.1/5.0 → **0.6/1.8** | 5% → **0%** | 5% → **0%** | 0 (0) | 0.2 | 4.2 → **3.3** | 4.2 → **5.0** |
+| lunge | 2.4/3.5 → **1.7/1.2** | 23% → **4%** | 36% → **21%** | 0 (0) | 0.2 | 3.0 → **2.9** | 4.9 → **5.7** |
+| arms | 1.7/1.6 → **0.7/0.7** | 0% | 0% | 0 (0) | 0.1 | 0.8 → **0.6** | 2.1 → **1.9** |
+| front_kick | 1.8/6.1 → **0.4/1.9** | 22% → **0%** | 26% → **5%** | 1 (0) | 0.2 → **0.3** | 4.0 → **1.4** | 6.1 → **5.4** |
+| jumping_jacks | 1.5/1.8 → **0.6/0.8** | 13% → **0%** | 13% → **0%** | 9 (6) → **9 (2)** | 13.2 → **1.8** | 1.7 → **1.4** | 3.0 → **2.4** |
+| punches | 3.2/3.8 → **1.9/1.4** | 0% | 0% → **1%** | 0 (0) | 0.1 | 5.3 → **4.4** | 5.3 → **6.3** |
+| shot_put | 2.3/3.8 → **0.9/1.0** | 89% → **0%** | 94% → **44%** | 7 (18) → **3 (13)** | 18.3 → **13.4** | 5.4 → **4.2** | 7.1 → **4.5** |
+| discus | 6.2/9.8 → **0.9/1.3** | 48% → **0%** | 76% → **10%** | 11 (10) → **4 (1)** | 10.8 → **1.3** | 12.8 → **2.1** | 6.7 → **3.7** |
+| hurdles | 2.5/3.8 → **0.8/1.6** | 64% → **0%** | 66% → **11%** | 4 (3) → **3 (1)** | 3.0 → **1.4** | 1.7 → **1.0** | 2.2 → **5.2** |
+
+Feet:
+
+| clip | foot penetration max (cm) | planted-foot slide (cm/s) | planted-foot tilt p95 (deg) | planted-foot twist (deg/s) |
+|---|---|---|---|---|
+| squat_jump | 0.3 → **0.1** | 0.13 → **0.05** | 0 → **2** | 4 → **0** |
+| squat | 0.1 | 0.07 → **0.04** | 0 → **2** | 1 → **0** |
+| lunge | 0.9 → **0.8** | 0.18 → **0.10** | 28 → **31** | 6 → **0** |
+| arms | 0.0 | 0.02 → **0.01** | 0 | 0 |
+| front_kick | 0.1 | 0.28 → **0.04** | 1 → **2** | 1 → **0** |
+| jumping_jacks | 0.1 | 0.16 → **0.09** | 1 → **2** | 14 → **0** |
+| punches | 0.3 → **0.2** | 0.24 → **0.21** | 0 → **5** | 1 → **0** |
+| shot_put | 1.8 → **0.5** | 0.45 → **0.13** | 16 → **28** | 8 → **0** |
+| discus | 1.0 → **0.3** | 0.64 → **0.14** | 2 → **8** | 24 → **102** |
+| hurdles | 0.8 → **0.0** | 0.10 → **0.04** | 6 | 16 → **0** |
+
+Root shift = mean distance `plant_feet` moved the hip midpoint from the pose estimate; the bracket removes its
+clip-constant part (a floor / start reference with no effect on the output). Pelvis rise = max minus 5th
+percentile, in G1 metres (the hurdler's +60 cm human rise is 51 cm at the 0.85 leg scale). Tilt and twist are the
+IK result's planted feet (degrees off flat, and yaw rate).
+
+Flight decisions after the fix:
+
+| clip | stretch | decision |
+|---|---|---|
+| squat_jump | 2.77 s and 6.90 s, 0.63 s each | flights (rise 39.6, 37.9 cm vs 19.7 needed), unchanged |
+| jumping_jacks | 7 hops, 0.20-0.40 s | all 7 kept as flights (rise 4.5-14.9 cm vs 2.0-7.8 needed) |
+| lunge | the 0.17 s "flight" | gone: the shuffle is now a contact |
+| shot_put | 1.10 s, 0.33 s | lowered 4.7 cm: rise 5.8 cm is under 0.4 of ballistic, the doubtful hop rejected as predicted |
+| shot_put | 2.20 s, 1.60 s | interpolated through 3 touch-downs (lowered up to 4.6 cm, was 9.4), warning in `meta.json` |
+| hurdles | 1.23 s to the end, 1.77 s | kept as a flight that ends the clip: the pelvis keeps its full rise (was lowered up to 62 cm). Warning: 1.77 s airborne is 3x what a 37 cm rise allows, so the root is probably drifting (camera tilt, see Stage 1) |
+
+Against the targets:
+
+- **Hurdles clearance survives** (pelvis rise 51 of 51 cm kept, was 26). No-contact frames fall from 88% to 65%:
+  the run-up now has contacts, and what is left is the clip's airborne end.
+- **Phantom lowering:** 0 on every clip except the shot put (5 cm, was 9).
+- **Ankle roll at its limit:** 0% on nine clips, 4% on the lunge (was 4-89%). Any-joint-at-limit drops on
+  every clip that had hits (punches goes from 0 to 1%); what remains is ankle pitch (the lunge's rear heel), the shot-putter's right shoulder pitch (40%,
+  unchanged: the hand at the neck is past the G1's range), and knee flexion.
+- **Knee IK error:** 0.4-1.9 cm (the worse knee was 3.5-9.8 cm on eight clips). Knee *angle* error against the
+  human improves on all ten, and the discus goes from 12.8 to 2.1 degrees.
+- **20 rad/s cap:** 32 frames over the ten clips become 19. More importantly, the hand while capped is within
+  2 cm everywhere except one shot-put frame (13 cm, the elbow at its full-flexion limit: the target is out of
+  reach). Worst hand error: jumping jacks 13.2 to 1.8 cm, discus 10.8 to 1.3, shot put 18.3 to 13.4.
+- **Root shift is not "well below 4-14 cm".** It is essentially unchanged on clips whose contacts were already
+  right (squat 9.7 cm with 0% no-contact before and after). About half of it is the constant reference offset;
+  the time-varying part (2.7-6.6 cm) is the pose estimate's own planted-foot drift: the 2D-track root and the
+  3D skeleton disagree about where a still foot is (Stage 1's ruler drift and depth error). More contacts move
+  it up slightly where frames were previously unpinned (hurdles 3.3 to 5.5, lunge 5.7 to 6.5). Fixing it needs a
+  better root (fix 3 or the camera model), not better contacts.
+- **Shot-put glide travel:** 123 cm before and after (the pose estimate's 119). The pivoting foot is still
+  found only 19-32% of the time: it slides at about 1 m/s during the glide, too fast for either signal.
+- **Squat jump, squat, arms, lunge:** better on every metric except the **hip angle error, +0.3 to +0.8
+  degrees** (squat 4.2 to 5.0, lunge 4.9 to 5.7, squat jump 4.9 to 5.2), and +2 degrees of planted-foot tilt
+  (95th percentile). The lunge's hip change comes mostly from fix 1 (its new contacts). The squats' comes from the
+  feet: the old IK let the knee follow the human out of the G1 leg's plane by straining a flat foot at the
+  ankle-roll limit (5% of frames) with 5 cm of knee error, whereas a G1 knee cannot track "knees out" with a
+  planted, non-twisting foot. Keeping part of the out-of-plane knee (tested at 30% and 60%) did not change the hip
+  angle, only the knee error.
+- **Feet:** penetration and sliding go down everywhere. Planted feet no longer twist (squat 1, jacks 14, hurdles
+  16 deg/s to 0); the discus pivots by design (102 deg/s, the spin). Tilt rises where a wide stance needs more
+  roll than the ankle has: shot put p95 28 degrees (was 16, with the ankle at its limit in 89% of frames instead),
+  punches 5, discus 8. That is the foot rolling onto its edge explicitly instead of the IK leaving it there
+  unasked.
+- **Jumping jacks keep their hops** (all 7), and `tests/test_retarget.py` has the original phantom-flight test
+  plus tests for running touch-downs, a missed-contact run-up ending in a jump, a clip ending mid-air, a short
+  lifted stance, a hop, the roll formula against the G1's joint, the leg heading, a wide stance, the version
+  record and the fps reader.
+
+Fix 7 corrects a claim in this audit: **the stored `meta.json` fps (30.0) was right.** Every `human.npy` has
+exactly 30 frames per second of video. The phone files' frames are 1/30 s apart by their timestamps, and their
+header's 27.7-29.6 fps (what mediapy reports, and what Stage 1's table lists as "true fps") is a nominal rate. The
+films were resampled to 30 fps by `_processed` (shot put 107 frames at 25.03 fps becomes 128). The real hazard is
+the opposite: `pipeline.py` run directly on a phone file used mediapy's header rate, 1-8% slow. It now
+measures the rate from the timestamps. The hurdles file also has one dropped frame (an 80 ms gap), now
+counted in `video_timing.irregular_gaps`.
+
+Costs and side effects:
+
+- The retarget takes about 2.2x as long (30 s for the ten clips on a laptop, about 0.5 s per second of video):
+  the backward solve and the re-seeds.
+- `FLIGHT_RISE_FRAC` 0.25 to 0.4 is also read by `experiments/generalist_policy.py`'s "floats" check on
+  retargeted clips, which becomes stricter in the same way.
+- The stored clips in `outputs/` still hold the old retarget, so tables made from them are pre-fix. Re-running
+  `retarget_audit.py --save-qpos <dir>` writes the new ones.
+- Not done: training the hurdles and shot put on the new references (both Colab A100 slots were taken by other
+  sessions' jobs).
+
+### Fix 6: coverage (camera compensation, athlete selection, intake checks), 2026-10-30
+
+What changed:
+
+- **`camera.py` (new): background camera compensation.** For every frame, the motion that maps it onto the
+  first frame is estimated from the background only. The athlete is masked out with SAM's mask joined to a
+  silhouette drawn from the pose landmarks, so `--no-sam` works too. `pose.human_trajectory(camera=...)`
+  maps the 2D landmarks through it before lifting to metres, so a pan or zoom no longer becomes root motion
+  and the torso ruler is measured in one image plane.
+  - Shi-Tomasi corners, tracked with pyramidal Lucas-Kanade (forward-backward checked) against a keyframe
+    rather than chained pair by pair, so errors do not add up. RANSAC fit. ORB, then phase correlation, as
+    fallbacks.
+  - Motion model: a similarity (pan, tilt, roll, zoom). A full homography is available
+    (`estimate(model="homography")`) but was less stable on frames with few features.
+  - Static cameras are a strict no-op: under 2 px of accumulated motion at the athlete, every matrix is the
+    identity and the root is bit-identical.
+  - An estimate is "unreliable" when fewer than 80% of the distinct frames register from features, as on the
+    1900 films (grain, flicker, mostly repeated frames). It is then applied only to a clear pan, over 5% of
+    the frame width.
+  - Like the audit said, a homography covers rotation and zoom, not a camera that translates.
+- **`athlete.py` (new): athlete selection.** `pipeline.py --athlete` takes `x,y` (a click), `x0,y0,x1,y1` (a
+  box) or an index counted from the left, on the first frame.
+  - With SAM it picks that object from SAM 3.1's outputs instead of the most-seen one
+    (`track.main_track_masks(select=)`; `sam_track.py --athlete`).
+  - Without SAM a CPU tracker follows the chosen person: MediaPipe in a crop around the last position,
+    upscaled so distant athletes are detected; a torso-colour check so it does not jump to someone else;
+    full-frame re-detection after a loss.
+  - `athlete.continuity` flags mask jumps (identity switches or same-shot splices).
+- **Intake checks, in `camera.json` beside each clip's outputs (the `meta.json` writer is untouched):**
+  - the athlete's pixel height (`pose.height_check`, a warning under 400 px);
+  - shot cuts (colour-histogram jumps);
+  - hip teleports and mask jumps (splices of the same shot, which a histogram cannot see);
+  - frames where camera motion could not be measured.
+- `pipeline.py`: a minimal hook (`camera.intake` before `human_trajectory`; `--athlete`, `--no-camera`).
+
+Measured on CPU, no downloads. The scripts are in `experiments/camera_coverage/` and the JSON in
+`docs/results/camera_coverage/`. Each clip's landmarks were cached on the whole frame (phone clips) or with
+the CPU tracker (films), because SAM masks are not stored.
+
+**Static clips and synthetic pans.** Static: the clip as filmed; "root change" is the maximum change in any
+root coordinate with the camera stage on vs off. Synthetic: a cropped copy of the same clip whose camera pans
+to follow the athlete with a sway, tilts and zooms in 10%, with MediaPipe re-run on the warped video. Cells
+are mean / max cm of the pelvis from the static clip's pelvis, so the "true camera" column is the floor that
+pose noise on the re-cropped video allows.
+
+| clip | height px | static: detected / root change | synthetic camera motion (px) | camera error, mean / max (px) | uncompensated | compensated | true camera |
+|---|---|---|---|---|---|---|---|
+| squat_jump | 1377 | yes / 0.00 cm | 59 | 0.13 / 0.6 | 4.9 / 7.1 | 0.7 / 2.0 | 0.7 / 2.0 |
+| squat | 1361 | yes / 0.00 cm | 53 | 0.08 / 0.3 | 5.3 / 7.3 | 0.8 / 1.7 | 0.8 / 1.7 |
+| lunge | 1078 | yes / 0.00 cm | 192 | 0.45 / 0.9 | 17.6 / 31.2 | 3.1 / 7.1 | 3.1 / 7.1 |
+| arms | 1127 | yes / 0.00 cm | 100 | 0.11 / 0.5 | 10.8 / 15.5 | 0.6 / 1.3 | 0.6 / 1.3 |
+| front_kick | 1027 | yes / 0.00 cm | 132 | 0.21 / 0.5 | 12.9 / 21.7 | 2.1 / 2.8 | 2.1 / 2.7 |
+| jumping_jacks | 1313 | yes / 0.00 cm | 70 | 0.16 / 0.3 | 7.7 / 10.3 | 0.5 / 1.1 | 0.5 / 1.1 |
+| punches | 1316 | yes / 0.00 cm | 95 | 0.07 / 0.3 | 7.4 / 13.5 | 1.0 / 1.6 | 1.0 / 1.6 |
+| shot_put (1900) | 699 | yes (unreliable) / 0.00 cm | 203 | 11.1 / 18.7 | 29.3 / 56.9 | 7.3 / 9.9 | 2.9 / 4.6 |
+| discus (1900) | 685 | yes (unreliable) / 0.00 cm | 139 | 59.3 / 92.9 | 19.3 / 40.4 | 16.8 / 26.3 | 9.2 / 16.1 |
+| hurdles (1900) | 416 | yes (unreliable) / 0.00 cm | 463 | 10.5 / 17.6 | 94.9 / 207.6 | 6.9 / 11.3 | 6.1 / 8.8 |
+
+- **No regression on static clips.** All ten keep their root bit for bit.
+  - On the phone clips the measured motion is 0.1-0.6 px.
+  - The films read 12-32 px with an unreliable estimate and are left alone. Hurdles probably does drift about
+    27 px (phase correlation on the roof agrees), so that is a correction this conservative rule forgoes.
+- **On a phone-quality pan the compensation is as good as knowing the camera.** Camera error is under 1 px
+  and the root equals the true-camera root to 0.1 cm, against 5-31 cm of phantom travel without it.
+- **On the films it removes most but not all of the pan.** Grain and repeated frames leave 10-60 px of
+  error. Hurdles drops from 95 / 208 cm to 7 / 11 cm, discus from 19 / 40 to 17 / 26.
+- The pixel heights confirm the audit's estimate. The films are at 416-699 px with the tracker's crop.
+  Without it, MediaPipe on the whole frame finds the hurdler in 0% of frames (shot put 73%, discus 89%);
+  with the CPU tracker, 100% for all three (the hurdler needs a box on frame 0).
+
+**The rejected pro clips** (`docs/PRO_CLIPS.md`, already on disk from the first download; CPU tracker with a
+box on the first frame, since SAM needs a GPU). Root numbers are over the frames where the tracker was
+verifiably on the athlete (checked on a contact sheet). Speeds are 0.3 s means of the pelvis's in-plane
+speed.
+
+| clip (why rejected) | athlete px | camera | root without compensation | root with compensation | plausible now? |
+|---|---|---|---|---|---|
+| High jump, Sudamericanos (distant, crowded, cuts) | 274 (warned) | pans 1740 px following the curved run-up | 0.2 m net over the 3.7 s run-up, peak 2.1 m/s: running on the spot | 12.3 m, accelerating from 0.5 to 5.1 m/s | **run-up yes.** The flop is lost: MediaPipe does not detect the inverted body over the bar, and the tracker ends on an official (flagged). No histogram cut was found in the source. |
+| Javelin, EuroGames (distant, panning) | 200 (warned) | pans 1470 px with the thrower | 0.4 m over the 1.9 s approach, peak 1.5 m/s | 5.5 m, 2.3 to 5.0 m/s | **approach yes**, a typical javelin run-up speed. The thrower is lost in the crowd at the throw (frame ~60, flagged); 200 px is too small. |
+| Biron running long jump (distant, crowded, panning) | 1115 | whip pan, 6200 px | net -1.1 m, peak 9.8 m/s | 11.8 m net, but peaks at 20 m/s and the pelvis dips 1.9 m | **no.** The pan is removed, but the jumper runs straight at the camera (300 to 1100 px tall). The fixed torso ruler and zero-depth assumption are wrong for that, which no homography fixes. |
+| Sweeney long jump (spliced out of order) | 385 (warned) | static, unreliable estimate, left alone | | | **flagged.** Mask jumps at the splices (frames 20-29, 56, 85, 116 of the excerpt). The histogram cut test finds nothing on a same-shot splice. |
+| Sweeney high jump (cut before landing) | | | | | not run: an incomplete motion is not a camera problem. The "starts and ends on the floor" intake check covers it. |
+
+What is left:
+
+- **Depth motion.** Clips filmed head-on or with a depth component need a per-frame ruler or a
+  world-grounded front end (Fix 3).
+- **Inverted or distant bodies.** MediaPipe loses them (the flop over the bar; the 200 px thrower in a crowd).
+  SAM's masks with a click prompt keep identity, but the pose is still MediaPipe's.
+- **Not run on a GPU.** SAM with `--athlete` selection is tested on fake SAM outputs only.
+- **Other entry points.** `experiments/process_clips.py` calls `video_to_motion` with defaults, so camera
+  compensation is now on there. It is a no-op on all ten stored clips, per the table above.
+  `server/live_worker.py` does not call the camera stage yet.
+
+### Fix 2: a success metric that a good tracker passes (2026-10-30)
+
+Code: `skill/keypose.py` (`_compile`, `KeyposeMachine.step`, new `tracking_rms` / `calibration` / `calibrate` /
+`cut_mid_motion`), `skill/task.py` (`features`, `evaluate`), `experiments/robustness_eval.py`. Tests:
+`tests/test_keypose.py` (flicker, tempo, floor, diagnostics, upright, mid-motion end; each new test fails on the
+code before the fix), `tests/test_robustness_eval.py` (calibration choice, where rollouts stop, summary). New
+measurement scripts: `experiments/pipeline_audit/spec_tempo.py` (the 0.7x / 1.4x acceptance check) and
+`wrong_move.py` (rejection checks on saved rollouts). JSON and summaries: `docs/results/pipeline_audit/fix2/`.
+
+What changed:
+
+1. **Flicker-tolerant holds.** A hold is met when 80% (`HOLD_FILL`) of the control steps in its last `hold_s`
+   satisfied the predicate (a ring buffer per env, cleared when a stage begins), not `hold_s` in a row. A flight's
+   airtime still counts in full and in a row: contacts are exact in simulation and the airtime is the jump.
+2. **Tempo-relative holds.** `hold_s` is at most half the stage's own reference duration (`HOLD_STAGE_FRAC`), and
+   the machine scales each pose's and settle's hold by the rollout's tempo so far (its time to this key moment over
+   the reference's, clamped to [0.5, 1]). Arriving more than 3x early (`TEMPO_CUT`) is not the motion at another
+   tempo but a shortcut, and holds in full: without that cut, the punches policies passed the arms clip's spec by
+   starting in its single key pose, 12x "early".
+3. **Tolerance floor from the tracker, stored per clip.** `robustness_eval.py` records each policy's per-body RMS
+   tracking error (`tracking_rms_m`) and per-feature RMS error in the spec's own features (`feature_rms_m`,
+   `K.tracking_rms`) on every condition that plays the clip. `--calibrate` runs the clean clip once uncalibrated,
+   takes the best tracker that never fell and is within 0.10 rad of joint error, writes `tracker_calibration.json`
+   (floor = max(`TOL_MIN`, 2 x RMS) per feature, capped at 2 x `TOL_MIN`), and scores every condition with it.
+   `--calibration FILE` (or `<runs>/tracker_calibration.json`) applies a stored one, so later policies on the clip
+   are held to the same floors; the calibrated spec records it under `calibration`. Relevance, goals and holds are
+   unchanged: only how close counts. The cap is 2x because at 3x the arms and discus specs (one key moment each)
+   accepted the punches rollouts; the 0.10 rad guard because the jumping-jacks trackers (best 0.12 rad) never jump,
+   and floors from them would be the error of not doing the move.
+4. **Diagnostics.** `evaluate()` returns `abandoned`: for each stage skipped, fallen in, or unfinished when the clip
+   ended, the feature furthest outside its tolerance at the rollout's closest approach (`error_tol`, 1 = at the
+   edge), the relevance-weighted RMS, and `reached` (both within 1: the hold, feet or stillness failed instead).
+   The eval aggregates the same per policy and condition from the batched machine, and `robust_summary.md` prints
+   "Where unsuccessful rollouts stop" and the per-body tracking error.
+5. **Upright vector: pelvis -> shoulder midpoint**, for the progress gate, the settle predicates and the fall rule
+   (`task.features`, `task.fallen`). This axis reads real trunk lean, and the references lean a lot more than the old
+   axis showed: 48 deg at the bottom of the squat, 54 deg absorbing the squat jump's landing (the old 4.4 cm axis,
+   mostly the pelvis's own tilt, never went past 26 deg on them). Kept as-is, the old thresholds would have refused
+   the reference's own landings and stopped paying progress at the bottom of its squats, and the squat jump's
+   stand/squat/jump spec failed its reference at 1.4x. So the thresholds now say what they meant on the old axis: a
+   landing is controlled within 60 deg (`LAND_UP`), progress is paid in full to 60 deg and not at all past 75 deg
+   (`GATE_UP`), the fall rule stays at 80 deg, and standing still (start, end, the stand stage) is still within
+   32 deg (`UPRIGHT`). The gate never binds on any of the ten references (min 1.00). `robustness_eval.py`'s own fall
+   rule (torso_link orientation from the simulator's quaternion) is unchanged: it is exact there.
+6. **Found on the way: the punches clip ends mid-motion.** With items 1-2 alone, every punches rollout reached the
+   last stage and stopped there: "turn left, step forward (finish)", right foot height 1.7-2.8x its tolerance (100%
+   of rollouts, per the new diagnostics). The clip's last frame catches the athlete starting a step out of frame (the
+   last frames move at 0.89 m/s, 7x the clip's median), so the end goal was a pose the reference itself touches only
+   on that frame (dwell 0.07 s; every other clip's end pose is held 0.33 s or more), and a tracker one frame behind
+   can never finish before the clip ends. `cut_mid_motion`: when the end pose is held under 0.2 s, the trailing burst
+   (frames over 2x the median speed, at most 0.3 s) is not a goal; the key moments and their tolerance scale are
+   otherwise the clip's (punches keeps its first five key moments; the walk-off is dropped; the spec warns and
+   records `goals_end_s`). Only the punches clip triggers it.
+
+#### The spec against its own reference (all ten clips; before = the code at 260e130)
+
+| clip | self-check | 0.7x | 1.4x | limb noise 2 / 4 / 6 cm | all-body noise 1 / 2 / 3 cm | key moments re-found (1 cm) |
+|---|---|---|---|---|---|---|
+| squat_jump | 12/12 -> 12/12 | 12 -> 12 | 12 -> 12 | 100/100/100 -> 100/100/100 | 67/0/0 -> 100/83/50 | 79% -> 79% |
+| squat | 9/9 -> 9/9 | 9 -> 9 | 9 -> 9 | 100/100/100 -> 100/100/100 | 67/0/0 -> 100/100/100 | 60% -> 60% |
+| lunge | 16/16 -> 16/16 | 16 -> 16 | **3 -> 16** | **75/25/25 -> 100/88/62** | 67/0/0 -> 100/83/50 | 86% -> 86% |
+| arms | 3/3 -> 3/3 | 3 -> 3 | 3 -> 3 | 100/100/100 -> 100/100/100 | 100/33/0 -> 100/100/100 | 100% -> 100% |
+| front_kick | 6/6 -> 6/6 | 6 -> 6 | 6 -> 6 | 100/88/100 -> 100/100/100 | 67/0/0 -> 100/100/100 | 100% -> 100% |
+| jumping_jacks | 13/13 -> 13/13 | 13 -> 13 | 13 -> 13 | 100/100/100 -> 100/100/100 | 100/0/0 -> 100/100/100 | 52% -> 52% |
+| punches | 7/7 -> 6/6 | 7 -> 6 | 7 -> 6 | **100/88/25 -> 100/88/62** | 100/0/0 -> 100/100/100 | 72% -> 83% |
+| shot_put | 4/4 -> 4/4 | 4 -> 4 | **2 -> 4** | 62/50/50 -> 50/75/50 | 83/0/0 -> 100/50/33 | 83% -> 83% |
+| discus | 2/2 -> 2/2 | 2 -> 2 | 2 -> 2 | 100/100/100 -> 100/100/100 | 100/33/0 -> 100/100/100 | 100% -> 100% |
+| hurdles | 2/4 -> 2/4 | 2 -> 2 | 2 -> 2 | 0 -> 0 | 0 -> 0 | - |
+
+From `spec_audit.py`, `spec_noise.py` and `spec_tempo.py` as before (8 noise trials per cell; limb noise leaves the
+pelvis, torso and foot heights exact; all-body noise does not). Every testable spec now passes its reference at
+0.7x, 1x and 1.4x (also the stand/squat/jump specs, `spec_tempo.json`); hurdles is still untestable (it ends mid-air:
+fix 1). All-body noise no longer reads as a fall (the upright vector). Not fixed by this: key-moment stability
+under re-compilation (52-100%, a property of the RDP selection, not of the predicates), and the shot put under limb
+noise, whose remaining failures are all root forward / root turn: `spec_noise.py` perturbs the hip bodies, which
+set the heading the root features are measured in (a simulated robot's hips are exact).
+
+#### Policies re-scored (same checkpoints, CPU mjlab 1.6.0, 16 envs per policy and condition, no training)
+
+| clip | policy (clean joint err) | clean | pushed 1 m/s | pushed 2 m/s (fell) | tempo 0.5x / 2x | standing still, reference frozen |
+|---|---|---|---|---|---|---|
+| punches | scratch, 1500 it (0.079 rad) | 0% -> **100%** | 0% -> 94% | 0% -> 0% (100%) | 0 -> 100% / 0 -> 100% | 0% -> 0% |
+| punches | specialist, 1500 it (0.099 rad) | 0% -> **100%** | 0% -> 94% | 0% -> 50% (38%) | 0 -> 100% / 0 -> 100% | 0% -> 0% |
+| punches | multi, 1500 it (0.104 rad) | 0% -> **100%** | 0% -> 100% | 6% -> 62% (19%) | 0 -> 100% / 0 -> 100% | 0% -> 0% |
+| punches (older retarget) | tracking_var, 300 it (0.139 rad) | 0% -> **100%** | 0% -> 88% | 0% -> 31% (50%) | 0 -> 100% / 0 -> 50% | 0% -> 0% |
+| punches (older retarget) | multi, 300 it (0.181 rad) | 0% -> **0%** | 0% -> 6% | 0% -> 19% (0%) | 0% / 0% | 0% -> 0% |
+| jumping_jacks | multi, 1500 it (0.119 rad) | 0% -> **0%** | 0% -> 0% | 0% -> 12% (0%) | 0% / 0% | 0% -> 0% |
+| jumping_jacks | scratch, 1500 it (0.129 rad) | 0% -> **0%** | 0% -> 0% | 0% -> 0% (50%) | 0% / 0% | 0% -> 0% |
+| jumping_jacks | specialist, 1500 it (0.153 rad) | 0% -> **0%** | 0% -> 0% | 0% -> 0% (19%) | 0% / 0% | 0% -> 0% |
+
+Punches 1500-iteration policies: the `remote_adapt_v2_punches` checkpoints (frontier-adapt); the 300-iteration ones:
+`remote_multiclip_adapt_punches`, trained on the older `mc_inputs` retarget of the same clip (joints up to 0.24 rad
+apart), so they are scored against that clip, with the punches calibration applied. Before = the code at 260e130
+with the spec the runs were scored with; after = the specs recompiled with this code, `--calibrate`. The CPU numbers
+reproduce the GPU eval's (punches clean 0%, joint error 0.079 / 0.099 / 0.104 rad, same as `robust.json`).
+
+- **Good trackers pass; a bad one still fails.** The three 0.08-0.10 rad punches trackers go from 0% to 100%, and
+  the 0.14 rad one with them. The 0.18 rad one still fails, all 16 rollouts stuck on "left hand right, left foot
+  back" with the left wrist's lateral position 1.14x its tolerance at their closest approach. Jumping jacks stays at
+  0%: every rollout stops at the jump (no start learned it, as the adaptation run found).
+- **The calibration raised no floor on punches.** The best tracker's per-feature RMS error is 0.1-4 cm (wrists
+  1.4-4 cm per axis), so 2x stays under every `TOL_MIN`. The audit's inference above (a 0.14 rad tracker lives at the
+  edge of a 10 cm wrist box) was wrong: the box was not the problem, the hold reset (items 1-2) and the end-of-clip
+  goal (item 6) were. The calibration stays as the mechanism that makes "a good tracker passes" hold by
+  construction on clips where tracking error is larger than the minimum tolerances.
+- **Falls and wrong moves are still rejected.** Every rollout that fell failed (success is zero by construction
+  after a fall; at 2 m/s the scratch tracker fell in all 16 and scored 0%). Standing still with the reference frozen
+  scores 0% everywhere, stopped at the first key moment ("right hand up, left hand up", right wrist z 1.6-1.9x).
+  Offline (`wrong_move.py`, all 16 clean rollouts per policy): with either arm held still, every punches tracker
+  fails its own spec (0%); scored against the arms, front kick, jumping jacks, shot put and discus specs it fails
+  every one (0%), also with every tolerance floor at its cap.
+- **What the spec cannot tell apart.** The mirrored punches (`--mirror`: the same combination with the other hands)
+  pass at 100%: punches' required moments are nearly left-right symmetric (the mirror of "left hand left, right hand
+  right" is itself), only two inner key moments are required (`REQUIRED_TOP`), and timing is free, so the loose task
+  cannot see a left/right swap of this combination. It was not rejected before either: before, nothing passed.
+  Under 2 m/s shoves, 2 of 16 jumping-jacks rollouts were knocked into a 0.12-0.18 s hop with 6-9 cm of pelvis rise,
+  which the jacks' small-hop flight stage accepts (with or without calibration).
+
+#### Effect on training and on other code
+
+- The reward machine is the same one the task-first tasks train on (`mjlab_tasks.TaskReward`), so holds, the
+  upright gate and the landing threshold also change their training reward; the stock and A2H tracking tasks do not
+  use it. Existing task-first checkpoints were trained on the old machine.
+- `skill/variations.py`'s self-check filter uses the same `evaluate()`. With main's `variations.py`
+  (`variants_audit.py`): no lunge or shot-put TRAIN variant fails its own spec any more (self-check drops: lunge
+  13 -> 0, shot put 6 -> 0), so the lunge keeps 24 of 36 instead of 15 and the shot put 24 of 36; what is left
+  dropped is the joint-limit filter (12 each). Punches keeps 36/36 as before. The last of these came from
+  `fit_holds`, after the variant-physics session found that the stage a failing variant is stuck at already has
+  its hold at 0: the culprit is an earlier stage's hold, completed late, which delays the later stages and moves
+  the next stage's root anchor. `fit_holds` now halves the latest earlier pose hold when the stuck stage has none
+  left, instead of stopping. The ten clips' own specs are unchanged by it (they pass their self-check first time).
+- What was not done: no Colab or GPU was used (mjlab 1.6.0 on CPU is the same version the Colab VMs install, at 16
+  instead of 64 envs per policy); no V-JEPA scoring; no policy was retrained.
+
+### Combined re-audit: all fixes, one retarget version (2026-10-30)
+
+This audit covers main plus fixes 1, 2, 4, 5, 6 and 7, and the two follow-ups the combination needed (`spec-trust-followup`, `variant-physics-followup`):
+
+- Each clip's `human.npy` was re-retargeted with the combined code (`retarget_audit.py --save-qpos`). The fresh qpos was installed as that clip's `qpos.npy` in a scratch copy of the clip folders.
+- The spec and variant audits were then re-run on those clips.
+- The JSON is in `docs/results/pipeline_audit/combined/`.
+
+Retarget numbers are identical to the fixes 1, 5, 7 table above. The camera stage is a no-op on all ten stored clips.
+
+| clip | keypose spec on its own reference, 0.7x / 1x / 1.4x | TRAIN variants kept (of 36) | main drops |
+|---|---|---|---|
+| squat_jump | 12/12 at each tempo | 36 | - |
+| squat | 9/9 | 36 | - |
+| lunge | 15/15 | 36 | - |
+| arms | 3/3 | 36 | - |
+| front_kick | 6/6 | 36 | - |
+| jumping_jacks | 12/12 | 11 | lost flight 13, speed 12 (the 3 cm hop vanishes at amplitude 0.85; the base is at the cap in the air) |
+| punches | 6/6 | 36 | - |
+| shot_put | 4/4 | 24 | joint limits 12 |
+| discus | 2/2 | 36 | - |
+| hurdles | 2/2 | **0** | ballistic 36, speed 12 |
+
+Before the fixes, on the same scripts:
+- lunge passed 3 of 16 stages at 1.4x, and shot put 2 of 4;
+- jumping jacks, shot put and discus kept 0 variants on their stored, uncapped retargets;
+- jumping jacks kept 14 variants that had lost their hop.
+
+**Hurdles: what remains.**
+- The last 1.77 s of the 1900 film has no detectable touch-down, with the legs tucked throughout. The retarget keeps that stretch as an open flight, and every variant fails the ballistic check.
+- Grounding the stretch in `retarget.py` was tried and rejected: grounded, it is a crouch on the toes with the ankles 8-14 cm up, so it would fabricate motion.
+- Trimming the clip at the hurdle-clearance touch-down (1.47 s), tested on a scratch copy:
+  - 36/36 variants kept;
+  - keypose spec 3/3 at every tempo;
+  - the clearance kept as a flight.
+- Trimming at the last ground contact (1.20 s) loses the clearance: 24/36 variants, no flight.
+- Re-cutting the stored clip is a data decision left for review.
+- The older stand/squat/jump spec (`skill/task.py compile_spec`) still fails on hurdles, because its stand stage needs both feet down for 0.3 s and a run-up never has that.

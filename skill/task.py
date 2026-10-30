@@ -27,7 +27,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-PELVIS, L_ANKLE, R_ANKLE, TORSO, L_HAND, R_HAND = 0, 3, 6, 7, 10, 13
+PELVIS, L_ANKLE, R_ANKLE, TORSO, L_SHOULDER, L_HAND, R_SHOULDER, R_HAND = 0, 3, 6, 7, 8, 10, 11, 13
 STAND, SQUAT, JUMP, LAND = range(4)
 KINDS = ("stand", "squat", "jump", "land")
 MAX_STAGES = 16  # observation size: one-hot stage, padded
@@ -40,18 +40,32 @@ DOWN, AIR = 0.05, 0.06  # m above standing ankle height: a foot on the ground / 
 # "Standing" is back above this fraction of the retarget's standing pelvis height. The simulated G1
 # stands on bent knees; the proportional retarget does too (the uniform one stood ~7 cm taller).
 STAND_FRAC = 0.92
-UPRIGHT = 0.85  # cos of torso lean from vertical (~32 deg) counted as upright
+UPRIGHT = 0.85  # cos of torso lean from vertical (~32 deg) counted as upright: standing, the start, the end
+# The torso axis is pelvis -> shoulders (features()), which leans like the person's trunk: the references lean up
+# to 54 deg while absorbing a squat jump's landing (48 deg at a squat's bottom). On the old 4.4 cm pelvis ->
+# torso_link axis (mostly the pelvis's own tilt) they never leaned past 26 deg, so a landing counted as upright
+# and progress was never gated on them; these keep it so. A landing is controlled within LAND_UP (cos 60 deg),
+# and progress is paid in full up to that lean and not at all past GATE_UP[0] (cos 75 deg; the fall rule: 80).
+LAND_UP = 0.5
+GATE_UP = (0.26, LAND_UP)
 HOLD = {STAND: 0.3, SQUAT: 0.05, LAND: 0.15}  # s a predicate must hold (a jump's is its min flight)
 
 
 def features(pos, foot0):
     """(..., bodies, 3) -> pelvis height, lower and higher foot above the ground, torso uprightness
-    (cos of the pelvis->torso axis from vertical)."""
+    (cos of the pelvis -> shoulder-midpoint axis from vertical: the torso's lean over a ~0.4 m lever.
+    The pelvis -> torso_link vector it replaces is 4.4 cm long on the G1, so 2 cm of position noise
+    read as a fall; docs/PIPELINE_ACCURACY.md, Stage 3)."""
     pos = torch.as_tensor(pos, dtype=torch.float32)
     feet = pos[..., [L_ANKLE, R_ANKLE], 2] - foot0
-    axis = pos[..., TORSO, :] - pos[..., PELVIS, :]
+    axis = pos[..., [L_SHOULDER, R_SHOULDER], :].mean(-2) - pos[..., PELVIS, :]
     up = axis[..., 2] / axis.norm(dim=-1).clamp(min=1e-6)
     return pos[..., PELVIS, 2], feet.min(-1).values, feet.max(-1).values, up
+
+
+def upright_gate(up):
+    """Share of progress paid at torso uprightness up (features()): 1 up to GATE_UP's lean, 0 past it."""
+    return ((up - GATE_UP[0]) / (GATE_UP[1] - GATE_UP[0])).clamp(0, 1)
 
 
 def _runs(labels, fps, min_s):
@@ -69,6 +83,12 @@ def _runs(labels, fps, min_s):
                 runs.append((labels[i], i, j))
         i = j
     return runs
+
+
+def lands(n_frames, touchdown, fps):
+    """Whether a clip of n_frames shows the landing of a flight that touches down at frame `touchdown`: the feet
+    are back down at least HOLD[LAND] before it ends."""
+    return n_frames - touchdown >= HOLD[LAND] * fps
 
 
 def compile_spec(pos, fps, skill=None, max_clearance=MAX_CLEARANCE, name=None):
@@ -105,7 +125,8 @@ def compile_spec(pos, fps, skill=None, max_clearance=MAX_CLEARANCE, name=None):
                            "clearance": round(float(min(lo[s:e].max(), max_clearance)), 3),
                            "ref_clearance": round(float(lo[s:e].max()), 3),
                            "min_air_s": round(float(np.clip(0.5 * flight, 0.05, 0.12)), 3)})
-            add(LAND, e, e)
+            if lands(len(pos), e, fps):  # a clip that ends in the air (the hurdles) shows no landing to ask for
+                add(LAND, e, e)
             last_air = e
         elif lab == "low" and (s - last_air) / fps < LAND_WINDOW:  # absorbing the landing
             if stages[-1]["kind"] == "stand":  # passed through standing height on the way down
@@ -124,7 +145,8 @@ def compile_spec(pos, fps, skill=None, max_clearance=MAX_CLEARANCE, name=None):
     spec = {"name": name, "fps": fps, "duration_s": round(len(pos) / fps, 3),
             "h0": round(h0, 3), "foot0": round(foot0, 3), "z_low": round(0.7 * h0, 3),
             "down": DOWN, "air": AIR, "down_ref": round(down_ref, 3), "air_ref": round(air_ref, 3), "weights": dict(WEIGHTS), "stages": stages,
-            "summary": summarize(stages), "warnings": []}
+            "summary": summarize(stages),
+            "warnings": ["the clip ends in the air: no landing to do"] if stages[-1]["kind"] == "jump" else []}
     if skill:
         attach_skill(spec, skill)
     return spec
@@ -224,11 +246,11 @@ class StageMachine:
         p = torch.stack([((z - zl) / (a - zl).clamp(min=1e-3)).clamp(0, 1),
                          ((h0 - z) / (h0 - a).clamp(min=1e-3)).clamp(0, 1),
                          (lo / a.clamp(min=1e-3)).clamp(0, 1),
-                         feet_down.float() * ((up - 0.6) / 0.25).clamp(0, 1)], -1)
+                         feet_down.float() * upright_gate(up)], -1)
         sat = torch.stack([(z >= a) & feet_down & (up > UPRIGHT),
                            (z <= a) & feet_down,
                            lo > s["air"],
-                           feet_down & (up > UPRIGHT) & (vz.abs() < 0.5)], -1)
+                           feet_down & (up > LAND_UP) & (vz.abs() < 0.5)], -1)
         idx = k[:, None]
         return p.gather(1, idx).squeeze(1), sat.gather(1, idx).squeeze(1)
 
@@ -282,7 +304,7 @@ class StageMachine:
 
         phi = torch.where(self.done, self.n_stages.float(), self.stage + self.p)
         d, self.phi = phi - self.phi, phi
-        gate = ((up - 0.6) / 0.3).clamp(0, 1)
+        gate = upright_gate(up)
         prog = torch.where(d > 0, d * gate, d) * self.w["progress"]
         self.stats["advances"] += adv.long()
         self.stats["jump_q"] = torch.where(adv & (jg > 0), q, self.stats["jump_q"])
@@ -404,16 +426,37 @@ def machine(spec, num_envs, device="cpu", dt=0.02, weights=None):
     return StageMachine(spec, num_envs, device, dt, weights)
 
 
+def abandoned_stage(spec, m, stage, why, near=None):
+    """Why a rollout gave up on a stage (skipped it, fell in it, or the clip ended in it): for a keypose
+    pose stage, the feature furthest outside its tolerance when the rollout came closest to the goal
+    (error_tol: that feature's error over its tolerance, 1 = at the edge; rms_tol: the relevance-weighted
+    RMS the predicate also bounds by 1). reached: both were within 1 there, so the pose was reached and what
+    failed is the hold, the support feet or stillness. near: the machine's (rms, per-feature errors)."""
+    st = spec["stages"][stage]
+    out = {"stage": int(stage), "name": st.get("label", st.get("name", st["kind"])), "kind": st["kind"], "why": why}
+    rms, x = near if near is not None else (getattr(m, "near_rms", None), getattr(m, "near_x", None))
+    if st["kind"] == "pose" and x is not None and torch.isfinite(rms[0]):
+        i = int(x[0].argmax())
+        out |= {"feature": spec.get("features", [None] * (i + 1))[i], "error_tol": round(float(x[0, i]), 2),
+                "rms_tol": round(float(rms[0]), 2), "reached": bool(x[0, i] <= 1 and rms[0] <= 1)}
+    return out
+
+
 def evaluate(spec, pos, fps):
-    """A rollout's body positions (T, bodies, 3) from the start of the motion -> semantic success."""
+    """A rollout's body positions (T, bodies, 3) from the start of the motion -> semantic success, and per
+    abandoned stage the feature that kept it from passing (abandoned_stage)."""
     m = machine(spec, 1, dt=1.0 / fps)
     pos_t = torch.as_tensor(np.asarray(pos), dtype=torch.float32)
     m.reset(torch.tensor([0]), 0.0, pos_t[:1])
-    done_at, jump_q, fell_at, trace = [], [], None, [int(m.stage[0])]
+    done_at, jump_q, fell_at, trace, abandoned = [], [], None, [int(m.stage[0])], []
+    skipped = lambda: int(getattr(m, "skipped", torch.zeros(1, dtype=torch.long))[0])  # noqa: E731
     for t in range(1, len(pos_t)):
         trace.append(int(m.stage[0]))  # the stage this frame is scored against
-        before = int(m.completed[0])
+        before, stage, n_skip = int(m.completed[0]), int(m.stage[0]), skipped()
+        near = (m.near_rms.clone(), m.near_x.clone()) if hasattr(m, "near_x") else None
         m.step(pos_t[t:t + 1])
+        if skipped() > n_skip:
+            abandoned.append(abandoned_stage(spec, m, stage, "skipped", near))
         if int(m.completed[0]) > before:
             done_at.append(round(t / fps, 3))
             if m.jump_goal[min(before, m.S - 1)] > 0:
@@ -421,6 +464,8 @@ def evaluate(spec, pos, fps):
         if fallen(pos_t[t:t + 1])[0]:
             fell_at = round(t / fps, 3)
             break
+    if not bool(m.done[0]) or fell_at is not None:
+        abandoned.append(abandoned_stage(spec, m, int(m.stage[0]), "fell" if fell_at is not None else "clip ended"))
     n = int(m.completed[0]) + int(getattr(m, "skipped", torch.zeros(1, dtype=torch.long))[0])  # stages passed
     met = measure(spec, pos_t[: (len(pos_t) if fell_at is None else int(fell_at * fps) + 1)].numpy(), fps)
     n_ok = len(trace) if fell_at is None else max(0, int(round((fell_at - FALL_ONSET) * fps)))
@@ -435,8 +480,8 @@ def evaluate(spec, pos, fps):
     return {"stages_total": m.S, "stages_completed": n, "completed_at_s": done_at,
             "next_stage": None if n >= m.S else spec["stages"][n].get("label", spec["stages"][n].get("name", spec["stages"][n]["kind"])),
             "success": bool(m.done[0]) and fell_at is None,
-            "stages_skipped": int(getattr(m, "skipped", torch.zeros(1, dtype=torch.long))[0]), "fell_at_s": fell_at, "jump_quality": jump_q,
-            "metrics": met, "criteria": crit}
+            "stages_skipped": skipped(), "fell_at_s": fell_at, "jump_quality": jump_q,
+            "abandoned": abandoned, "metrics": met, "criteria": crit}
 
 
 def body_positions_from_qpos(qpos):

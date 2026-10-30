@@ -31,7 +31,9 @@ same potential-based progress, stage bonuses, upright gating and fall refund, wi
 on the floor; going further than the key moment along its own motion is free up to OVERSHOOT),
 "flight" (both feet off the floor; jump quality as in skill/task.py) and "settle" (the start: feet
 down, upright and still; a landing: feet down and upright; the end: the feet that are down at the
-clip's end, upright and still).
+clip's end, upright and still). A stage's hold counts over a window (HOLD_FILL of its steps), is a
+share of the stage's reference duration (HOLD_STAGE_FRAC), and its tolerances may be floored by a
+tracker calibration of the clip (calibrate) so that a policy that tracks the clip well passes.
 """
 
 import argparse
@@ -83,6 +85,26 @@ FLIGHT_RISE_FRAC, FLIGHT_RISE_MAX = 0.5, 0.25  # m of pelvis rise above standing
 # it, up to HOLD_MAX. Passing through for one step let the front-kick task policies flick each kick for
 # 0.13-0.16 s from a crouch where the person held it ~0.5 s.
 HOLD_FRAC, HOLD_MAX = 0.5, 0.4
+# A hold is met when HOLD_FILL of the control steps in the last hold_s satisfied the predicate, not hold_s in a
+# row: one step out at the tolerance's edge reset the old counter, so a rollout that sits at the edge (a 0.14 rad
+# punches tracker) never accumulated its 0.2-0.4 s (docs/PIPELINE_ACCURACY.md, Stage 3). Flights keep counting
+# airtime in a row: contacts are exact in simulation and the airtime is the jump.
+HOLD_FILL = 0.8
+# And a hold is at most HOLD_STAGE_FRAC of the stage's own reference duration (the time from the previous key
+# moment to this one), so the same motion 1.4x faster still has room for it: in absolute seconds the reference
+# at 1.4x failed the lunge (3/16) and the shot put (2/4). The machine also scales each pose's and settle's hold
+# by the rollout's own tempo so far (its time to this key moment over the reference's, at least TEMPO_MIN), so a
+# faster performance holds in proportion; a flight's airtime is physics and is not scaled. Arriving more than
+# 1 / TEMPO_CUT times early isn't the motion at another tempo but a shortcut (the punches clip starts in the arms
+# clip's one key pose, 12x "early"): that hold counts in full.
+HOLD_STAGE_FRAC, TEMPO_MIN, TEMPO_CUT = 0.5, 0.5, 1 / 3
+LAND_HOLD_S = 0.1  # a landing's settle: feet down and upright this long. A clip that ends sooner after its last
+# touchdown, or in the air (the hurdles: it ends over the hurdle, 51 cm up), has no landing in it to ask for.
+# Tracker calibration (calibrate): each feature's tolerance floor is max(TOL_MIN, CALIB_K x the RMS error of a
+# good tracking policy on that feature on the clean clip), so a tracker that copies the clip passes by
+# construction; at most CALIB_MAX x TOL_MIN, so a poor calibration run can't make every move pass (at 3x, the
+# arms and discus specs, one key moment each, accepted the punches policies' rollouts; at 2x they reject them).
+CALIB_K, CALIB_MAX = 2.0, 2.0
 
 
 def heading(pos):
@@ -160,13 +182,14 @@ def rdp(F, eps, lo=0, hi=None, out=None):
     return out
 
 
-def key_moments(F, fps, air_mask=None, scale=1.0):
+def key_moments(F, fps, air_mask=None, scale=1.0, end=None):
     """(T, D) features -> sorted key-moment frames (not counting frame 0), the RDP tolerance and the
-    per-feature noise. scale > 1 coarsens the tolerance (compile_keypose_spec, to fit MAX_STAGES)."""
+    per-feature noise. scale > 1 coarsens the tolerance (compile_keypose_spec, to fit MAX_STAGES).
+    end: key moments only before this frame (the tolerance is still the whole clip's)."""
     sig = noise_sigma(F, fps)
     Fs = uniform_filter1d(F, max(1, int(round(0.1 * fps))), axis=0, mode="nearest")
     eps = scale * max(RDP_MIN, RDP_K * float(_metric(sig)), RDP_FRAC * float(_metric(Fs - Fs[0]).max()))
-    dev = rdp(Fs, eps)
+    dev = rdp(Fs[:end], eps)
     ks = sorted(dev)
     if air_mask is not None:  # a flight and its landing are their own stages: no pose goals inside
         ks = [k for k in ks if not air_mask[k]]
@@ -251,28 +274,111 @@ def dwell(Fk, k, goal, tol, rel, delta):
     return hi - lo + 1
 
 
-def compile_keypose_spec(pos, fps, skill=None, max_clearance=T.MAX_CLEARANCE, name=None):
+def compile_keypose_spec(pos, fps, skill=None, max_clearance=T.MAX_CLEARANCE, name=None, calibration=None):
     """pos: (T, bodies, 3) retarget body positions (G1-sized) at fps -> keypose task spec (JSON-able).
-    Too many stages for the policy's stage input (MAX_STAGES): the RDP tolerance coarsens until it fits."""
-    for i in range(12):
-        try:
-            return fit_holds(_compile(pos, fps, skill, max_clearance, name, scale=1.25 ** i), pos, fps)
-        except _TooMany:
-            continue
-    raise ValueError(f"more than {T.MAX_STAGES} stages even at a coarse tolerance: trim the clip")
+    Too many stages for the policy's stage input (MAX_STAGES): the RDP tolerance coarsens until it fits.
+    calibration: the clip's tracker calibration (calibration()), applied to the tolerances (calibrate())."""
+    pos = np.asarray(pos, np.float32)
+    end = len(pos)
+    for _ in range(2):
+        for i in range(12):
+            try:
+                spec = fit_holds(_compile(pos, fps, skill, max_clearance, name, scale=1.25 ** i, end=end), pos, fps)
+                break
+            except _TooMany:
+                continue
+        else:
+            raise ValueError(f"more than {T.MAX_STAGES} stages even at a coarse tolerance: trim the clip")
+        cut = cut_mid_motion(spec, pos, fps) if end == len(pos) else None
+        if cut is None:
+            break
+        end = cut
+    if end < len(pos):  # the goals end before the clip does
+        spec["goals_end_s"] = round(end / fps, 3)
+        spec["warnings"].append(f"the clip ends mid-motion: its last {(len(pos) - end) / fps:.2f} s are not a goal")
+    return calibrate(spec, calibration) if calibration else spec
 
 
-def fit_holds(spec, pos, fps, tries=8):
+# A clip cut mid-motion (the punches clip: the athlete starts a step out of frame on its last frames) makes its
+# last frame the end goal, a pose the reference itself only touches on that frame (dwell 0.07 s; every other
+# clip's end pose is held 0.33 s or more), so a tracker that lags by a frame can never finish before the clip
+# ends. Then the trailing burst of motion (frames faster than END_BURST x the clip's median speed, at most
+# END_TRIM_MAX_S) is not a goal: the end goal is the last pose before it, with the clip's key moments otherwise
+# as they were (their tolerance scale is still the whole clip's).
+END_DWELL_MIN, END_BURST, END_TRIM_MAX_S = 0.2, 2.0, 0.3
+
+
+def cut_mid_motion(spec, pos, fps):
+    """The frame count to compile the goals on when spec's end pose isn't held (see END_DWELL_MIN), else None."""
+    last = spec["stages"][-1]
+    if last["kind"] != "pose" or last.get("ref_dwell_s", np.inf) >= END_DWELL_MIN:
+        return None
+    F = trajectory_features(pos, spec["foot0"]).numpy()
+    Fs = uniform_filter1d(F, max(1, int(round(0.1 * fps))), axis=0, mode="nearest")
+    speed = _metric(np.diff(Fs, axis=0)) * fps  # speed[t]: frame t -> t + 1
+    end, lo = len(pos), len(pos) - int(END_TRIM_MAX_S * fps)
+    while end - 1 > lo and speed[end - 2] > END_BURST * np.median(speed):
+        end -= 1
+    return end if end < len(pos) else None
+
+
+def tracking_rms(pos, ref, foot0, window_s=0.5, fps=50.0):
+    """A tracker's per-feature RMS error (m, FEATURES order) against the reference it tracked: pos, ref
+    (N, T, B, 3) rollouts and the reference at the same times (or (T, B, 3)). Pose features time-locked;
+    the root features, which a stage measures from its previous key moment, as the error in the root's
+    displacement over window_s (a typical stage's length), each in its own heading at the window's start."""
+    pos, ref = (torch.as_tensor(np.asarray(x), dtype=torch.float32) for x in (pos, ref))
+    pos, ref = (x[None] if x.dim() == 3 else x for x in (pos, ref))
+    e_pose = pose_features(pos, foot0) - pose_features(ref, foot0)
+    L = int(np.clip(round(window_s * fps), 1, pos.shape[1] - 1))
+    disp = lambda x: root_features(x[:, L:], x[:, :-L, PELVIS, :2], heading(x[:, :-L]))  # noqa: E731
+    e_root = disp(pos) - disp(ref)
+    e_root[..., 2] = torch.remainder(e_root[..., 2] / YAW_R + torch.pi, 2 * torch.pi) * YAW_R - YAW_R * torch.pi
+    rms = lambda e: e.pow(2).mean((0, 1)).sqrt()  # noqa: E731
+    return torch.cat([rms(e_pose), rms(e_root)]).numpy()
+
+
+def calibration(rms, k=CALIB_K, **source):
+    """A good tracker's per-feature RMS error on the clean clip (tracking_rms) -> the clip's calibration:
+    tolerance floors max(TOL_MIN, k x RMS), at most CALIB_MAX x TOL_MIN. source: who measured it (policy,
+    checkpoint, joint error, ...), stored with it."""
+    rms, tmin = np.asarray(rms, np.float64), TOL_MIN.numpy().astype(np.float64)
+    assert rms.shape == (D,), rms.shape
+    floor = np.minimum(np.maximum(tmin, k * rms), CALIB_MAX * tmin)
+    return {"features": [f[0] for f in FEATURES], "k": k, "rms_m": np.round(rms, 4).tolist(),
+            "floor_m": np.round(floor, 4).tolist(), "tol_min_m": np.round(tmin, 4).tolist(), **source}
+
+
+def calibrate(spec, calib):
+    """spec with each pose stage's tolerances raised to calib's floors, as if compiled with TOL_MIN = floor:
+    tol = max(floor, TOL_FRAC x |delta|) / sqrt(relevance). What a stage tests (its relevance, goal, holds) is
+    unchanged; only how close counts. Re-calibrating starts from the uncalibrated tolerances (tol_base)."""
+    assert calib["features"] == [f[0] for f in FEATURES], "calibration for another feature set"
+    out = json.loads(json.dumps(spec))
+    floor = np.asarray(calib["floor_m"])
+    for st in out["stages"]:
+        if st["kind"] == "pose":
+            base, w = np.asarray(st.setdefault("tol_base", st["tol"])), np.asarray(st["relevance"])
+            st["tol"] = np.round(np.minimum(np.maximum(base, floor / np.sqrt(np.maximum(w, 1e-3))), 9.99), 4).tolist()
+    out["calibration"] = calib
+    return out
+
+
+def fit_holds(spec, pos, fps, tries=24):
     """The reference must complete its own spec. A hold it can't make (its dwell window started before the
-    previous stage let go, or the clip ends) is halved until it can; below 0.05 s it's dropped."""
+    previous stage let go, or the clip ends) is halved until it can; below 0.05 s it's dropped. When the stage it
+    is stuck at has no hold left, the culprit is an earlier one: a hold completed late delays the stages after it
+    and moves the next stage's root anchor, so the latest earlier pose hold is halved instead (variant-physics:
+    lunge variants at tempo 1.33 completed stage 2 at 4.0 s, not at its 1.4 s key moment)."""
     for _ in range(tries):
         sc = T.evaluate({**spec, "down": spec["down_ref"], "air": spec["air_ref"]}, pos, fps)
         n = sc["stages_completed"]
         if sc["success"] or n >= len(spec["stages"]):
             break
-        st = spec["stages"][n]
-        if st["kind"] != "pose" or not st.get("hold_s"):
-            break  # not a hold: leave it to the self-check to report
+        held = [i for i in range(n, 0, -1) if spec["stages"][i]["kind"] == "pose" and spec["stages"][i].get("hold_s")]
+        if not held:
+            break  # no hold left to shorten: leave it to the self-check to report
+        st = spec["stages"][held[0]]
         st["hold_s"] = round(st["hold_s"] / 2, 3) if st["hold_s"] >= 0.1 else 0.0
     return spec
 
@@ -281,8 +387,9 @@ class _TooMany(ValueError):
     pass
 
 
-def _compile(pos, fps, skill, max_clearance, name, scale):
+def _compile(pos, fps, skill, max_clearance, name, scale, end=None):
     pos = np.asarray(pos, np.float32)
+    end = len(pos) if end is None else end  # goals only before this frame (cut_mid_motion)
     foot0 = float(np.percentile(pos[:, [L_ANKLE, R_ANKLE], 2].min(1), 5))
     z, lo, hi, up = (x.numpy() for x in T.features(pos, foot0))
     ground = lo < 0.10
@@ -291,12 +398,12 @@ def _compile(pos, fps, skill, max_clearance, name, scale):
     down_ref = float(np.clip(np.percentile(hi[calm], 95) + 0.02, T.DOWN, 0.15)) if calm.any() else T.DOWN
     air_ref = max(T.AIR, down_ref + 0.01, 0.10)
     air = T._runs(np.where(lo > air_ref, "air", "ground"), fps, {"air": T.MIN_FLIGHT, "ground": 0.0})
-    flights = [(s, e) for lab, s, e in air if lab == "air"]
+    flights = [(s, e) for lab, s, e in air if lab == "air" and e <= end]
     air_mask = np.zeros(len(pos), bool)
     for s, e in flights:
         air_mask[max(0, s - int(0.1 * fps)):e + int(ABSORB_S * fps)] = True  # takeoff jitter, landing
     F = trajectory_features(pos, foot0).numpy()
-    keys, eps, sig, dev = key_moments(F, fps, air_mask, scale)
+    keys, eps, sig, dev = key_moments(F, fps, air_mask, scale, end)
     yaw = np.unwrap(heading(torch.as_tensor(pos)).numpy())
     finite = [dev[k] for k in keys if np.isfinite(dev[k])]
     need = sorted(finite, reverse=True)[REQUIRED_TOP - 1] if len(finite) >= REQUIRED_TOP else 0.0
@@ -316,8 +423,9 @@ def _compile(pos, fps, skill, max_clearance, name, scale):
                            "ref_air_s": round(air_s, 3),
                            "pelvis_rise": round(float(np.clip(FLIGHT_RISE_FRAC * rise, 0.0, FLIGHT_RISE_MAX)), 3),
                            "ref_pelvis_rise": round(rise, 3)})
-            stages.append({"kind": "settle", "start_s": round(e / fps, 3), "end_s": round(e / fps, 3),
-                           "name": "land", "hold_s": 0.1, "still": False, "feet_down": [True, True]})
+            if len(pos) - e >= LAND_HOLD_S * fps:  # a landing only if the video shows one
+                stages.append({"kind": "settle", "start_s": round(e / fps, 3), "end_s": round(e / fps, 3),
+                               "name": "land", "hold_s": LAND_HOLD_S, "still": False, "feet_down": [True, True]})
             prev_k, prev_t = e, e
             continue
         k = ev[1]
@@ -325,7 +433,6 @@ def _compile(pos, fps, skill, max_clearance, name, scale):
         w = relevance(delta, sig)
         if not w.any():
             continue
-        tol = np.maximum(TOL_MIN.numpy(), TOL_FRAC * np.abs(delta)) / np.sqrt(np.maximum(w, 1e-3))
         # root targets: in the previous key moment's heading frame, as root_features() measures them
         dxy, c, s_ = pos[k, PELVIS, :2] - pos[prev_k, PELVIS, :2], np.cos(yaw[prev_k]), np.sin(yaw[prev_k])
         # the turn wrapped into [-pi, pi), as root_features() measures it: a spin past 180 deg (a discus
@@ -333,6 +440,11 @@ def _compile(pos, fps, skill, max_clearance, name, scale):
         turn = float(np.remainder(yaw[k] - yaw[prev_k] + np.pi, 2 * np.pi) - np.pi)
         root = [c * dxy[0] + s_ * dxy[1], -s_ * dxy[0] + c * dxy[1], YAW_R * turn]
         goal = np.concatenate([F[k, :D_POSE], root])
+        # The tolerance is a share of the excursion the goal itself measures: the root's in the previous key moment's
+        # frame, the turn wrapped. From the unwrapped spin, the discus's one key moment allowed 2.2 rad of turn either
+        # way, and punching while turning a little passed it.
+        tol = np.maximum(TOL_MIN.numpy(), TOL_FRAC * np.abs(np.concatenate([delta[:D_POSE], root])))
+        tol = tol / np.sqrt(np.maximum(w, 1e-3))
         # Required down: a foot the reference has planted by the robot's own rule (T.DOWN), which is what the
         # robot is held to. One the reference merely has low (on its toes, a lunge's back foot, hovering up
         # to down_ref) is left free: required by the looser rule, the robot could never meet it (kp lunge:
@@ -343,17 +455,19 @@ def _compile(pos, fps, skill, max_clearance, name, scale):
         anchor = torch.as_tensor(pos[prev_k, PELVIS, :2]), torch.tensor(float(yaw[prev_k]))
         Fk = np.concatenate([F[:, :D_POSE], root_features(pos, *anchor).numpy()], -1)
         ref_dwell = dwell(Fk, k, goal, tol, w, np.concatenate([delta[:D_POSE], root])) / fps
+        hold = min(HOLD_FRAC * ref_dwell, HOLD_MAX, HOLD_STAGE_FRAC * (k - prev_t) / fps)
         stages.append({"kind": "pose", "level": round(min(level, 99.0), 2), "optional": bool(level < need), "start_s": round(prev_t / fps, 3), "end_s": round(k / fps, 3),
                        "name": name_moment(delta, w), "goal": np.round(goal, 4).tolist(),
                        "tol": np.round(tol, 4).tolist(), "relevance": np.round(w, 3).tolist(),
                        "delta": np.round(np.concatenate([delta[:D_POSE], root]), 4).tolist(),
                        "feet_down": feet_down, "frame": int(k),
-                       "hold_s": round(float(min(HOLD_FRAC * ref_dwell, HOLD_MAX)), 3), "ref_dwell_s": round(ref_dwell, 3)})
+                       "hold_s": round(float(hold), 3), "ref_dwell_s": round(ref_dwell, 3)})
         prev_k, prev_t = k, k
-    end_down = [bool(pos[-1, a, 2] - foot0 < T.DOWN) for a in (L_ANKLE, R_ANKLE)]
-    if stages[-1]["kind"] == "pose" and len(pos) - 1 - stages[-1]["frame"] < MIN_GAP_S * fps:
+    end_down = [bool(pos[end - 1, a, 2] - foot0 < T.DOWN) for a in (L_ANKLE, R_ANKLE)]
+    airborne_end = stages[-1]["kind"] == "flight"  # the clip ends in the air (the hurdles): no landing, no finish
+    if stages[-1]["kind"] == "pose" and end - 1 - stages[-1]["frame"] < MIN_GAP_S * fps:
         stages[-1] |= {"still": True, "optional": False, "name": stages[-1]["name"] + " (finish)"}  # the end pose is the finish
-    else:
+    elif not airborne_end:
         stages.append({"kind": "settle", "start_s": round(prev_t / fps, 3), "end_s": round(len(pos) / fps, 3),
                        "name": "finish", "hold_s": 0.1, "feet_down": end_down if any(end_down) else [True, True]})
     for a, b in zip(stages, stages[1:]):  # strictly increasing starts: stage_at() picks one per time
@@ -364,7 +478,8 @@ def _compile(pos, fps, skill, max_clearance, name, scale):
             "h0": round(h0, 3), "foot0": round(foot0, 3), "down": T.DOWN, "air": T.AIR,
             "down_ref": round(down_ref, 3), "air_ref": round(air_ref, 3), "weights": dict(WEIGHTS),
             "features": [f[0] for f in FEATURES], "rdp_eps": round(eps, 4), "stages": stages,
-            "summary": summarize(stages), "warnings": []}
+            "summary": summarize(stages),
+            "warnings": ["the clip ends in the air: no landing or finish to do"] if airborne_end else []}
     if skill:
         T.attach_skill(spec, skill)
         for st in spec["stages"]:
@@ -453,13 +568,28 @@ class KeyposeMachine:
         self.root_scale = torch.ones(num_envs, device=device)  # share of the root goal left (mid-stage starts)
         self.anchor_xy, self.anchor_yaw = torch.zeros(num_envs, 2, device=device), z()
         # where the current stage's predicate first held: the next stage's root goal is measured from here,
-        # not from where its hold ended (the body keeps moving during a hold, as the reference's does)
+        # not from where its hold ended (the body keeps moving during a hold, as the reference's does). After a pose
+        # stage, from where the rollout came closest to that pose (near_xy): _compile measures the next root goal
+        # from the reference's key frame, which is the reference's own closest approach at any tempo. The first-held
+        # point is earlier along the path (18 cm behind on the shot put's glide), which made the root goals of a
+        # travelling move depend on the rollout's timing (the shot put at 1.4x never met its "step forward").
         self.held_xy, self.held_yaw = torch.zeros(num_envs, 2, device=device), z()
+        self.near_xy, self.near_yaw = torch.zeros(num_envs, 2, device=device), z()
         self.done = z(torch.bool)
         self.stats = {"advances": z(torch.long), "jump_q": z()}
         self.n_stages = self._size[self.var]
         self.q_min, self.steps = torch.ones(num_envs, device=device), z(torch.long)
         self.skipped = z(torch.long)
+        # Holds over a window (HOLD_FILL, step()): hist is a ring buffer of whether the current stage's predicate
+        # held on each of the last H control steps, cleared when a stage begins; t0 the reference time the
+        # episode started at (the rollout's tempo is measured from there).
+        self.H = int(torch.ceil(self._hold_need.max() / dt - 1e-6).clamp(min=1))
+        self.hist, self.ring = torch.zeros(num_envs, self.H, dtype=torch.bool, device=device), 0
+        self.t0 = z()
+        # Diagnostics (skill/task.py abandoned_stage): the closest the rollout came to the current pose goal
+        # (relevance-weighted RMS in tolerances) and each feature's error over its tolerance at that step.
+        self.near_rms = torch.full((num_envs,), float("inf"), device=device)
+        self.near_x = torch.zeros(num_envs, D, device=device)
         self.extra_depth = z()  # StageMachine's commanded extra squat depth (mjlab_tasks fall rule): none here
         self.style_until_done = True  # mjlab_tasks.TimeWeighted: no style terms once the task is done
 
@@ -470,7 +600,8 @@ class KeyposeMachine:
 
     def _eval(self, stage, pos, vz, ids=slice(None)):
         """Progress in [0, 1] and whether the predicate holds, for envs ids (state buffers indexed by
-        ids) in stage, plus the relevance-weighted RMS distance to a pose goal in tolerances."""
+        ids) in stage, plus the relevance-weighted RMS distance to a pose goal in tolerances and each
+        relevant feature's error in tolerances (0 for the free ones)."""
         v = self.var[ids]
         foot0 = self._foot0[v][:, None]  # per env, against its two feet
         zp, lo, _, up = T.features(pos, foot0)
@@ -492,12 +623,14 @@ class KeyposeMachine:
         rise = self._rise[v, stage]
         p_air = (lo / self._clear[v, stage].clamp(min=1e-3)).clamp(0, 1)
         p_air = torch.where(rise > 0, 0.5 * p_air + 0.5 * ((zp - self._h0[v]) / rise.clamp(min=1e-3)).clamp(0, 1), p_air)
-        p = torch.where(k == POSE, p_pose, torch.where(k == FLIGHT, p_air, support.float() * ((up - 0.6) / 0.25).clamp(0, 1)))
-        calm = ~self._still[v, stage] | (vz.abs() < 0.5)
-        settled = support & (up > T.UPRIGHT) & calm
+        still = self._still[v, stage]  # a standing settle (start, end); else a landing, which may absorb leaning
+        p_up = torch.where(still, ((up - 0.6) / 0.25).clamp(0, 1), T.upright_gate(up))
+        p = torch.where(k == POSE, p_pose, torch.where(k == FLIGHT, p_air, support.float() * p_up))
+        calm = ~still | (vz.abs() < 0.5)
+        settled = support & (up > torch.where(still, T.UPRIGHT, T.LAND_UP)) & calm
         sat = torch.where(k == POSE, (worst <= 1) & (rms <= 1) & support & calm,
                           torch.where(k == FLIGHT, lo > self._air[v], settled))
-        return p, sat, rms
+        return p, sat, rms, torch.where(r > 0, x, torch.zeros_like(x))
 
     def _enter(self, ids, pos, frac=None, anchor=None):
         """Stage entry for envs ids (pos: theirs): anchor the root goal here (or at anchor = (xy, yaw)),
@@ -505,7 +638,7 @@ class KeyposeMachine:
         self.anchor_xy[ids], self.anchor_yaw[ids] = anchor if anchor is not None else (pos[:, PELVIS, :2], heading(pos))
         self.root_scale[ids] = 1.0 if frac is None else frac
         self.d0[ids] = 2.0  # placeholder so _eval's progress is defined; replaced just below
-        _, _, rms = self._eval(self.stage[ids], pos, torch.zeros(len(pos), device=self.dev), ids)
+        _, _, rms, _ = self._eval(self.stage[ids], pos, torch.zeros(len(pos), device=self.dev), ids)
         self.d0[ids] = rms.clamp(min=1.0 + 1e-3)
 
     def stage_at(self, t, v=None):
@@ -530,10 +663,13 @@ class KeyposeMachine:
         self.stage[ids] = stage
         span = (self._end[v, stage] - self._start[v, stage]).clamp(min=1e-3)
         self._enter(ids, pos, ((self._end[v, stage] - t) / span).clamp(0, 1))
-        p, _, _ = self._eval(stage, pos, torch.zeros(len(ids), device=self.dev), ids)
+        p, _, _, _ = self._eval(stage, pos, torch.zeros(len(ids), device=self.dev), ids)
         self.p[ids], self.phi[ids] = p, stage + p
-        for buf in (self.hold, self.apex, self.z_apex, self.completed, self.steps, self.banked, self.skipped):
+        for buf in (self.hold, self.apex, self.z_apex, self.completed, self.steps, self.banked, self.skipped,
+                    self.hist, self.near_x):
             buf[ids] = 0
+        self.near_rms[ids] = float("inf")
+        self.t0[ids] = t
         self.completed[ids] = ready.to(self.completed.dtype)
         self.q_min[ids] = 1.0
         self.done[ids] = False
@@ -544,7 +680,7 @@ class KeyposeMachine:
         pos = torch.as_tensor(pos, dtype=torch.float32, device=self.dev)
         z = pos[:, PELVIS, 2]
         vz, self.z_prev = (z - self.z_prev) / self.dt, z
-        p, sat, _ = self._eval(self.stage, pos, vz)
+        p, sat, rms, x = self._eval(self.stage, pos, vz)
         hold_end = self.done & sat  # done: the stage stays the last one, whose predicate is the end pose
         # An optional key moment (a detail of how the clip did it) may be skipped: if the next stage
         # already holds, move on to it, without the optional one's bonus.
@@ -554,29 +690,48 @@ class KeyposeMachine:
                      self.root_scale[opt].clone(), self.d0[opt].clone())
             self.stage[opt] += 1
             self._enter(opt, pos[opt])
-            p2, sat2, _ = self._eval(self.stage[opt], pos[opt], vz[opt], opt)
+            p2, sat2, rms2, x2 = self._eval(self.stage[opt], pos[opt], vz[opt], opt)
             back = ~sat2
             for buf, val in zip((self.stage, self.anchor_xy, self.anchor_yaw, self.root_scale, self.d0), saved):
                 buf[opt[back]] = val[back]
             skip = opt[sat2]
             if len(skip):
-                p, sat = p.clone(), sat.clone()
-                p[skip], sat[skip] = p2[sat2], True
-                self.hold[skip] = 0.0
+                p, sat, rms, x = p.clone(), sat.clone(), rms.clone(), x.clone()
+                p[skip], sat[skip], rms[skip], x[skip] = p2[sat2], True, rms2[sat2], x2[sat2]
+                self.hold[skip], self.hist[skip], self.near_rms[skip] = 0.0, False, float("inf")
                 self.skipped[skip] += 1
                 self.phi[skip] = self.phi[skip] + 1.0  # the skipped stage is behind it: no progress reward for it
         v = self.var
         _, lo, _, _ = T.features(pos, self._foot0[v][:, None])
         k = self._kind[v, self.stage]
+        closer = (k == POSE) & (rms < self.near_rms) & ~self.done
+        self.near_rms = torch.where(closer, rms, self.near_rms)
+        self.near_x = torch.where(closer[:, None], x, self.near_x)
+        self.near_xy = torch.where(closer[:, None], pos[:, PELVIS, :2], self.near_xy)
+        self.near_yaw = torch.where(closer, heading(pos), self.near_yaw)
         after_flight = self._jump_goal[v, self.stage] > 0
         self.apex = torch.where((k == FLIGHT) | after_flight, torch.maximum(self.apex, lo), torch.zeros_like(lo))
         self.z_apex = torch.where(k == FLIGHT, torch.maximum(self.z_apex, z), torch.zeros_like(z))
         risen = (k != FLIGHT) | (self.z_apex - self._h0[v] >= self._rise[v, self.stage] - 1e-6)
-        first = sat & (self.hold <= 0)
+        # The hold: of the stage's last `win` steps (its hold_s, scaled by the rollout's tempo so far), HOLD_FILL
+        # must have satisfied the predicate; a flight's airtime counts in full and in a row.
+        flight = k == FLIGHT
+        ref_s = (self._end[v, self.stage] - self.t0).clamp(min=1e-3)
+        tempo = (self.steps + 1) * self.dt / ref_s
+        tempo = torch.where(tempo < TEMPO_CUT, 1.0, tempo.clamp(TEMPO_MIN, 1.0))
+        win = torch.ceil(self._hold_need[v, self.stage] * torch.where(flight, 1.0, tempo) / self.dt - 1e-6)
+        win = win.clamp(1, self.H).long()
+        need = torch.where(flight, win, torch.ceil(HOLD_FILL * win - 1e-6).long().clamp(min=1))
+        slot = self.ring % self.H
+        self.ring += 1
+        self.hist[:, slot] = sat & ~self.done
+        age = (slot - torch.arange(self.H, device=self.dev)) % self.H
+        count = (self.hist & (age[None] < win[:, None])).sum(-1)
+        first = sat & (count == 1)  # nothing else satisfied in the window: a new stretch of it starts here
         self.held_xy = torch.where(first[:, None], pos[:, PELVIS, :2], self.held_xy)
         self.held_yaw = torch.where(first, heading(pos), self.held_yaw)
-        self.hold = torch.where(sat & ~self.done, self.hold + self.dt, torch.zeros_like(self.hold))
-        adv = sat & risen & (self.hold >= self._hold_need[v, self.stage] - 1e-6) & ~self.done
+        self.hold = count * self.dt  # seconds of the window that satisfied the predicate
+        adv = sat & risen & (count >= need) & ~self.done
 
         jg = self._jump_goal[v, self.stage]
         ratio = self.apex / jg.clamp(min=1e-3)
@@ -590,17 +745,21 @@ class KeyposeMachine:
         self.stage = torch.minimum(new_stage, self.n_stages - 1)
         moved = (adv & ~just_done).nonzero().squeeze(1)
         if len(moved):
-            self._enter(moved, pos[moved], anchor=(self.held_xy[moved], self.held_yaw[moved]))
+            from_pose = (k[moved] == POSE) & torch.isfinite(self.near_rms[moved])
+            self._enter(moved, pos[moved], anchor=(torch.where(from_pose[:, None], self.near_xy[moved], self.held_xy[moved]),
+                                                   torch.where(from_pose, self.near_yaw[moved], self.held_yaw[moved])))
             p = p.clone()
             p[moved] = 0.0
         self.p = torch.where(adv, torch.zeros_like(p), p)
         self.hold = torch.where(adv, torch.zeros_like(self.hold), self.hold)
+        self.hist[adv] = False
+        self.near_rms = torch.where(adv & ~just_done, torch.full_like(rms, float("inf")), self.near_rms)
         bonus = bonus + just_done * self.w["done"] * self.completed / self.n_stages
 
         phi = torch.where(self.done, self.n_stages.float(), self.stage + self.p)
         d, self.phi = phi - self.phi, phi
         _, _, _, up = T.features(pos, self._foot0[v][:, None])
-        gate = ((up - 0.6) / 0.3).clamp(0, 1)
+        gate = T.upright_gate(up)
         prog = torch.where(d > 0, d * gate, d) * self.w["progress"]
         self.stats["advances"] += adv.long()
         self.stats["jump_q"] = torch.where(adv & (jg > 0), q, self.stats["jump_q"])

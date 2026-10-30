@@ -80,6 +80,7 @@ def synthetic(hype=False, swing=True, lateral=False):
     pos = np.zeros((n, 14, 3), np.float32)
     pos[:] = pel[:, None]
     pos[:, T.PELVIS], pos[:, T.TORSO] = pel, torso
+    pos[:, T.L_SHOULDER], pos[:, T.R_SHOULDER] = torso + [0, 0.15, 0.1], torso + [0, -0.15, 0.1]
     pos[:, T.L_ANKLE], pos[:, T.R_ANKLE] = feet[:, 0], feet[:, 1]
     pos[:, T.L_HAND], pos[:, T.R_HAND] = hands[:, 0], hands[:, 1]
     kin["pos"] = pos
