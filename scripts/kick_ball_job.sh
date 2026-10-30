@@ -10,6 +10,9 @@ bash "$REPO/scripts/setup_colab.sh"
 export MUJOCO_GL=egl WANDB_MODE=disabled
 "$PY" "$REPO/experiments/kick_ball_eval.py" --checkpoint "$IN/model_1499.pt" --motion "$IN/motion.npz" \
   --out "$OUT/zero_shot" -n 256
+if [ -n "${PREV:-}" ]; then  # an earlier trained checkpoint, scored by this commit's evaluation
+  "$PY" "$REPO/experiments/kick_ball_eval.py" --checkpoint "$PREV" --motion "$IN/motion.npz" --out "$OUT/prev" -n 256
+fi
 A2H_INIT_CHECKPOINT="$IN/model_1499.pt" A2H_INIT_MODE=init "$PY" "$REPO/mjlab_objects.py" A2H-KickBall-Flat-Unitree-G1 \
   --env.commands.motion.motion-file "$IN/motion.npz" --env.scene.num-envs 4096 --agent.max-iterations "${ITERS:-800}" \
   --agent.save-interval 100 --agent.logger tensorboard --log-root "$OUT/logs"

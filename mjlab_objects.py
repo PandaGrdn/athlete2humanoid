@@ -157,12 +157,9 @@ class BallKick:
         if not self.ready:
             self._setup()
         t = self.cmd.time_steps
-        self._park(torch.nonzero(t < self.last_t).flatten())  # the motion wrapped: a new start
-        self.last_t = t.clone()
-        for k in range(len(self.strike)):
-            ids = torch.nonzero((t >= self.spawn[k]) & (t <= self.strike[k]) & (self.kick < k)).flatten()
-            if len(ids):
-                self._spawn(ids, k)
+        # Read the ball before anything below moves it: after a write, its derived state (velocity,
+        # position) is stale until the env's next forward(). A ball spawned while the last one
+        # still flew read as already hit, so the clip's second ball never appeared.
         # Hit: a held ball that moved since the last step. By the kicking leg if that is nearest.
         v = self.ball.data.root_link_lin_vel_w
         moved = self.held & (v.norm(dim=-1) > HIT_SPEED)
@@ -178,6 +175,12 @@ class BallKick:
             self.leg_hits += int((moved & leg).sum())
         kick = self.kick.clamp(min=0)
         self.held &= ~moved & (t <= self.hold_end[kick])
+        self._park(torch.nonzero(t < self.last_t).flatten())  # the motion wrapped: a new start
+        self.last_t = t.clone()
+        for k in range(len(self.strike)):
+            ids = torch.nonzero((t >= self.spawn[k]) & (t <= self.strike[k]) & (self.kick < k)).flatten()
+            if len(ids):
+                self._spawn(ids, k)
         ids = torch.nonzero(self.held).flatten()
         if len(ids):
             state = torch.zeros(len(ids), 13, device=env.device)
@@ -232,7 +235,9 @@ def kick_ball_cfg(play=False, jitter=0.03, speed_weight=3.0, hit_weight=20.0, re
     # A camera that sees the ball fly: beside and in front of the robot, close.
     v = cfg.viewer
     v.origin_type, v.entity_name, v.body_name = type(v).OriginType.ASSET_BODY, "robot", "torso_link"
-    v.distance, v.elevation, v.azimuth, v.width, v.height = 3.5, -12.0, 120.0, 640, 480
+    v.distance, v.elevation, v.azimuth, v.width, v.height = 2.6, -8.0, 135.0, 640, 480
+    if play:
+        cfg.commands["motion"].debug_vis = False  # no reference ghost: the robot and the ball only
     cfg.scene.entities["ball"] = EntityCfg(spec_fn=ball_spec, init_state=EntityCfg.InitialStateCfg(pos=PARK))
     cfg.events["ball"] = EventTermCfg(func=BallKick, mode="step", params={"jitter": 0.0 if play else jitter})
     for group in ("actor", "critic"):
