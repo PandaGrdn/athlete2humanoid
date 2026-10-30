@@ -29,6 +29,9 @@ SAM_PROMPT = os.environ.get("A2H_SAM_PROMPT", "athlete")
 # SAM 3.1 pins numpy<2, so it lives in its own Python 3.12 env. Point this at that env's python
 # and pipeline.py runs sam_track.py there; leave unset to import sam3 in-process.
 SAM_PYTHON = os.environ.get("A2H_SAM_PYTHON")
+# SAM 3D Body (the 3D pose front end, frontends/) also has its own env (scripts/setup_sam3d.sh): its python, and the
+# sam-3d-body checkout it imports. Unset: import sam_3d_body in-process if it is installed.
+SAM3D_PYTHON = os.environ.get("A2H_SAM3D_PYTHON")
 
 # Secrets: one file per secret in this folder (Drive in Colab), e.g. a2h/env/HF_TOKEN containing
 # HF_TOKEN = "hf_...". Works from an IDE attached to a Colab runtime, where the Colab

@@ -1,7 +1,8 @@
 """MediaPipe Pose on SAM-cropped frames -> a smoothed, metric, z-up human trajectory.
 
 Uses the MediaPipe Tasks API (PoseLandmarker); recent mediapipe releases dropped the legacy
-mp.solutions.pose. SAM 3D Body can replace this stage later with the same output shape.
+mp.solutions.pose. Where SAM 3D Body is set up, pipeline.py uses it instead (frontends/sam3d_body.py gives the
+same landmarks; fix 3 of docs/PIPELINE_ACCURACY.md); this is the fallback and the live demo's front end.
 """
 
 import mediapipe as mp
@@ -120,8 +121,12 @@ def human_trajectory(world, image_xy, boxes, return_view=False, camera=None):
     metres_per_px = np.median(torso_m / torso_px)
     root = np.zeros((len(world), 3))
     root[:, :2] = (hip_px - hip_px[0]) * metres_per_px  # camera x right, y down
-    cam = world + root[:, None, :]
+    return camera_to_world(world + root[:, None, :], return_view)
 
+
+def camera_to_world(cam, return_view=False):
+    """(T, 33, 3) landmarks in camera axes (x right, y down, z depth), metres -> z-up, athlete facing +x
+    (and, with return_view, the camera's azimuth in that frame), as human_trajectory returns them."""
     # Camera axes (x right, y down, z depth) -> z-up world.
     P = np.stack([cam[..., 0], cam[..., 2], -cam[..., 1]], -1)
 

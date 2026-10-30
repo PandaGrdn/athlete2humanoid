@@ -2,7 +2,7 @@
 # Set up a Colab VM for training: mjlab venv, robot assets, headless rendering.
 #   bash scripts/setup_colab.sh            # training only (CSV -> policy)
 #   bash scripts/setup_colab.sh --with-main # also the main env's deps (latent stages, no SAM)
-#   bash scripts/setup_colab.sh --with-sam # also the video stage (main deps + SAM 3.1 venv)
+#   bash scripts/setup_colab.sh --with-sam # also the video stage (main deps + SAM 3.1 and SAM 3D Body venvs)
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -26,5 +26,6 @@ if [ "${1:-}" = "--with-sam" ]; then
   uv pip install -q -p /content/sam_env/bin/python --torch-backend auto torch torchvision \
     "setuptools<81" -e "/content/sam3[notebooks]"
   /content/sam_env/bin/python -c "import torch, sam3; print('SAM env OK, CUDA:', torch.cuda.is_available())"
+  bash "$REPO/scripts/setup_sam3d.sh" /content  # the 3D pose front end (A2H_SAM3D_PYTHON)
 fi
 echo SETUP_DONE

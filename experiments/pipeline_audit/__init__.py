@@ -7,6 +7,7 @@ the simulator, stage by stage, on the clips already processed under outputs/. No
     python experiments/pipeline_audit/spec_audit.py        # keypose specs: tolerances vs noise, key-moment stability, tempo
     python experiments/pipeline_audit/spec_noise.py        # which predicate (tolerance, hold) breaks a spec under limb noise
     python experiments/pipeline_audit/variants_audit.py    # the variant filter against physics (ballistics, joint speed)
+    python experiments/pipeline_audit/frontend_ab.py       # fix 3: MediaPipe vs SAM 3D Body (frontends/), pose and retarget metrics
 
 Each writes a JSON next to docs/results/pipeline_audit/ (override with --out). All run on CPU in the main
 environment (mujoco, mink, torch, scipy; raw_pose.py also needs mediapipe and the pose model under assets/).

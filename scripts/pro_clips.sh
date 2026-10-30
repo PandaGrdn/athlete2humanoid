@@ -1,6 +1,6 @@
 #!/bin/bash
 # New videos -> trained, robustness-tested policies in one unattended job (scripts/remote_run.py pro):
-#   1. SAM 3.1 installed at job start (the Modal image has none), then experiments/process_clips.py
+#   1. SAM 3.1 and SAM 3D Body installed at job start (the Modal image has neither), then experiments/process_clips.py
 #   2. per clip, experiments/multiclip_policy.py: tracking_var / multi / multi_vjc, each from its own
 #      checkpoint in inputs/ (--init-dir), trained on the clip's variants, then every robustness suite
 #   [POLICIES="multi"] bash scripts/pro_clips.sh <iters> <video>...   (default: all three, compared)
@@ -19,6 +19,8 @@ if [ ! -x /content/sam_env/bin/python ]; then
 fi
 export A2H_SAM_PYTHON=/content/sam_env/bin/python
 /content/sam_env/bin/python -c "import torch, sam3; print('SAM env OK, CUDA:', torch.cuda.is_available())" || exit 1
+bash scripts/setup_sam3d.sh /content || exit 1  # the 3D pose front end
+export A2H_SAM3D_PYTHON=/content/sam3d_env/bin/python A2H_SAM3D_DIR=/content/sam-3d-body
 
 python3 experiments/process_clips.py "$@" --out "$OUT/process" || exit 1
 tar xzf "$OUT/process/results.tar.gz" -C "$D/inputs"

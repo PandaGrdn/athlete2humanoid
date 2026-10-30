@@ -469,7 +469,8 @@ Cost: about 1 GPU hour for inference on three short clips; the time is in the lo
 ## What was not measured
 
 - No world-grounded model or SAM 3D Body was run (weights need approval); the front-end comparison is from the
-  literature and the error profile.
+  literature and the error profile. (Since run for SAM 3D Body: see "Fix 3" under "Fixes applied". GVHMR / WHAM
+  still not run.)
 - Policy rollouts for punches are not stored locally, so the failing feature at its stuck stage is inferred
   from the spec's tolerances and the policy's scalar joint error, not read off the rollout.
 - The right-knee asymmetry is reported without a settled cause.
@@ -477,6 +478,198 @@ Cost: about 1 GPU hour for inference on three short clips; the time is in the lo
   estimate from the whole-frame heights.
 
 ## Fixes applied
+
+### Fix 3: the front-end A/B, MediaPipe vs SAM 3D Body (2026-10-30)
+
+**Decision: SAM 3D Body is the pipeline's default 3D pose front end where it is set up, with MediaPipe as the
+fallback.** The audit's own rule says no: on the three clips it names, SAM 3D Body passes the squat jump by a wide
+margin but fails both athletic clips. The knee IK error gets worse on shot_put and hurdles instead of halving, and
+the double-support ankle disagreement gets worse on shot_put (hurdles has no MediaPipe baseline for it).
+
+Run on all ten clips, though, SAM 3D Body is clearly better on eight:
+- all seven phone clips, the footage the pipeline is built for;
+- the discus film.
+
+The user's instruction was to integrate it if it makes the pipeline much better, so it is integrated (see
+"Integration" below). The two clips where it loses, shot_put and hurdles, lose on the G1's joint range, not on the
+pose. `pipeline.py --frontend mediapipe` keeps the old path for footage like them.
+
+What was run:
+
+- **SAM 3D Body** (`facebook/sam-3d-body-dinov3`, code at `facebookresearch/sam-3d-body@b5c765a`) on a Modal L40S
+  (profile `a2h`), via `frontends/sam3d_modal.py`. It saw the same frames as the stored `human.npy`:
+  - squat_jump: the phone file, 271 frames;
+  - shot_put and hurdles: the 30 fps / 720p resample that `process_clips.py` feeds the pipeline, 128 and 89 frames.
+
+  The hip height lines up with MediaPipe's at lag 0 (correlation 0.99-1.0).
+- **Setup per clip:**
+  - the athlete's box per frame from torchvision's COCO Faster R-CNN (one person per clip, found in 100% of frames);
+  - one focal length per clip from MoGe-2: the median over 8 frames, 1242 / 1662 / 1426 px;
+  - the body decoder only, with no hand refinement.
+
+  Inference took 85 s, 44 s and 29 s; the app was stopped afterwards.
+- **`frontends/sam3d_body.py`** maps the MHR70 keypoints to MediaPipe's 33 landmarks and builds the trajectory two
+  ways:
+  - **3DB, model root:** keypoints plus the model's predicted camera translation, so the root includes depth.
+  - **3DB, 2D-hip root:** the keypoints as the skeleton, with `pose.human_trajectory`'s own root rule (2D hip track
+    times the torso ruler, depth zero). This separates the skeleton's effect from the root's.
+
+  Both go through the same fill and Savitzky-Golay smoothing and the same camera-to-world step
+  (`pose.camera_to_world`, factored out of `human_trajectory` unchanged) as MediaPipe.
+- **Scoring:** `experiments/pipeline_audit/frontend_ab.py` runs `pose_stats.clip_stats` and `retarget_audit.audit`
+  (current `retarget.py`) on all three trajectories. JSON: `docs/results/pipeline_audit/frontend_ab/frontend_ab.json`.
+- **GVHMR / WHAM: not run, by the user's decision.** Both need the SMPL / SMPL-X body models, whose licence is
+  non-commercial and needs two MPI registrations. The test of feeding a world-grounded model's contacts to
+  `plant_feet` in place of `stance_mask` was therefore not done.
+
+Before the retarget:
+
+| clip | front end | bone CV thigh / shin / upper arm / forearm (%) | double-support ankle diff mean / max (cm) | double-support frames | same on the lowest foot point (cm, frames) | stance hover mean / sd (cm) | depth ratio (smoothed) |
+|---|---|---|---|---|---|---|---|
+| squat_jump | MediaPipe | 3.7 / 3.0 / 5.6 / 7.9 | 6.6 / 10.3 | 173 | 9.5 (151) | 3.9 / 2.0 | 1.6 |
+| squat_jump | 3DB, model root | **1.5 / 1.5 / 1.8 / 2.1** | **1.4 / 3.3** | 230 | **1.2** (230) | **1.4 / 1.1** | 1.7 |
+| squat_jump | 3DB, 2D-hip root | 1.5 / 1.5 / 1.8 / 2.1 | 1.4 / 3.3 | 225 | 1.2 (225) | 1.7 / 1.5 | 1.4 |
+| shot_put | MediaPipe | 7.9 / 9.9 / 21.4 / 18.2 | 2.8 / 6.2 | 5 | 4.0 (3) | 3.4 / 3.8 | 1.2 |
+| shot_put | 3DB, model root | **1.8 / 1.0 / 2.2 / 4.1** | 6.7 / 10.1 | 20 | 3.7 (20) | 3.6 / 3.4 | 2.4 |
+| shot_put | 3DB, 2D-hip root | 1.8 / 1.0 / 2.2 / 4.1 | 5.9 / 10.1 | 24 | 3.2 (24) | 4.0 / 3.2 | 0.9 |
+| hurdles | MediaPipe | 14.1 / 12.2 / 17.0 / 19.9 | n/a | 0 | n/a | -0.4 / 1.3 | 0.2 |
+| hurdles | 3DB, model root | **5.0 / 6.7 / 3.4 / 3.8** | 5.9 / 7.9 | 2 | 4.7 (2) | 1.2 / 2.6 | 0.25 |
+| hurdles | 3DB, 2D-hip root | 5.0 / 6.7 / 3.4 / 3.8 | 5.9 / 7.9 | 2 | 4.7 (2) | 0.7 / 1.8 | 0.06 |
+
+The "lowest foot point" column measures double support at the lower of each foot's ankle, heel and toe instead of
+at the ankle, so a raised heel does not count as disagreement.
+
+After the retarget (current code):
+
+| clip | front end | knee IK L / R (cm) | any joint at limit (worst) | frames at 20 rad/s | root shift mean / max (time-varying) (cm) | no-contact frames | pelvis rise kept / pose (cm) | angle error knee / hip / elbow / shoulder (deg) |
+|---|---|---|---|---|---|---|---|---|
+| squat_jump | MediaPipe | 0.5 / 1.6 | 1% (R ankle pitch) | 0 | 9.5 / 14.0 (5.4) | 13% | 57 / 57 | 2.0 / 5.2 / 0.9 / 3.7 |
+| squat_jump | 3DB, model root | 0.5 / **0.4** | 0% | 0 | **3.0 / 5.2 (1.6)** | 13% | 55 / 58 | **0.5 / 2.9 / 0.5 / 2.5** |
+| squat_jump | 3DB, 2D-hip root | 0.5 / 0.4 | 0% | 0 | 3.9 / 7.3 (3.3) | 14% | 57 / 58 | 0.5 / 2.9 / 0.5 / 2.5 |
+| shot_put | MediaPipe | 0.9 / 1.0 | 44% (R shoulder pitch 40%) | 3 | 14.4 / 22.4 (5.5) | 58% | 23 / 26 | 4.2 / 4.5 / 3.8 / 7.8 |
+| shot_put | 3DB, model root | 2.0 / 0.8 | **100%** (R shoulder yaw 100%) | 0 | 10.8 / 33.6 (8.9) | **16%** | 24 / 25 | 3.8 / 5.7 / 10.8 / 12.8 |
+| shot_put | 3DB, 2D-hip root | 1.3 / 0.8 | **100%** (R shoulder yaw 100%) | 0 | 7.8 / 17.8 (5.6) | **17%** | 24 / 25 | 2.5 / 5.9 / 10.8 / 12.9 |
+| hurdles | MediaPipe | 0.8 / 1.6 | 11% (L ankle pitch 10%) | 3 | 6.8 / 22.2 (5.5) | 65% | 51 / 51 | 1.0 / 5.2 / 1.9 / 2.2 |
+| hurdles | 3DB, model root | 2.8 / 1.2 | 33% (L ankle pitch 33%) | 0 | 10.7 / 15.3 (6.2) | 64% | 48 / 54 | 1.2 / 9.1 / 1.4 / 2.1 |
+| hurdles | 3DB, 2D-hip root | 2.9 / 1.2 | 42% (L ankle pitch 42%) | 0 | 8.7 / 17.2 (5.7) | 63% | 46 / 53 | 1.3 / 9.4 / 1.4 / 2.2 |
+
+The decision rule, as ratios of the mean over both knees (3DB / MediaPipe):
+
+| front end | squat_jump: ankle / knee (must be <= 1) | shot_put: ankle / knee (must be <= 0.5) | hurdles: ankle / knee (must be <= 0.5) | adopt |
+|---|---|---|---|---|
+| 3DB, model root | 0.21 / 0.42 | 2.38 / 1.49 | n/a / 1.69 | no |
+| 3DB, 2D-hip root | 0.21 / 0.42 | 2.10 / 1.08 | n/a / 1.75 | no |
+
+What this says:
+
+- **The skeleton is much better.** Bone-length CV falls 2-5x on every clip and for every bone: 1-4% on the films
+  against 8-21%. Before smoothing, SAM 3D Body's hip-centred depth is about as noisy as its image plane:
+  - squat jump: 0.27 / 0.25 / 0.38 cm, ratio 1.5, against MediaPipe's raw 2.4;
+  - shot put: 0.95 / 0.64 / 0.89 cm, ratio 1.1, against 1.7;
+  - `frontend_ab.json`, `raw_noise_hip_centred_cm`. MediaPipe's figures are from the whole-frame raw pass in Stage 1.
+- **On the clean phone clip, everything the audit measures improves:**
+  - double-support ankle disagreement 6.6 to 1.4 cm;
+  - stance hover 3.9 to 1.4 cm;
+  - right knee IK 1.6 to 0.4 cm;
+  - root shift 9.5 to 3.0 cm (time-varying part 5.4 to 1.6);
+  - knee, hip and elbow angle error about halved.
+
+  This is the result the audit predicted for the limbs and the feet.
+- **On the athletic films, the retarget gets worse.** SAM 3D Body puts the joints in poses the G1 cannot reach more
+  often:
+  - **Shot put:** the shot is held at the neck. The right shoulder yaw sits at its limit in 100% of frames, against
+    MediaPipe's shoulder pitch at 40%, and the elbow and shoulder angle errors go up to 11 and 13 degrees.
+  - **Hurdles:** the sprinter's ankle pitch hits its limit in 33-42% of frames instead of 10%. Hip angle error
+    rises from 5 to 9 degrees and the left knee takes up 2-3 cm.
+
+  Whether SAM 3D Body or MediaPipe is closer to the athlete there is not measured: there is no ground truth for
+  1900 films. The knee IK error (the rule's metric) measures reachability, and a more extreme pose is less
+  reachable.
+- **The ankle metric is the wrong yardstick on a throw.** On shot_put, MediaPipe's 2.8 cm comes from 5
+  double-support frames; SAM 3D Body finds 20. On the lowest point of each foot, the two front ends are level:
+  4.0 cm against 3.2-3.7. SAM 3D Body's rear heel is raised about 3 cm in the power position, which the ankle
+  metric counts as disagreement. On hurdles, MediaPipe never has both feet down, so the ankle half of the rule
+  cannot be applied there.
+- **Contacts improve on the glide.** No-contact frames on shot_put fall from 58% to 16%, because the pivoting foot
+  is now found. The 1.6 s interpolated stretch becomes a 0.3 s lowered one, the same decision as the earlier
+  0.33 s hop. Hurdles keeps the same open flight at the end (rise 36 cm kept, MediaPipe 37).
+- **The model's own root is not better than the 2D-hip rule on the films.**
+  - On the squat jump it is the best of the three (time-varying root shift 1.6 cm).
+  - On the films, its depth comes from the box scale per frame (2.4 cm raw depth noise on shot put, 3.2 on hurdles)
+    and its horizontal track jitters 9 cm on the hurdler, so root shift rises: 10.8 vs 7.8 cm on shot put,
+    10.7 vs 8.7 on hurdles.
+  - A world-grounded model (GVHMR) is the one that would be expected to fix this, and it was not run.
+
+All ten clips, MediaPipe → SAM 3D Body with the 2D-hip root (the variant the pipeline uses). The other seven ran
+the same way on Modal, about 6 GPU-minutes for all ten:
+
+| clip | bone CV, mean of 4 (%) | double-support ankle diff (cm) | stance hover (cm) | knee IK, mean L/R (cm) | any joint at limit | frames at 20 rad/s | root shift mean (time-varying) (cm) | no-contact frames |
+|---|---|---|---|---|---|---|---|---|
+| squat_jump | 5.1 → 1.7 | 6.6 → 1.4 | 4.0 → 1.8 | 1.1 → 0.5 | 1% → 0% | 0 → 0 | 9.5 (5.4) → 3.9 (3.3) | 13% → 14% |
+| squat | 5.3 → 1.9 | 6.5 → 1.3 | 2.9 → 1.8 | 1.2 → 0.4 | 0% → 0% | 0 → 0 | 9.7 (4.9) → 4.2 (3.9) | 0% → 0% |
+| lunge | 6.9 → 1.7 | 3.0 → 2.2 | 3.4 → 3.2 | 1.4 → 1.0 | 21% → 28% | 0 → 0 | 9.6 (6.5) → 7.9 (7.3) | 0% → 0% |
+| arms | 6.0 → 1.0 | 3.2 → 0.5 | 2.5 → 0.7 | 0.7 → 0.3 | 0% → 0% | 0 → 0 | 1.7 (0.9) → 1.3 (1.1) | 0% → 0% |
+| front_kick | 4.4 → 1.5 | 3.4 → 1.5 | 1.5 → 1.3 | 1.2 → 0.6 | 5% → 2% | 1 → 0 | 6.1 (3.9) → 3.2 (2.9) | 0% → 0% |
+| jumping_jacks | 9.3 → 1.5 | 4.8 → 1.3 | 2.5 → 1.4 | 0.7 → 0.5 | 0% → 0% | 9 → 7 | 5.5 (3.6) → 6.3 (4.9) | 41% → 6% |
+| punches | 6.7 → 1.4 | 5.9 → 6.5 | 1.3 → 1.5 | 1.6 → 0.6 | 1% → 0% | 0 → 0 | 4.3 (2.7) → 3.0 (1.8) | 0% → 0% |
+| shot_put | 14.4 → 2.3 | 2.8 → 5.9 | 3.4 → 4.0 | 0.9 → 1.0 | 44% → 100% | 3 → 0 | 14.4 (5.5) → 7.8 (5.6) | 58% → 17% |
+| discus | 11.7 → 4.1 | 7.7 → 3.2 | 3.6 → 3.0 | 1.1 → 1.0 | 10% → 0% | 4 → 0 | 10.2 (6.6) → 9.8 (6.9) | 2% → 7% |
+| hurdles | 15.8 → 4.7 | n/a → 5.9 | -0.4 → 0.7 | 1.2 → 2.1 | 11% → 42% | 3 → 0 | 6.8 (5.5) → 8.7 (5.7) | 65% → 63% |
+
+On the phone clips:
+- **Bone-length CV** falls 3-6x.
+- **Double-support ankle disagreement** falls 1.4-6x, except on punches. In 82% of that clip's frames the feet
+  are cut off or hidden, so both front ends guess them.
+- **Knee IK error** falls by up to 3x on every phone clip.
+- **Root shift** falls on six of seven; it rises 0.8 cm on jumping jacks.
+- **Jumping jacks** gets its contacts back: 6% no-contact frames instead of 41%.
+- **Knee and hip angle errors** against the human skeleton halve on most clips (`frontend_ab.json`).
+- **Joint limits:** the lunge's rear ankle pitch is at its limit more often (21% to 28%). That is the one
+  phone-clip regression.
+
+Of the films, discus improves on every row except no-contact frames (2% to 7%). Shot put and hurdles are as
+described above.
+
+Integration (`pipeline.py`):
+- **`--frontend auto|sam3d|mediapipe`**, default `auto`: SAM 3D Body where it can run, else MediaPipe.
+  - It can run when `A2H_SAM3D_PYTHON` points at an env made by `scripts/setup_sam3d.sh`, or when `sam_3d_body`
+    imports in-process with a GPU.
+  - Explicit `sam3d` fails with the setup instructions if it can't run.
+  - `meta.json` records the choice as `frontend`, and the raw output is kept as `sam3d.npz`.
+- **Boxes:** SAM 3D Body runs on the athlete's SAM 3.1 mask boxes (or `--athlete`'s masks). Without a mask it
+  falls back to its own person detector.
+- **Landmarks:** its keypoints become MediaPipe's `world` / `image_xy` / `boxes` (`sam3d_body.landmarks`), so
+  camera compensation, the intake checks, `human_trajectory` and the retarget are unchanged. This is the 2D-hip
+  root variant. The model's own root was better only on the two squats, and it cannot be compensated for a
+  panning camera.
+- **GPU jobs:** `scripts/setup_colab.sh --with-sam`, `scripts/pro_clips.sh` and `scripts/remote_run.py` build the
+  env and set `A2H_SAM3D_PYTHON`, so `process` and `pro` jobs use it. The live web demo (`server/live_worker.py`,
+  CPU) stays on MediaPipe.
+- **Checked end to end on Modal:** `pipeline.py --no-sam` on squat_jump, in an image whose env came from
+  `setup_sam3d.sh`, through the subprocess path. Locally, the pipeline's `human.npy` with SAM 3D Body's output
+  equals the A/B trajectory exactly.
+- **Not changed:** the stored clips in `outputs/` and their `qpos.npy`. Re-processing them, and retraining on the
+  result, is a separate run.
+
+Remaining work: the films' losses are the G1's joint range, not the pose. The retarget would need to handle a
+shoulder or ankle past its range, as fix 5 did for ankle roll, before a more faithful front end pays off there.
+
+Caveats:
+
+- **Mapping.** MHR70's hips are joint centres, while MediaPipe's sit higher and wider. This changes hip width only:
+  `rescale_bones` keeps directions.
+- **Detector.** The boxes come from Faster R-CNN, not the SAM 3.1 masks: each clip has one person.
+- **Focal length.** The shot put's 8 MoGe-2 estimates spread from 1400 to 2532 px; the film's first frames are
+  tilted in the scan. The camera-root variant carries that uncertainty and the 2D-hip variant does not.
+- **Reproduce:**
+
+```bash
+MODAL_PROFILE=a2h python -m modal run --detach frontends/sam3d_modal.py --videos clips/squat_jump.mov,outputs/frontend_ab/shot_put30.mp4,outputs/frontend_ab/hurdles30.mp4
+MODAL_PROFILE=a2h python -m modal volume get a2h-frontend-ab sam3d outputs/frontend_ab/
+python experiments/pipeline_audit/frontend_ab.py
+```
+
+  The `*30.mp4` files are `ffmpeg -i clips_pro/<clip>.mp4 -vf fps=30,scale=-2:720 -an`.
 
 ### Fix 4: physical variant filter and ballistic re-timing (`skill/variations.py`, 2026-10-30)
 
