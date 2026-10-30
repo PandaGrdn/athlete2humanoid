@@ -50,6 +50,7 @@ TASKS = {"tracking": "Mjlab-Tracking-Flat-Unitree-G1", "hybrid": "A2H-Hybrid-Fla
          "multi": "A2H-Tracking-Flat-Unitree-G1", "multi_vj": "A2H-TrackingVJ-Flat-Unitree-G1",
          "multi_future": "A2H-TrackingFuture-Flat-Unitree-G1",
          "multi_vjc": "A2H-TrackingVJCausal-Flat-Unitree-G1"}  # the latent of the video so far only
+TASKS["multi_vjp"] = TASKS["multi_vjl"] = "A2H-TrackingVJPred-Flat-Unitree-G1"  # + the predicted latent ahead (experiments/worldmodel_policy.py)
 TASK_FIRST = ("task", "taskphase", "taskcmd", "taskhybrid", "taskhybrid_var")  # trained on the semantic task spec (skill/task.py)
 
 
