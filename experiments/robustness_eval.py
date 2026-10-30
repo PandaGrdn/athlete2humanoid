@@ -46,6 +46,11 @@ itself there with --mjlab), the V-JEPA scoring in the main env (--no-vjepa skips
    Task success: every stage of the spec, in order, from the stage the clip is in at the start,
    and no fall before the clip ends. Cross-checked offline with skill/task.py evaluate() on the
    saved rollouts' body positions where episodes start at t = 0.
+   Tolerances (keypose specs): floored by the clip's tracker calibration when there is one
+   (--calibration, or <runs>/tracker_calibration.json), or measured here with --calibrate: the clean
+   clip is run once uncalibrated, the best tracker's per-feature RMS error sets the floors
+   (skill/keypose.py calibrate), <out>/tracker_calibration.json is written, and every condition is
+   then scored with it. Stored with the clip, the same floors score every later policy on it.
    Distance to the clip: joint-space DTW to the retarget (at 1x, from the start phase) of every
    rollout that stayed up, so timing changes cost nothing and only different poses count. Next to
    it, the time-locked joint error, and in meta what standing still would score.
@@ -72,6 +77,9 @@ robust.json:
     "task_spec": {"source", "summary", "stages", "h0", "jump_clearance_m", "ref_squat_depth_m",
                   "self_check"}, "start_poses": {"crouched_frame"},
     "dtw_joint_rad_still": joint-space DTW of standing still at frame 0 to the clip (the scale),
+    "calibration": the clip's tracker calibration the keypose tolerances were floored with (null if none),
+    "uncalibrated_clean": {policy: {"task_success", "stages_completed", "joint_err_rad", "abandoned"}}
+                   (--calibrate: the clean clip scored before calibrating),
     "seconds": {"mjlab", "vjepa"}
   },
   "reference_check": {policy: {"aligned", "dtw", "eval_json_aligned", "eval_json_dtw"}},
@@ -97,6 +105,14 @@ robust.json:
                         landings excluded (m),
       "pushes":         mean shoves per env,
       "dtw_joint_rad":  mean joint-space DTW to the clip over envs that stayed up (null if none),
+      "tracking_rms_m": {body: RMS position error vs the reference while upright, time-locked (m)},
+      "feature_rms_m":  {keypose feature: RMS error (skill/keypose.py tracking_rms), envs that stayed up}
+                        (keypose specs, conditions that play the clip itself),
+      "abandoned":      [{"stage", "name", "kind", "share" of all envs, "fell" share of those, and for a
+                        pose stage "feature" most often furthest outside its tolerance at the closest
+                        approach, "error_tol" its error / tolerance, "rms_tol", "reached" share
+                        within tolerance there (the hold, feet or stillness failed)}]: where the
+                        unsuccessful envs stopped, top 3,
       "vjepa_aligned":  mean over the rendered rollouts (null if none),
       "vjepa_dtw":      same, DTW,
       "vjepa_each":     [[aligned, dtw], ...] per rendered rollout
@@ -283,6 +299,49 @@ def run_env(runs, pols):
     return env
 
 
+CALIBRATION = "tracker_calibration.json"  # a clip's tolerance floors from a good tracker (skill/keypose.py calibrate)
+
+
+def tracker_calibration(res, which, pols, clip):
+    """The clean clip's results -> the clip's calibration: from `which` policy, or ("best") the one with the lowest
+    joint error among those that never fell. None if there is none."""
+    from skill import keypose as K
+    ok = {n: r for n, r in res.items() if "feature_rms_m" in r and r["fall_rate"] == 0}
+    name = which if which in ok else min(ok, key=lambda n: ok[n]["joint_err_rad"], default=None) if which == "best" else None
+    if name is None:
+        return None
+    r = ok[name]
+    return K.calibration([r["feature_rms_m"][f[0]] for f in K.FEATURES], clip=clip, policy=name,
+                         checkpoint=Path(pols[name]["checkpoint"]).name, joint_err_rad=round(r["joint_err_rad"], 4),
+                         torso_err_m=round(r["torso_err_m"], 4), tracking_rms_m=r["tracking_rms_m"],
+                         note="each feature's tolerance floor is max(TOL_MIN, k x this tracker's RMS error on the clean clip)")
+
+
+def abandoned(spec, failed, fell, stage, x, rms, top=3):
+    """Where the unsuccessful rollouts of one policy stopped: per stage (the one each was in when the clip ended or it
+    fell), the share of all rollouts, how many of those fell, and for a pose stage the feature most often furthest
+    outside its tolerance at the rollout's closest approach (error_tol: its error over its tolerance, median) and
+    the share that reached the pose (every feature and the RMS within tolerance) but didn't hold it."""
+    from skill import keypose as K
+    feats = spec.get("features") or [f[0] for f in K.FEATURES]
+    out, n = [], len(failed)
+    for s in (int(v) for v in stage[failed].unique().tolist()):
+        sel = failed & (stage == s)
+        st = spec["stages"][s]
+        row = {"stage": s, "name": st.get("label", st.get("name", st["kind"])), "kind": st["kind"],
+               "share": round(int(sel.sum()) / n, 3), "fell": round(int((sel & fell).sum()) / max(int(sel.sum()), 1), 3)}
+        reached = sel & (rms < float("inf"))
+        if x is not None and st["kind"] == "pose" and reached.any():
+            worst = x[reached].argmax(-1)
+            i = int(worst.mode().values)
+            row |= {"feature": feats[i], "error_tol": round(float(x[reached][worst == i, i].median()), 2),
+                    "rms_tol": round(float(rms[reached].median()), 2),
+                    "reached": round(float(((x[reached].max(-1).values <= 1) & (rms[reached] <= 1)).float().mean()), 3)}
+        out.append(row)
+    return sorted(out, key=lambda r: -r["share"])[:top]
+
+
+
 def mjlab_stage(a, out):
     import warnings
     from dataclasses import asdict
@@ -301,6 +360,7 @@ def mjlab_stage(a, out):
     from mjlab.tasks.tracking.mdp.commands import MotionLoader
     from mjlab.utils.lab_api.math import yaw_quat
 
+    from latent.reward_net import BODIES as BODY_NAMES
     from skill import task as skill_task
 
     warnings.filterwarnings("ignore", message="dr.body_mass")
@@ -322,6 +382,22 @@ def mjlab_stage(a, out):
         spec_path = str(out / "task_spec.json")
         Path(spec_path).write_text(json.dumps(spec, indent=1))
     from skill import keypose as K
+    keypose = spec.get("type") == "keypose"
+    # The clip's tracker calibration (skill/keypose.py calibrate): given, found in the run folder, or measured here.
+    calib_file = a.calibration or (Path(a.runs) / CALIBRATION if a.runs and (Path(a.runs) / CALIBRATION).exists() else None)
+    calibrate = bool(a.calibrate) and not calib_file
+    if (calib_file or a.calibrate) and not keypose:
+        log("calibration skipped: it is for keypose specs (this one has no per-feature tolerances)")
+        calib_file, calibrate = None, False
+
+    def use_calibration(calib):
+        nonlocal spec, spec_path
+        spec = K.calibrate(spec, calib)
+        spec_path = str(out / "task_spec_calibrated.json")
+        Path(spec_path).write_text(json.dumps(spec, indent=1))
+    if calib_file:
+        use_calibration(json.loads(Path(calib_file).read_text()))
+        log(f"tolerances calibrated by {calib_file} ({spec['calibration'].get('policy', '?')})")
 
     def kinds_of(sp):
         """The stage kinds the machine reports: keypose (pose / flight / settle) or stand / squat / jump / land."""
@@ -434,8 +510,13 @@ def mjlab_stage(a, out):
         robot.write_root_link_velocity_to_sim(vel, env_ids=ids)
 
     results, rollouts = [], {}
+    meta["calibration"] = spec.get("calibration")
+    plan = list(enumerate(conditions(a)))
+    if calibrate:  # the clean clip once more first, uncalibrated: the calibration is measured on it
+        plan = plan[:1] + plan
     with torch.inference_mode():  # also the resets: tensors made inside can't be updated outside
-        for ci, (suite, level, p) in enumerate(conditions(a)):
+        for pi_, (ci, (suite, level, p)) in enumerate(plan):
+            calibrating = calibrate and pi_ == 0
             tc = time.time()
             torch.manual_seed(a.seed + ci)
             mf = motion_file if p["speed"] == 1 else resample_motion(motion_file, out / f"motion_x{p['speed']:g}.npz", p["speed"])
@@ -492,6 +573,17 @@ def mjlab_stage(a, out):
             qpos = torch.zeros(len(keep), steps, 7 + robot.data.joint_pos.shape[1], device=device)
             body = torch.zeros(len(keep), steps, *cmd.robot_body_pos_w.shape[1:], device=device)
             joints = torch.zeros(N, steps, robot.data.joint_pos.shape[1], device=device)
+            # tracking error per body (time-locked, while upright), and every env's bodies and the reference's at
+            # the same steps for the per-feature error (keypose specs: the calibration's input)
+            body_sq = torch.zeros(N, cmd.robot_body_pos_w.shape[1], device=device)
+            track = keypose and p["reference"] == "clip" and not p["transfer"]
+            all_body = torch.zeros(N, steps, *cmd.robot_body_pos_w.shape[1:], device=device) if track else None
+            all_ref = torch.zeros_like(all_body) if track else None
+            # where an unsuccessful rollout stops: its stage, and (keypose) its closest approach to that goal
+            diag = hasattr(m, "near_x")
+            stuck_stage = zeros(torch.long)
+            stuck_x = torch.zeros(N, K.D, device=device) if diag else None
+            stuck_rms = torch.full((N,), float("inf"), device=device)
             for t in range(steps):
                 if p["push_mps"] and not p["push_at"]:
                     ids = ((t >= next_push) & ~fallen).nonzero().squeeze(1)
@@ -513,6 +605,14 @@ def mjlab_stage(a, out):
                 ts = cmd.time_steps.clamp(max=T - 1)
                 torso_err += live * (cmd.robot_anchor_pos_w - truth.body_pos_w[ts, anchor] - env.scene.env_origins).norm(dim=-1)
                 joint_err += live * (cmd.robot_joint_pos - truth.joint_pos[ts]).abs().mean(-1)
+                rel = cmd.robot_body_pos_w - env.scene.env_origins[:, None]
+                body_sq += live[:, None] * (rel - truth.body_pos_w[ts]).pow(2).sum(-1)
+                if track:
+                    all_body[:, t], all_ref[:, t] = rel, truth.body_pos_w[ts]
+                stuck_stage = torch.where(live, m.stage, stuck_stage)
+                if diag:
+                    stuck_x = torch.where(live[:, None], m.near_x, stuck_x)
+                    stuck_rms = torch.where(live, m.near_rms, stuck_rms)
 
                 # The task, by the stage machine the env's reward ran this step (TaskReward).
                 pos = cmd.robot_body_pos_w
@@ -570,6 +670,15 @@ def mjlab_stage(a, out):
                              "squat_depth_m": mean(cs["h0"] - z_min),
                              "pushes": mean(pushes),
                              "dtw_joint_rad": mean(dtw, up_ok)}
+                res[name]["tracking_rms_m"] = {b: round(x, 4) for b, x in zip(
+                    BODY_NAMES, (body_sq[sl].sum(0) / upright[sl].sum().clamp(min=1)).sqrt().tolist())}
+                ok = (~fallen[sl]).nonzero().squeeze(1) + sl.start
+                if track and len(ok):  # per spec feature, over the rollouts that stayed up (K.tracking_rms)
+                    win = float(np.median([s["end_s"] - s["start_s"] for s in cs["stages"] if s["kind"] == "pose"] or [0.5]))
+                    rms = K.tracking_rms(all_body[ok].cpu(), all_ref[ok].cpu(), cs["foot0"], win, STEP_HZ)
+                    res[name]["feature_rms_m"] = dict(zip(cs["features"], np.round(rms, 4).tolist()))
+                res[name]["abandoned"] = abandoned(cs, ~success[sl], fallen[sl], stuck_stage[sl],
+                                                   None if stuck_x is None else stuck_x[sl], stuck_rms[sl])
             for k, e in enumerate(keep.tolist()):
                 name = names[e // a.reps]
                 key = f"{ci}/{name}/{e % a.reps}"
@@ -581,10 +690,25 @@ def mjlab_stage(a, out):
                     ev = [skill_task.evaluate(cs, rollouts[f"{ci}/{name}/{r}/body"], STEP_HZ)["success"]
                           for r in range(a.score)]
                     res[name]["task_success_evaluate"] = float(np.mean(ev))
+            log(f"{suite:10s} {level:14s} ({steps} steps, {time.time() - tc:.0f} s){' uncalibrated' if calibrating else ''}: "
+                + "  ".join(f"{n} fall {r['fall_rate']:.2f} task {r['task_success']:.2f} dtw {fmt(r['dtw_joint_rad'])}"
+                            for n, r in res.items()))
+            if calibrating:  # the clip's calibration from its best tracker; then every condition is scored with it
+                calib = tracker_calibration(res, a.calibrate, pols, a.target)
+                if calib is None:
+                    log("no policy stayed up on the clean clip: not calibrated")
+                else:
+                    (out / CALIBRATION).write_text(json.dumps(calib, indent=1))
+                    use_calibration(calib)
+                    clip_machine = skill_task.machine(spec, env.num_envs, env.device, env.step_dt)
+                    reward_term.m = env.a2h_task = clip_machine
+                    meta["calibration"] = spec["calibration"]
+                    log(f"calibrated from {calib['policy']} (joint err {calib['joint_err_rad']:.3f} rad): floors "
+                        + ", ".join(f"{f} {100 * x:.1f} cm" for f, x, t in zip(calib["features"], calib["floor_m"], calib["tol_min_m"]) if x > t + 1e-4))
+                meta["uncalibrated_clean"] = {n: {k: r[k] for k in ("task_success", "stages_completed", "joint_err_rad", "abandoned")}
+                                              for n, r in res.items()}
+                continue
             results.append({"suite": suite, "level": level, "params": p, "policies": res})
-            log(f"{suite:10s} {level:14s} ({steps} steps, {time.time() - tc:.0f} s): " + "  ".join(
-                f"{n} fall {r['fall_rate']:.2f} task {r['task_success']:.2f} dtw {fmt(r['dtw_joint_rad'])}"
-                for n, r in res.items()))
 
     meta["seconds"] = {"mjlab": time.time() - t0}
     np.savez(out / "rollouts.npz", **rollouts)
@@ -755,8 +879,31 @@ def write_summary(result, path):
               "or standing still at t = 0; no reference: standing still and the reference frozen at t = 0.",
               "- DTW to clip: joint-space DTW to the retarget on the clean clip, mean rad per matched frame, over "
               "rollouts that stayed up" + (f"; standing still scores {still:.3f}." if still else ".")
-              + " Joint err: the same, time-locked. V-JEPA: aligned cosine with the video, clean clip.", "",
-              "## Per condition", "",
+              + " Joint err: the same, time-locked. V-JEPA: aligned cosine with the video, clean clip."]
+    cal, unc = meta.get("calibration"), meta.get("uncalibrated_clean")
+    if cal:
+        lines.append(f"- Tolerances floored by the clip's tracker calibration: max(TOL_MIN, {cal.get('k', 2):g} x the RMS error of "
+                     f"{cal.get('policy', '?')} (joint err {fmt(cal.get('joint_err_rad'))} rad) per feature)"
+                     + (": clean success before it " + ", ".join(f"{n} {pct(r['task_success'])}" for n, r in unc.items()) if unc else "")
+                     + ".")
+    stops = [(n, clean[n]["abandoned"]) for n in names if clean[n].get("abandoned")]
+    if stops:
+        lines += ["", "## Where unsuccessful rollouts stop (clean clip)", "",
+                  "The stage they were in when the clip ended or they fell, as a share of all rollouts; for a key pose, the "
+                  "feature most often furthest outside its tolerance at their closest approach (error / tolerance, median).", "",
+                  "| Policy | Stage | Rollouts | Fell | Furthest feature | Error / tol | Reached, not held |",
+                  "|---|---|---|---|---|---|---|"]
+        for n, rows in stops:
+            lines += [f"| {n} | {r['stage']}: {r['name']} | {pct(r['share'])} | {pct(r['fell'])} | {r.get('feature', '-')} | "
+                      f"{fmt(r.get('error_tol'), 2)} | {pct(r.get('reached'))} |" for r in rows]
+    rms = {n: clean[n]["tracking_rms_m"] for n in names if clean[n].get("tracking_rms_m")}
+    if rms:
+        cols = [("pelvis", "pelvis"), ("torso", "torso_link"), ("L hand", "left_wrist_yaw_link"),
+                ("R hand", "right_wrist_yaw_link"), ("L foot", "left_ankle_roll_link"), ("R foot", "right_ankle_roll_link")]
+        lines += ["", "## Tracking error on the clean clip (RMS while upright, cm)", "",
+                  "| Policy | " + " | ".join(h for h, _ in cols) + " |", "|---|" + "---|" * len(cols)]
+        lines += [f"| {n} | " + " | ".join(fmt(100 * r[b], 1) if b in r else "-" for _, b in cols) + " |" for n, r in rms.items()]
+    lines += ["", "## Per condition", "",
               "| Suite | Level | " + " | ".join(names) + " |", "|---|---|" + "---|" * len(names)]
     for c in conds:
         cells = []
@@ -827,6 +974,11 @@ def parse(argv=None):
     ap.add_argument("--max-steps", type=int, help="cap rollout length (debugging)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--no-vjepa", action="store_true", help="mjlab stage only (no rendering; e.g. on a CPU)")
+    ap.add_argument("--calibration", help=f"the clip's {CALIBRATION} (default: <runs>/{CALIBRATION} if there): "
+                                          "keypose tolerances floored by a good tracker's error")
+    ap.add_argument("--calibrate", nargs="?", const="best", metavar="POLICY",
+                    help=f"measure the calibration on the clean clip from POLICY (default: the best tracker that never "
+                         f"fell), write <out>/{CALIBRATION}, and score every condition with it")
     ap.add_argument("--summary", help="only (re)write robust_summary.md next to this robust.json")
     ap.add_argument("--smoke", action="store_true", help="tiny: plumbing test")
     ap.add_argument("--mjlab", action="store_true", help=argparse.SUPPRESS)  # internal: stage 1

@@ -173,6 +173,67 @@ class TestSummary(unittest.TestCase):
         self.assertEqual(R.summarise(fake_result(False)["conditions"])["tracking"]["clean"]["task_success"], None)
 
 
+class TestCalibrationAndDiagnostics(unittest.TestCase):
+    """The clip's tracker calibration is the best tracker that stayed up; where unsuccessful rollouts stop is
+    counted per stage with the feature furthest outside its tolerance; robust_summary.md prints both."""
+
+    def setUp(self):
+        from skill import keypose as K
+        self.K = K
+        rms = lambda x: dict(zip([f[0] for f in K.FEATURES], [x] * K.D))  # noqa: E731
+        self.res = {"good": {"fall_rate": 0.0, "joint_err_rad": 0.08, "torso_err_m": 0.03, "feature_rms_m": rms(0.07),
+                             "tracking_rms_m": {"pelvis": 0.03}},
+                    "better_but_fell": {"fall_rate": 0.1, "joint_err_rad": 0.05, "torso_err_m": 0.03,
+                                        "feature_rms_m": rms(0.01), "tracking_rms_m": {}},
+                    "poor": {"fall_rate": 0.0, "joint_err_rad": 0.2, "torso_err_m": 0.1, "feature_rms_m": rms(0.3),
+                             "tracking_rms_m": {}}}
+        self.pols = {n: {"checkpoint": f"/x/policy_{n}/model_1.pt"} for n in self.res}
+
+    def test_calibration_is_the_best_tracker_that_stayed_up(self):
+        cal = R.tracker_calibration(self.res, "best", self.pols, "punches")
+        self.assertEqual((cal["policy"], cal["clip"], cal["checkpoint"]), ("good", "punches", "model_1.pt"))
+        wrist = cal["features"].index("left wrist z")
+        self.assertAlmostEqual(cal["floor_m"][wrist], 0.14)  # 2 x 7 cm, above the 10 cm TOL_MIN
+        self.assertAlmostEqual(cal["floor_m"][0], 2 * 0.04)  # pelvis: 2 x 7 cm capped at CALIB_MAX x 4 cm
+        self.assertEqual(R.tracker_calibration(self.res, "poor", self.pols, "punches")["policy"], "poor")
+        self.assertIsNone(R.tracker_calibration({"x": {**self.res["good"], "fall_rate": 0.5}}, "best", self.pols, "p"))
+
+    def test_where_rollouts_stop(self):
+        K = self.K
+        spec = {"features": [f[0] for f in K.FEATURES],
+                "stages": [{"kind": "settle", "name": "ready"}, {"kind": "pose", "name": "punch"}, {"kind": "settle", "name": "finish"}]}
+        n = 8
+        failed = torch.tensor([True] * 6 + [False] * 2)
+        fell = torch.tensor([False] * 5 + [True] + [False] * 2)
+        stage = torch.tensor([1, 1, 1, 1, 2, 2, 2, 2])
+        x = torch.zeros(n, K.D)
+        wy = spec["features"].index("right wrist y")
+        x[:4, wy] = torch.tensor([1.6, 1.4, 1.5, 0.5])
+        rms = torch.tensor([1.2, 1.1, 1.3, 0.4, float("inf"), float("inf"), 0.1, 0.1])
+        rows = R.abandoned(spec, failed, fell, stage, x, rms)
+        self.assertEqual([r["name"] for r in rows], ["punch", "finish"])
+        punch, finish = rows
+        self.assertEqual((punch["share"], punch["fell"], punch["feature"], punch["error_tol"]), (0.5, 0.0, "right wrist y", 1.4))  # the lower median
+        self.assertEqual(punch["reached"], 0.25)  # one of the four came within tolerance and didn't hold it
+        self.assertEqual((finish["share"], finish["fell"]), (0.25, 0.5))
+        self.assertNotIn("feature", finish)
+
+    def test_summary_prints_calibration_stops_and_tracking_error(self):
+        result = fake_result()
+        clean = result["conditions"][0]["policies"]["tracking"]
+        clean["abandoned"] = [{"stage": 6, "name": "turn left, step forward (finish)", "kind": "pose", "share": 1.0,
+                               "fell": 0.0, "feature": "right foot height", "error_tol": 1.71, "reached": 0.0}]
+        clean["tracking_rms_m"] = {"pelvis": 0.034, "left_wrist_yaw_link": 0.066}
+        result["meta"]["calibration"] = {"k": 2.0, "policy": "scratch", "joint_err_rad": 0.079}
+        result["meta"]["uncalibrated_clean"] = {"tracking": {"task_success": 0.0}, "taskphase": {"task_success": 0.5}}
+        with tempfile.TemporaryDirectory() as d:
+            md = Path(R.write_summary(result, Path(d) / "s.md")).read_text()
+        self.assertIn("2 x the RMS error of scratch (joint err 0.079 rad)", md)
+        self.assertIn("clean success before it tracking 0%, taskphase 50%", md)
+        self.assertIn("| tracking | 6: turn left, step forward (finish) | 100% | 0% | right foot height | 1.71 | 0% |", md)
+        self.assertIn("| tracking | 3.4 | - | 6.6 |", md)
+
+
 @unittest.skipUnless(HAS_MJLAB, "needs mjlab (its CPU env is enough)")
 class TestMjlabStage(unittest.TestCase):
     """The real thing on CPU, tiny: one env build per run, every suite once, 30 steps."""
