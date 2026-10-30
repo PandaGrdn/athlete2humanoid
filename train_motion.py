@@ -45,7 +45,7 @@ def csv_to_npz(py, csv, fps, dst, env):
 
 def train_motion(csv, fps, out, iters=1500, num_envs=4096, mjlab_python=None, task=TASK, bundle=None,
                  reward_config=None, task_spec=None, importance=None, init=None, variants=None, rollout_importance=None,
-                 video_latent=None, rollout_video_latent=None, train_motion_file=None):
+                 video_latent=None, rollout_video_latent=None, train_motion_file=None, save_interval=250):
     """variants: experiments/variant_policy.py's variants.json, next to its motion_variants.npz (or
     train_motion_file): train on those (A2H_VARIANTS), then roll out on csv's clip (the original) with
     rollout_importance. video_latent / rollout_video_latent: the video's latent per step of the training
@@ -99,7 +99,7 @@ def train_motion(csv, fps, out, iters=1500, num_envs=4096, mjlab_python=None, ta
     # 2. PPO motion tracking.
     run([*trainer, task, "--env.commands.motion.motion-file", train_npz,
          "--env.scene.num-envs", num_envs, "--agent.max-iterations", iters,
-         "--agent.save-interval", 250, "--agent.logger", "tensorboard", "--log-root", log_root],
+         "--agent.save-interval", save_interval, "--agent.logger", "tensorboard", "--log-root", log_root],
         env=env, cwd=out)
 
     # 3. Roll out the last checkpoint headless.
@@ -133,8 +133,11 @@ if __name__ == "__main__":
     ap.add_argument("--train-motion", help="with --variants: the motion file they are laid out in")
     ap.add_argument("--video-latent", help="the video's latent per step of the training motion (A2H-TrackingVJ)")
     ap.add_argument("--rollout-video-latent", help="... and of the rollout's (the clip's own)")
+    ap.add_argument("--save-interval", type=int, default=250, help="iterations between checkpoints "
+                    "(experiments/adaptation_curves.py: finer, to test the policy along the way)")
     a = ap.parse_args()
     train_motion(a.csv, a.fps, a.out, a.iters, a.num_envs, task=a.task, bundle=a.bundle, reward_config=a.reward_config,
                  task_spec=a.task_spec, importance=a.importance, init=a.init, variants=a.variants,
                  rollout_importance=a.rollout_importance, video_latent=a.video_latent,
-                 rollout_video_latent=a.rollout_video_latent, train_motion_file=a.train_motion)
+                 rollout_video_latent=a.rollout_video_latent, train_motion_file=a.train_motion,
+                 save_interval=a.save_interval)
