@@ -45,16 +45,17 @@ def prepare_video(src, dst, max_side=480, required=True):
     return dst
 
 
-def frames_at(video, times, labels, cols=4, max_width=1600, tile_height=360):
+def frames_at(video, times, labels, cols=4, max_width=1600, tile_height=360, fps=None):
     """The frames of `video` at `times` (s), each captioned with its label, in a grid -> PNG bytes.
-    None when OpenCV is missing or no frame can be read."""
+    None when OpenCV is missing or no frame can be read. fps: the video's real frame rate when its
+    header is wrong (phone clips: pipeline.video_fps), else the header's."""
     try:
         import cv2
         import numpy as np
     except ImportError:
         return None
     cap = cv2.VideoCapture(str(video))
-    fps, total = cap.get(cv2.CAP_PROP_FPS) or 30.0, int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps, total = fps or cap.get(cv2.CAP_PROP_FPS) or 30.0, int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     tiles = []
     for t, label in zip(times, labels):
         cap.set(cv2.CAP_PROP_POS_FRAMES, int(min(max(round(t * fps), 0), max(total - 1, 0))))

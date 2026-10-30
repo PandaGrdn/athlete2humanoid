@@ -20,6 +20,7 @@ from muse import rollout_critic as rc
 from muse import reward_agent as ra
 from muse import skill_reader as sr
 from muse.schema import validate, strict_errors
+from skill import spec_schema
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "tests" / "data" / "remote_latent"
@@ -283,8 +284,13 @@ class MomentNamerTest(TempDir):
         self.assertIn(poses[0]["name"], spec["summary"])
         self.assertEqual(spec["named_by"]["mode"], "fixture:moment_names_front_kick.json")
         # the reward never reads names: everything else in the spec is unchanged
-        strip = lambda st: {k: v for k, v in st.items() if k not in ("name", "label", "description", "measured")}  # noqa: E731
+        strip = lambda st: {k: v for k, v in st.items()  # noqa: E731
+                            if k not in ("name", "label", "description", "measured", spec_schema.LABEL_KEY)}
         self.assertEqual([strip(st) for st in spec["stages"]], [strip(st) for st in before["stages"]])
+        # the stable key front ends read: Muse's label on each named moment, the compiler's name elsewhere
+        self.assertEqual([st[spec_schema.LABEL_KEY] for st in poses], [m["name"] for m in answer["moments"]])
+        self.assertEqual(spec_schema.stage_label(spec["stages"][0]), "ready")
+        self.assertEqual(spec_schema.text_errors(spec), [])
         prompt = client.requests[0]["messages"][1]["content"][0]["text"]
         self.assertIn("1. 1.40 s, required. Measured: right foot up, right foot forward.", prompt)
         self.assertEqual(client.requests[0]["messages"][1]["content"][1]["type"], "video_url")
@@ -322,12 +328,79 @@ class MomentNamerTest(TempDir):
         with self.assertRaises(FileNotFoundError):
             self.name(folder)
 
+    def test_flights_are_moments_too(self):
+        """A clip with no key pose but a jump (the hurdles clip) still gets a label for its jump."""
+        spec = json.loads(KICK_SPEC.read_text())
+        spec["stages"] = [spec["stages"][0], {"kind": "flight", "start_s": 1.0, "end_s": 1.4, "name": "jump",
+                                              "optional": False}]
+        folder = kick_folder(self.tmp / "job")
+        (folder / "task_spec.json").write_text(json.dumps(spec))
+        answer = {"action": {"label": "hurdle_clear", "description": "A run-up and a jump over a hurdle."},
+                  "moments": [{"index": 1, "name": "clear the hurdle", "description": "Both feet leave the ground."}]}
+        client = mc.MuseClient(fixture=write_fixture(self.tmp / "f.json", answer))
+        named = mn.name_moments(folder / "task_spec.json", client)
+        self.assertEqual(named["stages"][1][spec_schema.LABEL_KEY], "clear the hurdle")
+        self.assertEqual(named["stages"][1]["measured"], "jump")
+        self.assertIn("1. 1.00-1.40 s, required. Both feet off the ground", client.requests[0]["messages"][1]["content"][0]["text"])
+        self.assertEqual(spec_schema.text_errors(named), [])
+
+    def test_name_if_available_is_silent_without_a_key(self):
+        folder = kick_folder(self.tmp / "job")
+        before = (folder / "task_spec.json").read_text()
+        logged = []
+        with mock.patch.object(config, "get_secret", return_value=None):
+            self.assertIsNone(mn.name_if_available(folder / "task_spec.json", log=logged.append))
+        self.assertEqual(((folder / "task_spec.json").read_text(), logged), (before, []))
+        # with a client that answers: named in place
+        good = mc.make_client(dry_run=True, default_fixture="moment_names_front_kick.json")
+        self.assertEqual(mn.name_if_available(folder / "task_spec.json", client=good)["named_by"]["mode"],
+                         "fixture:moment_names_front_kick.json")
+        # an answer that doesn't fit (2 moments for 4): one line, and the spec keeps what it had
+        named = (folder / "task_spec.json").read_text()
+        bad = fixture_value("moment_names_front_kick.json")
+        bad["moments"] = bad["moments"][:2]
+        client = mc.MuseClient(fixture=write_fixture(self.tmp / "bad.json", bad, bad))
+        self.assertIsNone(mn.name_if_available(folder / "task_spec.json", client=client, log=logged.append))
+        self.assertEqual(len(logged), 1)
+        self.assertIn("keeping the measured names", logged[0])
+        self.assertEqual((folder / "task_spec.json").read_text(), named)
+
     @unittest.skipUnless(__import__("importlib").util.find_spec("torch"), "skill.keypose needs torch")
     def test_summarize_matches_keypose(self):
         from skill.keypose import summarize
         spec = json.loads(KICK_SPEC.read_text())
         self.assertEqual(mn.summarize(spec["stages"]), summarize(spec["stages"]))
         self.assertEqual(mn.summarize(spec["stages"]), spec["summary"])
+
+
+class SpecSchemaTest(unittest.TestCase):
+    """skill/spec_schema.py: task_spec.json's text fields, and the label a front end shows per stage."""
+
+    def test_label_falls_back_to_the_compilers_names(self):
+        st = {"kind": "pose", "name": "right foot up, right foot forward"}
+        self.assertEqual(spec_schema.stage_label(st), "right foot up, right foot forward")
+        self.assertEqual(spec_schema.stage_label(st | {"label": "chamber"}), "chamber")
+        self.assertEqual(spec_schema.stage_label(st | {"label": "chamber", "muse_label": "raise right knee"}),
+                         "raise right knee")
+        self.assertEqual(spec_schema.stage_label({"kind": "settle"}), "settle")
+
+    def test_unnamed_specs_are_valid(self):
+        spec = json.loads(KICK_SPEC.read_text())
+        self.assertEqual(spec_schema.text_errors(spec), [])
+        self.assertFalse(any(spec_schema.LABEL_KEY in st for st in spec["stages"]))
+
+    def test_text_errors(self):
+        spec = json.loads(KICK_SPEC.read_text())
+        spec["stages"][0]["muse_label"] = "stand ready"  # a settle stage: never named
+        spec["stages"][1]["muse_label"] = "x" * 41
+        spec["stages"][2]["muse_label"] = 3
+        spec["stages"][3]["description"] = "y" * 241
+        spec["named_by"] = "muse-spark-1.3"
+        errs = spec_schema.text_errors(spec)
+        self.assertEqual(len(errs), 5, errs)
+        for part in ("stages[0].muse_label: only pose and flight", "stages[1].muse_label: 1-40", "stages[2].muse_label: expected",
+                     "stages[3].description: at most", "$.named_by: expected object"):
+            self.assertTrue(any(part in e for e in errs), (part, errs))
 
 
 class RolloutCriticTest(TempDir):
