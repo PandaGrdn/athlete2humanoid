@@ -16,7 +16,7 @@
   text-transform: uppercase; color: var(--text-3); }
 .sc-loading .dot { display: inline-block; margin-right: 10px; vertical-align: middle; }
 
-.sc-head { position: absolute; top: 44px; left: var(--sc-gutter); max-width: 420px; pointer-events: none; }
+.sc-head { position: absolute; top: 76px; left: var(--sc-gutter); max-width: 420px; pointer-events: none; }
 .sc-kicker { font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-3); display: flex; align-items: center; gap: 10px; }
 .sc-kicker::before { content: ""; width: 34px; height: 1px; background: currentColor; }
 .sc-head h1 { margin-top: 20px; font-family: var(--sc-display); font-weight: 200; font-size: clamp(52px, 6.2vw, 96px); line-height: 0.88;
@@ -36,7 +36,7 @@
 .sc-hint span:last-child { border-right: 0; color: var(--text-2); }
 .sc-hint.gone { opacity: 0; }
 
-.sc-chip { position: absolute; top: 44px; right: var(--sc-gutter); max-width: min(320px, calc(100% - 32px)); display: flex; flex-direction: column;
+.sc-chip { position: absolute; top: 76px; right: var(--sc-gutter); max-width: min(320px, calc(100% - 32px)); display: flex; flex-direction: column;
   gap: 4px; padding: 12px 14px; background: rgba(0, 0, 0, 0.62); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); animation: sc-in 0.25s var(--ease, ease-out); pointer-events: none; }
 .sc-chip .k { font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-3); }
@@ -94,7 +94,7 @@
 @media (max-width: 640px) {
   .sc { --sc-gutter: 16px; }
   .sc-stage { height: 66svh; min-height: 440px; }
-  .sc-head { top: 20px; right: 16px; }
+  .sc-head { top: 62px; right: 16px; }
   .sc-head h1 { font-size: 44px; margin-top: 12px; }
   .sc-lede { display: none; }
   .sc-source { bottom: 16px; left: 16px; right: auto; width: 84px; }
@@ -105,6 +105,18 @@
   .sc-fact .v { font-size: 44px; }
 }
 
+/* the clip switcher: a row of tabs across the top of the stage */
+.sc-switch { position: absolute; top: 20px; left: var(--sc-gutter); right: var(--sc-gutter); z-index: 3; display: flex; gap: 6px;
+  overflow-x: auto; scrollbar-width: none; }
+.sc-switch::-webkit-scrollbar { display: none; }
+.sc-switch button { flex: none; height: 30px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45); backdrop-filter: blur(6px); color: var(--text-2); font-size: 12px; cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s; }
+.sc-switch button:hover { color: var(--text); border-color: var(--text-2); }
+.sc-switch button.on { color: #000; background: var(--text); border-color: var(--text); }
+.sc-caveat { margin-top: 14px; display: inline-block; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--text-2); border: 1px dashed var(--border-strong); padding: 4px 8px; }
+[data-ui="aether"] .sc-switch button { border-radius: 2px; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; }
+
 /* aether: square corners, hairlines */
 [data-ui="aether"] :is(.sc-crop, .sc-chip, .sc-seg, .sc-steps) { border-radius: 2px; }
-[data-ui="aether"] .sc-crop video { filter: grayscale(1) contrast(1.15); }

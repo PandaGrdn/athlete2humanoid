@@ -91,7 +91,7 @@ export default function App() {
           <Route path="/live/:id?" element={<LivePage />} />
           <Route path="/jobs/:id" element={<JobPage />} />
           <Route path="/runs/:id" element={<RunPage />} />
-          <Route path="/showcase" element={<Suspense fallback={ShowcaseFallback}><Showcase /></Suspense>} />
+          <Route path="/showcase/:clip?" element={<Suspense fallback={ShowcaseFallback}><Showcase /></Suspense>} />
           <Route path="/research" element={<ExamplesIndex />} />
           <Route path="/research/:id" element={<ExampleDetail />} />
           <Route path="/examples" element={<Navigate to="/research" replace />} />
