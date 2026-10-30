@@ -961,3 +961,18 @@ reproduce the GPU eval's (punches clean 0%, joint error 0.079 / 0.099 / 0.104 ra
   left, instead of stopping. The ten clips' own specs are unchanged by it (they pass their self-check first time).
 - What was not done: no Colab or GPU was used (mjlab 1.6.0 on CPU is the same version the Colab VMs install, at 16
   instead of 64 envs per policy); no V-JEPA scoring; no policy was retrained.
+
+**Training check (Colab A100, 2026-10-30).** One run on the physical jumping-jack variants:
+
+- **Setup:** `remote_run.py variants --branch variant-physics`, `tracking_var` for 1,500 iterations, warm-started from
+  `mc_adapt_inputs/policy_multi/model_1999.pt`. It trained on 12 of 36 variants (65 s of motion), built from the
+  capped retarget.
+- **The hop is not learned.** In the clip rollout both feet clear at most 7.7 cm (the reference: 12.6 cm), with
+  no flight.
+- **Spec:** the rollout completes 6 of 13 stages and is stuck at the jump stage.
+- **Comparison:** the earlier jumping-jack adaptation run (`remote_multiclip_adapt_jacks`) used the stale
+  76 rad/s variants and only 300 iterations. Its four policies complete 1 of 13 stages and fall 7-8 times in the
+  same rollout; this one falls 0 times, with joint error 0.12 vs 0.15-0.18 rad. The iteration counts differ, so
+  this does not isolate the filter's effect.
+- **Possible causes:** the hop is short (0.16 s, 3 cm of pelvis rise), and only 12 alpha-1.0 variants carry it.
+  A larger or longer hop in the source clip would give the reward more to work with than more variants would.
