@@ -107,3 +107,22 @@ back towards the average pose.
 So the brief's fallback applies: train on the learned predictor's future. The V-JEPA-predicted policy is trained too,
 since it costs nothing extra in the same job (both train at once): a check that an input no better than noise neither
 helps nor hurts.
+
+## Policies with the imagined future (`outputs/remote_wm_vjp1`)
+
+RESULTS
+
+## Not attempted: rewarding the robot's own imagined future
+
+The stretch idea is a policy rewarded when the latent *it* would produce next, as V-JEPA imagines it from a render of
+the robot, matches the video's. It needs a predictor whose imagined future beats copying the present, and neither here
+does. The reward would score the robot against a guess that is no better than "keep doing what you're doing".
+
+What would make it, and the input above, worth trying:
+- **V-JEPA 2-AC**, Meta's action-conditioned predictor, trained to roll the latent forward in time. It is a different
+  checkpoint (a new download), and robot-arm actions are what it is conditioned on, so it would need fine-tuning on the G1.
+- **A learned predictor on many motions.** The distillation set (`latent/distill.py`, 536 robot motions with V-JEPA
+  embeddings) is about 100 times more data than the five clips here.
+- **Predicting in the robot's own space.** `multi_future`'s 80% shows the retarget ahead is what helps. A small model that
+  predicts the retarget's next joints from the past video latent is the same world model, with a target that's easier
+  to learn.

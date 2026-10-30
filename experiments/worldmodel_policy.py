@@ -144,13 +144,14 @@ def quality_md(r):
 
 # ---------------------------------------------------------------- stage 2: the tables, training, eval
 
-def tables(lat, train, pca_vjc, pca_vj, predictors):
+def tables(lat, train, pca_vjc, pca_vj, predictors, pca_ln=None):
     """name -> {"vjc": (table, mirrored), "vj": ..., <predictor>: ...}, per V-JEPA step, already projected.
     vjc: the causal latent (its run's PCA); vj: the centred one (its run's PCA); per predictor: [the causal
     latent | predicted ~0.5 s | ~1 s], the predictions made at each step from frames up to it ("vjepa":
     V-JEPA 2's predictor, in the PCA of its layer-normed latents; "learned": the ridge predictor in vjc's PCA,
-    cross-fitted on the training clips)."""
-    pca_ln = ln_pca(lat, train)
+    cross-fitted on the training clips). pca_ln: the run's own, when carrying on from it (a refit can flip
+    a component's sign on another machine, and the policy was trained on the first fit's)."""
+    pca_ln = pca_ln or ln_pca(lat, train)
     zc = {(c, m): VC.project(lat[c]["raw" + m], pca_vjc) for c in lat for m in ("", "_m")}
     learned = learned_predictions(zc, train) if "learned" in predictors else None
     out = {}
@@ -263,7 +264,9 @@ def pack(out):
 def train_stage(a, clips_dir, out, train, held):
     lat = load_latents(a.latents, [*train, *held])
     preds = list(a.predictors)
-    tabs, pca_ln = tables(lat, train, dict(np.load(a.pca_vjc)), dict(np.load(a.pca_vj)), preds)
+    kept = out / "wm_pca.npz"
+    kept = {k[3:]: v for k, v in np.load(kept).items() if k.startswith("ln_")} if kept.exists() else None
+    tabs, pca_ln = tables(lat, train, dict(np.load(a.pca_vjc)), dict(np.load(a.pca_vj)), preds, kept)
     np.savez(out / "wm_pca.npz", **{f"ln_{k}": v for k, v in pca_ln.items()}, horizons=np.array(WM.HORIZONS))
     py = Path(os.environ.get("A2H_MJLAB_PYTHON", "/content/mjlab_env/bin/python"))
     env = dict(os.environ, MUJOCO_GL=os.environ.get("MUJOCO_GL", "egl"), WANDB_MODE="disabled")
