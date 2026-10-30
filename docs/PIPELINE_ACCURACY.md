@@ -567,7 +567,7 @@ Tests are in `tests/test_variations.py`:
 `tests/data/qpos_front_kick.npy` is now the capped retarget of the same clip. The old one had a frame at
 21.7 rad/s, so its own identity variant was dropped.
 
-## Fixes applied: 1 (contacts and flights), 5 (retarget IK), 7 (fps and version) (2026-10-31)
+### Fixes 1, 5, 7: contacts and flights, retarget IK, fps and version (2026-10-30)
 
 Implemented in `retarget.py` (plus the `meta.json` writer in `pipeline.py` and `experiments/process_clips.py`).
 Measured with `experiments/pipeline_audit/retarget_audit.py` on the same ten `human.npy` files, before (main at
