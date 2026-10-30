@@ -731,6 +731,20 @@ for task, name, term in (("A2H-TrackingVJ-Flat-Unitree-G1", "video_latent", vide
                         play_env_cfg=use_variants(conditioned_tracking_cfg(name, term, play=True)),
                         rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
 
+# Motions that travel (travel_tasks.py, docs/FRONTIER_TRAVEL.md): A2H-Travel{Reward,Term,Phase,}-Flat-Unitree-G1,
+# tracking plus root terms, a horizontal termination curriculum, travel-weighted starts, or all three.
+from travel_tasks import TASKS as TRAVEL_TASKS, travel_env_cfg  # noqa: E402
+
+
+def tracking_cfg(play=False):
+    return use_variants(unitree_g1_flat_tracking_env_cfg(play=play))
+
+
+for task, changes in TRAVEL_TASKS.items():
+    register_mjlab_task(task_id=task, env_cfg=travel_env_cfg(tracking_cfg, changes),
+                        play_env_cfg=travel_env_cfg(tracking_cfg, changes, play=True),
+                        rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
+
 
 # experiments/generalist_policy.py: the same trackers (plain, and with the retarget's look-ahead) with a
 # bigger network, for the zero-shot generalist's network-size comparison. Trained from scratch.
