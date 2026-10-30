@@ -1,0 +1,2435 @@
+[
+ {
+  "clip": "discus",
+  "at": [
+   50,
+   100,
+   300,
+   500,
+   1000,
+   1500
+  ],
+  "build_s": 351.1,
+  "gpu": "NVIDIA L40S",
+  "starts": {
+   "scratch": {
+    "checkpoint": null,
+    "source": null,
+    "task": "A2H-Tracking-Flat-Unitree-G1",
+    "timing": {
+     "startup_s": 30.006927251815796,
+     "wall_s": 1125.134183883667,
+     "returncode": 0,
+     "parallel": 1
+    },
+    "curve": {
+     "50": {
+      "ppo_s": 33,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.20788075029850006
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.2078804224729538
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.2483319640159607
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.0,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.22198830544948578
+       }
+      },
+      "minutes": 6.901782120863597
+     },
+     "100": {
+      "ppo_s": 66,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.2491455078125
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.2491455227136612
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.27174218744039536
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.4,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.2314554423093796
+       }
+      },
+      "minutes": 7.451782120863597
+     },
+     "300": {
+      "ppo_s": 202,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.23520168662071228
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.2352023422718048
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.2825446277856827
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.4,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.24011987447738647
+       }
+      },
+      "minutes": 9.718448787530264
+     },
+     "500": {
+      "ppo_s": 338,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3237761855125427
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.32474586367607117
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.51171875,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3029954433441162
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.403125,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.2915178894996643
+       }
+      },
+      "minutes": 11.985115454196931
+     },
+     "1000": {
+      "ppo_s": 689,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": 0.32629063725471497,
+        "joint_err_rad": 0.32695066928863525
+       },
+       "push": {
+        "task_success": 0.265625,
+        "fall_rate": 0.0625,
+        "stages_frac": 0.6328125,
+        "dtw_joint_rad": 0.3280864357948303,
+        "joint_err_rad": 0.3285049796104431
+       },
+       "tempo": {
+        "task_success": 0.1484375,
+        "fall_rate": 0.8515625,
+        "stages_frac": 0.66015625,
+        "dtw_joint_rad": 0.41627034544944763,
+        "joint_err_rad": 0.3203134983778
+       },
+       "transfer": {
+        "task_success": 0.453125,
+        "fall_rate": 0.246875,
+        "stages_frac": 0.503125,
+        "dtw_joint_rad": 0.3104381740093231,
+        "joint_err_rad": 0.29798640608787536
+       }
+      },
+      "minutes": 17.835115454196927
+     },
+     "1500": {
+      "ppo_s": 1044,
+      "suites": {
+       "clean": {
+        "task_success": 1.0,
+        "fall_rate": 0.0,
+        "stages_frac": 1.0,
+        "dtw_joint_rad": 0.28676682710647583,
+        "joint_err_rad": 0.287300705909729
+       },
+       "push": {
+        "task_success": 0.609375,
+        "fall_rate": 0.109375,
+        "stages_frac": 0.8125,
+        "dtw_joint_rad": 0.290206640958786,
+        "joint_err_rad": 0.28945237398147583
+       },
+       "tempo": {
+        "task_success": 0.4921875,
+        "fall_rate": 0.5078125,
+        "stages_frac": 0.75,
+        "dtw_joint_rad": 0.3752516806125641,
+        "joint_err_rad": 0.3184652328491211
+       },
+       "transfer": {
+        "task_success": 0.796875,
+        "fall_rate": 0.0,
+        "stages_frac": 0.796875,
+        "dtw_joint_rad": 0.27413989305496217,
+        "joint_err_rad": 0.2751577734947205
+       }
+      },
+      "minutes": 23.751782120863595
+     }
+    },
+    "full": {
+     "clean": {
+      "task_success": 1.0,
+      "fall_rate": 0.0,
+      "stages_frac": 1.0,
+      "dtw_joint_rad": 0.28705817461013794,
+      "joint_err_rad": 0.28759273886680603
+     },
+     "push": {
+      "task_success": 0.6015625,
+      "fall_rate": 0.1171875,
+      "stages_frac": 0.806640625,
+      "dtw_joint_rad": 0.2903721332550049,
+      "joint_err_rad": 0.2888292968273163
+     },
+     "init": {
+      "task_success": 0.5104166666666666,
+      "fall_rate": 0.296875,
+      "stages_frac": 0.5208333333333334,
+      "dtw_joint_rad": 0.3173246582349141,
+      "joint_err_rad": 0.3155459562937419
+     },
+     "dynamics": {
+      "task_success": 0.953125,
+      "fall_rate": 0.026041666666666668,
+      "stages_frac": 0.9765625,
+      "dtw_joint_rad": 0.28753546873728436,
+      "joint_err_rad": 0.2877299288908641
+     },
+     "speed": {
+      "task_success": 0.84375,
+      "fall_rate": 0.0,
+      "stages_frac": 0.921875,
+      "dtw_joint_rad": 0.31011512875556946,
+      "joint_err_rad": 0.28998371958732605
+     },
+     "push_phase": {
+      "task_success": 0.8203125,
+      "fall_rate": 0.046875,
+      "stages_frac": 0.91015625,
+      "dtw_joint_rad": 0.28860872983932495,
+      "joint_err_rad": 0.28756283223629
+     },
+     "start": {
+      "task_success": 0.5,
+      "fall_rate": 0.0625,
+      "stages_frac": 0.75,
+      "dtw_joint_rad": 0.2928404361009598,
+      "joint_err_rad": 0.292193278670311
+     },
+     "noref": {
+      "task_success": 0.0,
+      "fall_rate": 0.8125,
+      "stages_frac": 0.5,
+      "dtw_joint_rad": 0.44289493560791016,
+      "joint_err_rad": 0.4321121573448181
+     },
+     "tempo": {
+      "task_success": 0.3333333333333333,
+      "fall_rate": 0.6666666666666666,
+      "stages_frac": 0.6666666666666666,
+      "dtw_joint_rad": 0.37582188844680786,
+      "joint_err_rad": 0.31797200441360474
+     },
+     "transfer": {
+      "task_success": 0.8,
+      "fall_rate": 0.0,
+      "stages_frac": 0.8,
+      "dtw_joint_rad": 0.27432177066802976,
+      "joint_err_rad": 0.27531307339668276
+     }
+    }
+   },
+   "specialist": {
+    "checkpoint": "policy_specialist/model_1499.pt",
+    "source": "/Users/ethan/Documents/Github/athlete2humanoid/outputs/mc_adapt_inputs/policy_tracking_var/model_1499.pt",
+    "task": "A2H-Tracking-Flat-Unitree-G1",
+    "timing": {
+     "startup_s": 25.006418228149414,
+     "wall_s": 1120.1225917339325,
+     "returncode": 0,
+     "parallel": 1
+    },
+    "curve": {
+     "50": {
+      "ppo_s": 34,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.403180867433548
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.40258869528770447
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.36345575749874115
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.328125,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.33885085582733154
+       }
+      },
+      "minutes": 6.835106970469157
+     },
+     "100": {
+      "ppo_s": 67,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.38191062211990356
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3823293447494507
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.72265625,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3433780372142792
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5875,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3340935826301575
+       }
+      },
+      "minutes": 7.385106970469157
+     },
+     "300": {
+      "ppo_s": 202,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.29297688603401184
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.2929839491844177
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.65234375,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.30110228061676025
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.540625,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.2671022564172745
+       }
+      },
+      "minutes": 9.635106970469158
+     },
+     "500": {
+      "ppo_s": 337,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.2804604172706604
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.28048527240753174
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5078125,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.302417516708374
+       },
+       "transfer": {
+        "task_success": 0.003125,
+        "fall_rate": 0.996875,
+        "stages_frac": 0.50625,
+        "dtw_joint_rad": 0.25861531496047974,
+        "joint_err_rad": 0.2781482577323914
+       }
+      },
+      "minutes": 11.885106970469158
+     },
+     "1000": {
+      "ppo_s": 691,
+      "suites": {
+       "clean": {
+        "task_success": 0.734375,
+        "fall_rate": 0.0,
+        "stages_frac": 0.8671875,
+        "dtw_joint_rad": 0.2847514748573303,
+        "joint_err_rad": 0.28558841347694397
+       },
+       "push": {
+        "task_success": 0.4375,
+        "fall_rate": 0.09375,
+        "stages_frac": 0.734375,
+        "dtw_joint_rad": 0.2887890338897705,
+        "joint_err_rad": 0.289887934923172
+       },
+       "tempo": {
+        "task_success": 0.4609375,
+        "fall_rate": 0.5234375,
+        "stages_frac": 0.7421875,
+        "dtw_joint_rad": 0.3463089168071747,
+        "joint_err_rad": 0.3038771450519562
+       },
+       "transfer": {
+        "task_success": 0.715625,
+        "fall_rate": 0.171875,
+        "stages_frac": 0.74375,
+        "dtw_joint_rad": 0.2740991830825806,
+        "joint_err_rad": 0.2751467227935791
+       }
+      },
+      "minutes": 17.785106970469155
+     },
+     "1500": {
+      "ppo_s": 1046,
+      "suites": {
+       "clean": {
+        "task_success": 1.0,
+        "fall_rate": 0.0,
+        "stages_frac": 1.0,
+        "dtw_joint_rad": 0.2515330910682678,
+        "joint_err_rad": 0.25193125009536743
+       },
+       "push": {
+        "task_success": 0.765625,
+        "fall_rate": 0.015625,
+        "stages_frac": 0.8828125,
+        "dtw_joint_rad": 0.2598589062690735,
+        "joint_err_rad": 0.2598606050014496
+       },
+       "tempo": {
+        "task_success": 0.5,
+        "fall_rate": 0.5,
+        "stages_frac": 0.75,
+        "dtw_joint_rad": 0.3149977922439575,
+        "joint_err_rad": 0.2826433628797531
+       },
+       "transfer": {
+        "task_success": 0.8,
+        "fall_rate": 0.009375,
+        "stages_frac": 0.8,
+        "dtw_joint_rad": 0.23872195184230804,
+        "joint_err_rad": 0.23975149691104888
+       }
+      },
+      "minutes": 23.701773637135823
+     }
+    },
+    "full": {
+     "clean": {
+      "task_success": 1.0,
+      "fall_rate": 0.0,
+      "stages_frac": 1.0,
+      "dtw_joint_rad": 0.25165578722953796,
+      "joint_err_rad": 0.25205326080322266
+     },
+     "push": {
+      "task_success": 0.75,
+      "fall_rate": 0.04296875,
+      "stages_frac": 0.876953125,
+      "dtw_joint_rad": 0.2589731067419052,
+      "joint_err_rad": 0.2594694346189499
+     },
+     "init": {
+      "task_success": 0.5364583333333334,
+      "fall_rate": 0.21875,
+      "stages_frac": 0.546875,
+      "dtw_joint_rad": 0.283437579870224,
+      "joint_err_rad": 0.2910310924053192
+     },
+     "dynamics": {
+      "task_success": 0.9791666666666666,
+      "fall_rate": 0.020833333333333332,
+      "stages_frac": 0.9895833333333334,
+      "dtw_joint_rad": 0.254863162835439,
+      "joint_err_rad": 0.2556268274784088
+     },
+     "speed": {
+      "task_success": 0.8515625,
+      "fall_rate": 0.1484375,
+      "stages_frac": 0.92578125,
+      "dtw_joint_rad": 0.2722413092851639,
+      "joint_err_rad": 0.2547071576118469
+     },
+     "push_phase": {
+      "task_success": 0.9375,
+      "fall_rate": 0.0234375,
+      "stages_frac": 0.9765625,
+      "dtw_joint_rad": 0.25377555191516876,
+      "joint_err_rad": 0.25463394820690155
+     },
+     "start": {
+      "task_success": 0.734375,
+      "fall_rate": 0.265625,
+      "stages_frac": 0.8671875,
+      "dtw_joint_rad": 0.2635775953531265,
+      "joint_err_rad": 0.27005133032798767
+     },
+     "noref": {
+      "task_success": 0.375,
+      "fall_rate": 0.03125,
+      "stages_frac": 0.6875,
+      "dtw_joint_rad": 0.43437811732292175,
+      "joint_err_rad": 0.4339681565761566
+     },
+     "tempo": {
+      "task_success": 0.3333333333333333,
+      "fall_rate": 0.6666666666666666,
+      "stages_frac": 0.6666666666666666,
+      "dtw_joint_rad": 0.31498444080352783,
+      "joint_err_rad": 0.294106384118398
+     },
+     "transfer": {
+      "task_success": 0.796875,
+      "fall_rate": 0.009375,
+      "stages_frac": 0.8,
+      "dtw_joint_rad": 0.2376239776611328,
+      "joint_err_rad": 0.23856922388076782
+     }
+    }
+   },
+   "multi": {
+    "checkpoint": "policy_multi/model_1999.pt",
+    "source": "/Users/ethan/Documents/Github/athlete2humanoid/outputs/mc_adapt_inputs/policy_multi/model_1999.pt",
+    "task": "A2H-Tracking-Flat-Unitree-G1",
+    "timing": {
+     "startup_s": 25.005383014678955,
+     "wall_s": 1105.132910490036,
+     "returncode": 0,
+     "parallel": 1
+    },
+    "curve": {
+     "50": {
+      "ppo_s": 34,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5546875,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.35879644751548767
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5546875,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3590906858444214
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.35627876222133636
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.215625,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.31245200634002684
+       }
+      },
+      "minutes": 6.835089716911316
+     },
+     "100": {
+      "ppo_s": 67,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.35048016905784607
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3491296172142029
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.51171875,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3147779256105423
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.409375,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.2972595512866974
+       }
+      },
+      "minutes": 7.385089716911316
+     },
+     "300": {
+      "ppo_s": 202,
+      "suites": {
+       "clean": {
+        "task_success": 0.015625,
+        "fall_rate": 0.96875,
+        "stages_frac": 0.5625,
+        "dtw_joint_rad": 0.39783257246017456,
+        "joint_err_rad": 0.32911762595176697
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.546875,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.32697856426239014
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.5390625,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.27721069753170013
+       },
+       "transfer": {
+        "task_success": 0.003125,
+        "fall_rate": 0.996875,
+        "stages_frac": 0.609375,
+        "dtw_joint_rad": 0.3912808895111084,
+        "joint_err_rad": 0.2845300376415253
+       }
+      },
+      "minutes": 9.635089716911317
+     },
+     "500": {
+      "ppo_s": 339,
+      "suites": {
+       "clean": {
+        "task_success": 0.390625,
+        "fall_rate": 0.03125,
+        "stages_frac": 0.6953125,
+        "dtw_joint_rad": 0.3407578468322754,
+        "joint_err_rad": 0.34009742736816406
+       },
+       "push": {
+        "task_success": 0.078125,
+        "fall_rate": 0.5625,
+        "stages_frac": 0.578125,
+        "dtw_joint_rad": 0.3440553843975067,
+        "joint_err_rad": 0.33466941118240356
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.50390625,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.24564407020807266
+       },
+       "transfer": {
+        "task_success": 0.315625,
+        "fall_rate": 0.684375,
+        "stages_frac": 0.603125,
+        "dtw_joint_rad": 0.3032006820042928,
+        "joint_err_rad": 0.2824626535177231
+       }
+      },
+      "minutes": 11.91842305024465
+     },
+     "1000": {
+      "ppo_s": 686,
+      "suites": {
+       "clean": {
+        "task_success": 1.0,
+        "fall_rate": 0.0,
+        "stages_frac": 1.0,
+        "dtw_joint_rad": 0.2653072476387024,
+        "joint_err_rad": 0.26575225591659546
+       },
+       "push": {
+        "task_success": 0.875,
+        "fall_rate": 0.0,
+        "stages_frac": 0.9375,
+        "dtw_joint_rad": 0.27173563838005066,
+        "joint_err_rad": 0.27219969034194946
+       },
+       "tempo": {
+        "task_success": 0.4453125,
+        "fall_rate": 0.5546875,
+        "stages_frac": 0.75,
+        "dtw_joint_rad": 0.3456353545188904,
+        "joint_err_rad": 0.2951120138168335
+       },
+       "transfer": {
+        "task_success": 0.775,
+        "fall_rate": 0.06875,
+        "stages_frac": 0.8,
+        "dtw_joint_rad": 0.2617722719907761,
+        "joint_err_rad": 0.2618403911590576
+       }
+      },
+      "minutes": 17.70175638357798
+     },
+     "1500": {
+      "ppo_s": 1039,
+      "suites": {
+       "clean": {
+        "task_success": 1.0,
+        "fall_rate": 0.0,
+        "stages_frac": 1.0,
+        "dtw_joint_rad": 0.23699074983596802,
+        "joint_err_rad": 0.23734501004219055
+       },
+       "push": {
+        "task_success": 0.859375,
+        "fall_rate": 0.03125,
+        "stages_frac": 0.9375,
+        "dtw_joint_rad": 0.2426667958498001,
+        "joint_err_rad": 0.2431492954492569
+       },
+       "tempo": {
+        "task_success": 0.5,
+        "fall_rate": 0.5,
+        "stages_frac": 0.75,
+        "dtw_joint_rad": 0.301538348197937,
+        "joint_err_rad": 0.2881987765431404
+       },
+       "transfer": {
+        "task_success": 0.784375,
+        "fall_rate": 0.021875,
+        "stages_frac": 0.8,
+        "dtw_joint_rad": 0.22941772937774657,
+        "joint_err_rad": 0.23045560121536254
+       }
+      },
+      "minutes": 23.585089716911316
+     }
+    },
+    "full": {
+     "clean": {
+      "task_success": 1.0,
+      "fall_rate": 0.0,
+      "stages_frac": 1.0,
+      "dtw_joint_rad": 0.23706424236297607,
+      "joint_err_rad": 0.23741865158081055
+     },
+     "push": {
+      "task_success": 0.859375,
+      "fall_rate": 0.02734375,
+      "stages_frac": 0.931640625,
+      "dtw_joint_rad": 0.24345466867089272,
+      "joint_err_rad": 0.24369842186570168
+     },
+     "init": {
+      "task_success": 0.5572916666666666,
+      "fall_rate": 0.18229166666666666,
+      "stages_frac": 0.5677083333333334,
+      "dtw_joint_rad": 0.25611979762713116,
+      "joint_err_rad": 0.2681041856606801
+     },
+     "dynamics": {
+      "task_success": 0.9375,
+      "fall_rate": 0.046875,
+      "stages_frac": 0.96875,
+      "dtw_joint_rad": 0.2383144348859787,
+      "joint_err_rad": 0.239692822098732
+     },
+     "speed": {
+      "task_success": 1.0,
+      "fall_rate": 0.0,
+      "stages_frac": 1.0,
+      "dtw_joint_rad": 0.2489786073565483,
+      "joint_err_rad": 0.233416385948658
+     },
+     "push_phase": {
+      "task_success": 0.9921875,
+      "fall_rate": 0.0,
+      "stages_frac": 0.99609375,
+      "dtw_joint_rad": 0.2384001463651657,
+      "joint_err_rad": 0.2387574166059494
+     },
+     "start": {
+      "task_success": 0.6015625,
+      "fall_rate": 0.3984375,
+      "stages_frac": 0.80078125,
+      "dtw_joint_rad": 0.2546437084674835,
+      "joint_err_rad": 0.2703198492527008
+     },
+     "noref": {
+      "task_success": 0.0,
+      "fall_rate": 0.015625,
+      "stages_frac": 0.5,
+      "dtw_joint_rad": 0.4314538538455963,
+      "joint_err_rad": 0.4314432740211487
+     },
+     "tempo": {
+      "task_success": 0.328125,
+      "fall_rate": 0.671875,
+      "stages_frac": 0.6666666666666666,
+      "dtw_joint_rad": 0.3018207550048828,
+      "joint_err_rad": 0.29099907477696735
+     },
+     "transfer": {
+      "task_success": 0.784375,
+      "fall_rate": 0.01875,
+      "stages_frac": 0.8,
+      "dtw_joint_rad": 0.23027317225933075,
+      "joint_err_rad": 0.23110887706279754
+     }
+    }
+   }
+  }
+ },
+ {
+  "clip": "punches",
+  "at": [
+   50,
+   100,
+   300,
+   500,
+   1000,
+   1500
+  ],
+  "build_s": 447.9,
+  "gpu": "NVIDIA L40S",
+  "starts": {
+   "scratch": {
+    "checkpoint": null,
+    "source": null,
+    "task": "A2H-Tracking-Flat-Unitree-G1",
+    "timing": {
+     "startup_s": 35.00732731819153,
+     "wall_s": 1160.1402792930603,
+     "returncode": 0,
+     "parallel": 1
+    },
+    "curve": {
+     "50": {
+      "ppo_s": 34,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.1428571492433548,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3984961211681366
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.1428571492433548,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3984961211681366
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.1428571492433548,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.4168391227722168
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.028571428997176036,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.4035058787890843
+       }
+      },
+      "minutes": 8.615122121969858
+     },
+     "100": {
+      "ppo_s": 67,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.1428571492433548,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3545592725276947
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.1428571492433548,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.35455799102783203
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.1428571492433548,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.367526650428772
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.028571428997176036,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.36745039905820576
+       }
+      },
+      "minutes": 9.165122121969858
+     },
+     "300": {
+      "ppo_s": 201,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.2857142984867096,
+        "dtw_joint_rad": 0.1302984058856964,
+        "joint_err_rad": 0.1306574046611786
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.15625,
+        "stages_frac": 0.4129464328289032,
+        "dtw_joint_rad": 0.1485559046268463,
+        "joint_err_rad": 0.1506722867488861
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.2857142984867096,
+        "dtw_joint_rad": 0.16846607625484467,
+        "joint_err_rad": 0.13860200345516205
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.2247767916747502,
+        "dtw_joint_rad": 0.13602703383990697,
+        "joint_err_rad": 0.1371621915272304
+       }
+      },
+      "minutes": 11.398455455303191
+     },
+     "500": {
+      "ppo_s": 340,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.2857142984867096,
+        "dtw_joint_rad": 0.11730216443538666,
+        "joint_err_rad": 0.11788228899240494
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.109375,
+        "stages_frac": 0.5290178656578064,
+        "dtw_joint_rad": 0.13677749037742615,
+        "joint_err_rad": 0.13999679684638977
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.2857142984867096,
+        "dtw_joint_rad": 0.14603330940008163,
+        "joint_err_rad": 0.1204526349902153
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.3098214396408626,
+        "dtw_joint_rad": 0.11925572901964188,
+        "joint_err_rad": 0.12034601398876735
+       }
+      },
+      "minutes": 13.71512212196986
+     },
+     "1000": {
+      "ppo_s": 710,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.6584821343421936,
+        "dtw_joint_rad": 0.09630652517080307,
+        "joint_err_rad": 0.09671086072921753
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.078125,
+        "stages_frac": 0.6696429252624512,
+        "dtw_joint_rad": 0.11693490296602249,
+        "joint_err_rad": 0.11901344358921051
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.5122767835855484,
+        "dtw_joint_rad": 0.12222138047218323,
+        "joint_err_rad": 0.10065164789557457
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.5807291801486697,
+        "dtw_joint_rad": 0.09702815541199275,
+        "joint_err_rad": 0.09808610486132759
+       }
+      },
+      "minutes": 19.881788788636527
+     },
+     "1500": {
+      "ppo_s": 1082,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.5714285969734192,
+        "dtw_joint_rad": 0.07827483862638474,
+        "joint_err_rad": 0.07850699126720428
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.03125,
+        "stages_frac": 0.5625,
+        "dtw_joint_rad": 0.09663423150777817,
+        "joint_err_rad": 0.09777849912643433
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.5200893133878708,
+        "dtw_joint_rad": 0.10291889309883118,
+        "joint_err_rad": 0.08343008905649185
+       },
+       "transfer": {
+        "task_success": 0.029017857142857144,
+        "fall_rate": 0.0,
+        "stages_frac": 0.5770833492279053,
+        "dtw_joint_rad": 0.07801270059176854,
+        "joint_err_rad": 0.07930321459259305
+       }
+      },
+      "minutes": 26.081788788636526
+     }
+    },
+    "full": {
+     "clean": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.5714285969734192,
+      "dtw_joint_rad": 0.07832060754299164,
+      "joint_err_rad": 0.07854840159416199
+     },
+     "push": {
+      "task_success": 0.0,
+      "fall_rate": 0.1484375,
+      "stages_frac": 0.541294664144516,
+      "dtw_joint_rad": 0.09596636705100536,
+      "joint_err_rad": 0.0993224699050188
+     },
+     "init": {
+      "task_success": 0.0,
+      "fall_rate": 0.25,
+      "stages_frac": 0.474590798219045,
+      "dtw_joint_rad": 0.0983120525876681,
+      "joint_err_rad": 0.13901441792647043
+     },
+     "dynamics": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.5714285969734192,
+      "dtw_joint_rad": 0.07830915103356044,
+      "joint_err_rad": 0.07854166130224864
+     },
+     "speed": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.5714285969734192,
+      "dtw_joint_rad": 0.08370783179998398,
+      "joint_err_rad": 0.07879218459129333
+     },
+     "push_phase": {
+      "task_success": 0.0,
+      "fall_rate": 0.03125,
+      "stages_frac": 0.5825892984867096,
+      "dtw_joint_rad": 0.0930744968354702,
+      "joint_err_rad": 0.09540411829948425
+     },
+     "start": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.6171875298023224,
+      "dtw_joint_rad": 0.09464175999164581,
+      "joint_err_rad": 0.09474766626954079
+     },
+     "noref": {
+      "task_success": 0.0,
+      "fall_rate": 0.03125,
+      "stages_frac": 0.1428571492433548,
+      "dtw_joint_rad": 0.18313850462436676,
+      "joint_err_rad": 0.18354448676109314
+     },
+     "tempo": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.5409226516882578,
+      "dtw_joint_rad": 0.09818178166945775,
+      "joint_err_rad": 0.08223992337783177
+     },
+     "transfer": {
+      "task_success": 0.026785714285714284,
+      "fall_rate": 0.0,
+      "stages_frac": 0.5715029878275735,
+      "dtw_joint_rad": 0.07809158946786608,
+      "joint_err_rad": 0.07938830980232783
+     }
+    }
+   },
+   "specialist": {
+    "checkpoint": "policy_specialist/model_1499.pt",
+    "source": "/Users/ethan/Documents/Github/athlete2humanoid/outputs/mc_adapt_inputs/policy_tracking_var/model_1499.pt",
+    "task": "A2H-Tracking-Flat-Unitree-G1",
+    "timing": {
+     "startup_s": 20.005245685577393,
+     "wall_s": 1145.1343488693237,
+     "returncode": 0,
+     "parallel": 1
+    },
+    "curve": {
+     "50": {
+      "ppo_s": 32,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.640625,
+        "stages_frac": 0.3995535969734192,
+        "dtw_joint_rad": 0.19786463677883148,
+        "joint_err_rad": 0.20337235927581787
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.859375,
+        "stages_frac": 0.361607164144516,
+        "dtw_joint_rad": 0.206584170460701,
+        "joint_err_rad": 0.20910431444644928
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.59375,
+        "stages_frac": 0.3660714626312256,
+        "dtw_joint_rad": 0.25454869866371155,
+        "joint_err_rad": 0.21256977319717407
+       },
+       "transfer": {
+        "task_success": 0.002232142857142857,
+        "fall_rate": 0.6741071428571429,
+        "stages_frac": 0.18199404994291918,
+        "dtw_joint_rad": 0.19585329294204712,
+        "joint_err_rad": 0.20773400579180037
+       }
+      },
+      "minutes": 8.331754094759622
+     },
+     "100": {
+      "ppo_s": 66,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.665178656578064,
+        "dtw_joint_rad": 0.17608244717121124,
+        "joint_err_rad": 0.17650318145751953
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.109375,
+        "stages_frac": 0.6495535969734192,
+        "dtw_joint_rad": 0.19230203330516815,
+        "joint_err_rad": 0.19415736198425293
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.5044642984867096,
+        "dtw_joint_rad": 0.219749815762043,
+        "joint_err_rad": 0.1795269399881363
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.35007441469601225,
+        "dtw_joint_rad": 0.18602255412510463,
+        "joint_err_rad": 0.18651449893202102
+       }
+      },
+      "minutes": 8.898420761426289
+     },
+     "300": {
+      "ppo_s": 205,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.2857142984867096,
+        "dtw_joint_rad": 0.13845741748809814,
+        "joint_err_rad": 0.1394149363040924
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.1875,
+        "stages_frac": 0.5245535969734192,
+        "dtw_joint_rad": 0.1590617299079895,
+        "joint_err_rad": 0.16202230751514435
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.4229911118745804,
+        "dtw_joint_rad": 0.17260070145130157,
+        "joint_err_rad": 0.14262451976537704
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.313616082072258,
+        "dtw_joint_rad": 0.14125311161790574,
+        "joint_err_rad": 0.1420408742768424
+       }
+      },
+      "minutes": 11.215087428092955
+     },
+     "500": {
+      "ppo_s": 350,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.2879464328289032,
+        "dtw_joint_rad": 0.1311526596546173,
+        "joint_err_rad": 0.1315576136112213
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.109375,
+        "stages_frac": 0.5267857313156128,
+        "dtw_joint_rad": 0.14924344420433044,
+        "joint_err_rad": 0.15133118629455566
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.4285714477300644,
+        "dtw_joint_rad": 0.16668330132961273,
+        "joint_err_rad": 0.136114664375782
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.35267857036420275,
+        "dtw_joint_rad": 0.13142657492841994,
+        "joint_err_rad": 0.13229151495865413
+       }
+      },
+      "minutes": 13.631754094759623
+     },
+     "1000": {
+      "ppo_s": 711,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.7142857313156128,
+        "dtw_joint_rad": 0.10687893629074097,
+        "joint_err_rad": 0.10710137337446213
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.03125,
+        "stages_frac": 0.6964285969734192,
+        "dtw_joint_rad": 0.1263888031244278,
+        "joint_err_rad": 0.12709379196166992
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.5379464328289032,
+        "dtw_joint_rad": 0.13978659361600876,
+        "joint_err_rad": 0.11181091144680977
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.5509672739676067,
+        "dtw_joint_rad": 0.10685692514692034,
+        "joint_err_rad": 0.10797267513615745
+       }
+      },
+      "minutes": 19.64842076142629
+     },
+     "1500": {
+      "ppo_s": 1080,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.6651785969734192,
+        "dtw_joint_rad": 0.09890621900558472,
+        "joint_err_rad": 0.09939843416213989
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.03125,
+        "stages_frac": 0.6473214626312256,
+        "dtw_joint_rad": 0.11616581678390503,
+        "joint_err_rad": 0.11704643070697784
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.6149553954601288,
+        "dtw_joint_rad": 0.13154193758964539,
+        "joint_err_rad": 0.1047210544347763
+       },
+       "transfer": {
+        "task_success": 0.002232142857142857,
+        "fall_rate": 0.0,
+        "stages_frac": 0.5509672633239201,
+        "dtw_joint_rad": 0.09833686160189765,
+        "joint_err_rad": 0.0993989109992981
+       }
+      },
+      "minutes": 25.798420761426293
+     }
+    },
+    "full": {
+     "clean": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.6517857313156128,
+      "dtw_joint_rad": 0.09900197386741638,
+      "joint_err_rad": 0.09949317574501038
+     },
+     "push": {
+      "task_success": 0.0,
+      "fall_rate": 0.07421875,
+      "stages_frac": 0.6316964626312256,
+      "dtw_joint_rad": 0.11484482511878014,
+      "joint_err_rad": 0.11649724282324314
+     },
+     "init": {
+      "task_success": 0.0,
+      "fall_rate": 0.21875,
+      "stages_frac": 0.4968005915482839,
+      "dtw_joint_rad": 0.11272822817166646,
+      "joint_err_rad": 0.14609509706497192
+     },
+     "dynamics": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.6331845919291178,
+      "dtw_joint_rad": 0.09929632643858592,
+      "joint_err_rad": 0.09975720445315044
+     },
+     "speed": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.642857164144516,
+      "dtw_joint_rad": 0.10642445459961891,
+      "joint_err_rad": 0.09986325725913048
+     },
+     "push_phase": {
+      "task_success": 0.0,
+      "fall_rate": 0.0546875,
+      "stages_frac": 0.6350446939468384,
+      "dtw_joint_rad": 0.10998785495758057,
+      "joint_err_rad": 0.11266134679317474
+     },
+     "start": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.642857164144516,
+      "dtw_joint_rad": 0.11919589340686798,
+      "joint_err_rad": 0.11936236172914505
+     },
+     "noref": {
+      "task_success": 0.0,
+      "fall_rate": 0.015625,
+      "stages_frac": 0.2455357313156128,
+      "dtw_joint_rad": 0.2160574048757553,
+      "joint_err_rad": 0.2163258194923401
+     },
+     "tempo": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.671875019868215,
+      "dtw_joint_rad": 0.1264098510146141,
+      "joint_err_rad": 0.10426259289185207
+     },
+     "transfer": {
+      "task_success": 0.006696428571428571,
+      "fall_rate": 0.0,
+      "stages_frac": 0.5497023803847176,
+      "dtw_joint_rad": 0.09848236186163765,
+      "joint_err_rad": 0.09954150872571128
+     }
+    }
+   },
+   "multi": {
+    "checkpoint": "policy_multi/model_1999.pt",
+    "source": "/Users/ethan/Documents/Github/athlete2humanoid/outputs/mc_adapt_inputs/policy_multi/model_1999.pt",
+    "task": "A2H-Tracking-Flat-Unitree-G1",
+    "timing": {
+     "startup_s": 20.00642704963684,
+     "wall_s": 1135.1339740753174,
+     "returncode": 0,
+     "parallel": 1
+    },
+    "curve": {
+     "50": {
+      "ppo_s": 33,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.109375,
+        "stages_frac": 0.2857142984867096,
+        "dtw_joint_rad": 0.2581905722618103,
+        "joint_err_rad": 0.2600418031215668
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.4375,
+        "stages_frac": 0.2901785969734192,
+        "dtw_joint_rad": 0.2655006945133209,
+        "joint_err_rad": 0.26822787523269653
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.3828125,
+        "stages_frac": 0.2845982164144516,
+        "dtw_joint_rad": 0.30642935633659363,
+        "joint_err_rad": 0.2580517530441284
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 0.35714285714285715,
+        "stages_frac": 0.13489583347524917,
+        "dtw_joint_rad": 0.2610327920743397,
+        "joint_err_rad": 0.26145770507199423
+       }
+      },
+      "minutes": 8.34844045082728
+     },
+     "100": {
+      "ppo_s": 67,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.2857142984867096,
+        "dtw_joint_rad": 0.24773935973644257,
+        "joint_err_rad": 0.24805119633674622
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.015625,
+        "stages_frac": 0.2857142984867096,
+        "dtw_joint_rad": 0.26059475541114807,
+        "joint_err_rad": 0.26096856594085693
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.2857142984867096,
+        "dtw_joint_rad": 0.2902114540338516,
+        "joint_err_rad": 0.24575591087341309
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.2333333364554814,
+        "dtw_joint_rad": 0.24768595397472382,
+        "joint_err_rad": 0.24803750855582102
+       }
+      },
+      "minutes": 8.915107117493948
+     },
+     "300": {
+      "ppo_s": 209,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.2857142984867096,
+        "dtw_joint_rad": 0.1891985684633255,
+        "joint_err_rad": 0.1894218623638153
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.4375,
+        "dtw_joint_rad": 0.20610478520393372,
+        "joint_err_rad": 0.20638474822044373
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.2857142984867096,
+        "dtw_joint_rad": 0.2316633090376854,
+        "joint_err_rad": 0.19064569473266602
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.2800595313310623,
+        "dtw_joint_rad": 0.18829193711280823,
+        "joint_err_rad": 0.18856637179851532
+       }
+      },
+      "minutes": 11.281773784160613
+     },
+     "500": {
+      "ppo_s": 352,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.5535714626312256,
+        "dtw_joint_rad": 0.16113686561584473,
+        "joint_err_rad": 0.16129884123802185
+       },
+       "push": {
+        "task_success": 0.015625,
+        "fall_rate": 0.046875,
+        "stages_frac": 0.6897321939468384,
+        "dtw_joint_rad": 0.17828071117401123,
+        "joint_err_rad": 0.17920541763305664
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.4921875,
+        "dtw_joint_rad": 0.2030007392168045,
+        "joint_err_rad": 0.1645221784710884
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.3662202422107969,
+        "dtw_joint_rad": 0.15689803447042192,
+        "joint_err_rad": 0.15722558966704778
+       }
+      },
+      "minutes": 13.665107117493948
+     },
+     "1000": {
+      "ppo_s": 710,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.6919642686843872,
+        "dtw_joint_rad": 0.1229793056845665,
+        "joint_err_rad": 0.12306763231754303
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.015625,
+        "stages_frac": 0.6004464626312256,
+        "dtw_joint_rad": 0.14119179546833038,
+        "joint_err_rad": 0.14150658249855042
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.7109375298023224,
+        "dtw_joint_rad": 0.15954142063856125,
+        "joint_err_rad": 0.12820033356547356
+       },
+       "transfer": {
+        "task_success": 0.13616071428571427,
+        "fall_rate": 0.0,
+        "stages_frac": 0.6279762046677726,
+        "dtw_joint_rad": 0.11985996897731509,
+        "joint_err_rad": 0.12063934866871152
+       }
+      },
+      "minutes": 19.631773784160615
+     },
+     "1500": {
+      "ppo_s": 1068,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.6919642686843872,
+        "dtw_joint_rad": 0.10443595796823502,
+        "joint_err_rad": 0.10450742393732071
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.6160714626312256,
+        "dtw_joint_rad": 0.12076278030872345,
+        "joint_err_rad": 0.12085330486297607
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.7466517984867096,
+        "dtw_joint_rad": 0.13661357760429382,
+        "joint_err_rad": 0.10978380218148232
+       },
+       "transfer": {
+        "task_success": 0.002232142857142857,
+        "fall_rate": 0.0,
+        "stages_frac": 0.6064732330186027,
+        "dtw_joint_rad": 0.10316551583153862,
+        "joint_err_rad": 0.10406288398163659
+       }
+      },
+      "minutes": 25.598440450827283
+     }
+    },
+    "full": {
+     "clean": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.6897321939468384,
+      "dtw_joint_rad": 0.10426892340183258,
+      "joint_err_rad": 0.10434059798717499
+     },
+     "push": {
+      "task_success": 0.01171875,
+      "fall_rate": 0.015625,
+      "stages_frac": 0.6121652275323868,
+      "dtw_joint_rad": 0.11959750950336456,
+      "joint_err_rad": 0.12000052817165852
+     },
+     "init": {
+      "task_success": 0.005208333333333333,
+      "fall_rate": 0.13541666666666666,
+      "stages_frac": 0.5133680502573649,
+      "dtw_joint_rad": 0.12333873907725017,
+      "joint_err_rad": 0.1447709525624911
+     },
+     "dynamics": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.691220243771871,
+      "dtw_joint_rad": 0.1046896477540334,
+      "joint_err_rad": 0.10475550840298335
+     },
+     "speed": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.6473214626312256,
+      "dtw_joint_rad": 0.11113198101520538,
+      "joint_err_rad": 0.1045508123934269
+     },
+     "push_phase": {
+      "task_success": 0.0234375,
+      "fall_rate": 0.0,
+      "stages_frac": 0.6484375298023224,
+      "dtw_joint_rad": 0.1147470772266388,
+      "joint_err_rad": 0.11483968421816826
+     },
+     "start": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.6339285969734192,
+      "dtw_joint_rad": 0.11922726035118103,
+      "joint_err_rad": 0.11920285224914551
+     },
+     "noref": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.1830357313156128,
+      "dtw_joint_rad": 0.19407141208648682,
+      "joint_err_rad": 0.1939758062362671
+     },
+     "tempo": {
+      "task_success": 0.0,
+      "fall_rate": 0.0,
+      "stages_frac": 0.6904762387275696,
+      "dtw_joint_rad": 0.13203425705432892,
+      "joint_err_rad": 0.10883121689160664
+     },
+     "transfer": {
+      "task_success": 0.008928571428571428,
+      "fall_rate": 0.0,
+      "stages_frac": 0.6016369206564767,
+      "dtw_joint_rad": 0.10297909166131701,
+      "joint_err_rad": 0.10388045970882688
+     }
+    }
+   }
+  }
+ },
+ {
+  "clip": "jumping_jacks",
+  "at": [
+   50,
+   100,
+   300,
+   500,
+   1000,
+   1500
+  ],
+  "build_s": 586.4,
+  "gpu": "NVIDIA L40S",
+  "starts": {
+   "scratch": {
+    "checkpoint": null,
+    "source": null,
+    "task": "A2H-Tracking-Flat-Unitree-G1",
+    "timing": {
+     "startup_s": 40.00763297080994,
+     "wall_s": 1460.2004561424255,
+     "returncode": 0,
+     "parallel": 1
+    },
+    "curve": {
+     "50": {
+      "ppo_s": 41,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.21901468932628632
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.21901468932628632
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.24416027963161469
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.16666666666666666,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.26030124227205914
+       }
+      },
+      "minutes": 11.1234605495135
+     },
+     "100": {
+      "ppo_s": 80,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.14823010563850403
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.14823010563850403
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.16975785046815872
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.16666666666666666,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.17349510888258615
+       }
+      },
+      "minutes": 11.773460549513498
+     },
+     "300": {
+      "ppo_s": 246,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.1890428215265274
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.1890428066253662
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.2011304274201393
+       },
+       "transfer": {
+        "task_success": 0.015625,
+        "fall_rate": 0.9375,
+        "stages_frac": 0.22482639054457346,
+        "dtw_joint_rad": 0.14870042353868484,
+        "joint_err_rad": 0.19213311125834784
+       }
+      },
+      "minutes": 14.540127216180165
+     },
+     "500": {
+      "ppo_s": 422,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.30889421701431274,
+        "dtw_joint_rad": 0.15503141283988953,
+        "joint_err_rad": 0.15651565790176392
+       },
+       "push": {
+        "task_success": 0.015625,
+        "fall_rate": 0.171875,
+        "stages_frac": 0.301682710647583,
+        "dtw_joint_rad": 0.1632315069437027,
+        "joint_err_rad": 0.16772975027561188
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.140625,
+        "stages_frac": 0.20252404361963272,
+        "dtw_joint_rad": 0.2276168018579483,
+        "joint_err_rad": 0.20708204805850983
+       },
+       "transfer": {
+        "task_success": 0.4869791666666667,
+        "fall_rate": 0.0,
+        "stages_frac": 0.48456577956676483,
+        "dtw_joint_rad": 0.15639077872037888,
+        "joint_err_rad": 0.15979300439357758
+       }
+      },
+      "minutes": 17.4734605495135
+     },
+     "1000": {
+      "ppo_s": 876,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.3076923191547394,
+        "dtw_joint_rad": 0.1264420449733734,
+        "joint_err_rad": 0.12779977917671204
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.078125,
+        "stages_frac": 0.30528849363327026,
+        "dtw_joint_rad": 0.13620299100875854,
+        "joint_err_rad": 0.13982978463172913
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.484375,
+        "stages_frac": 0.1929086595773697,
+        "dtw_joint_rad": 0.2077762633562088,
+        "joint_err_rad": 0.20395590364933014
+       },
+       "transfer": {
+        "task_success": 0.4765625,
+        "fall_rate": 0.0,
+        "stages_frac": 0.48264366139968234,
+        "dtw_joint_rad": 0.13346593330303827,
+        "joint_err_rad": 0.13697641839583716
+       }
+      },
+      "minutes": 25.040127216180167
+     },
+     "1500": {
+      "ppo_s": 1348,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.30889421701431274,
+        "dtw_joint_rad": 0.12851661443710327,
+        "joint_err_rad": 0.12929967045783997
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.015625,
+        "stages_frac": 0.30528849363327026,
+        "dtw_joint_rad": 0.13584913313388824,
+        "joint_err_rad": 0.13714316487312317
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.5,
+        "stages_frac": 0.1923076994717121,
+        "dtw_joint_rad": 0.1684596836566925,
+        "joint_err_rad": 0.21151036024093628
+       },
+       "transfer": {
+        "task_success": 0.5,
+        "fall_rate": 0.0,
+        "stages_frac": 0.4917582447330157,
+        "dtw_joint_rad": 0.132450753202041,
+        "joint_err_rad": 0.13573228319485983
+       }
+      },
+      "minutes": 32.906793882846834
+     }
+    },
+    "full": {}
+   },
+   "specialist": {
+    "checkpoint": "policy_specialist/model_1499.pt",
+    "source": "/Users/ethan/Documents/Github/athlete2humanoid/outputs/mc_adapt_inputs/policy_tracking_var/model_1499.pt",
+    "task": "A2H-Tracking-Flat-Unitree-G1",
+    "timing": {
+     "startup_s": 30.00810480117798,
+     "wall_s": 1400.1574504375458,
+     "returncode": 0,
+     "parallel": 1
+    },
+    "curve": {
+     "50": {
+      "ppo_s": 41,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.39073410630226135
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.39111942052841187
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.38981346786022186
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.13601762824691832,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3468281428019206
+       }
+      },
+      "minutes": 10.956801746686299
+     },
+     "100": {
+      "ppo_s": 82,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.37100711464881897
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3710075318813324
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3985106348991394
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.16806891032805046,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3525104771057765
+       }
+      },
+      "minutes": 11.640135080019633
+     },
+     "300": {
+      "ppo_s": 249,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3385036587715149
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3385220170021057
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.2802616208791733
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 0.9869791666666666,
+        "stages_frac": 0.19013755396008492,
+        "dtw_joint_rad": 0.1786782592535019,
+        "joint_err_rad": 0.28769055505593616
+       }
+      },
+      "minutes": 14.423468413352966
+     },
+     "500": {
+      "ppo_s": 418,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.796875,
+        "stages_frac": 0.12379807978868484,
+        "dtw_joint_rad": 0.20662462711334229,
+        "joint_err_rad": 0.26230326294898987
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.828125,
+        "stages_frac": 0.12139423191547394,
+        "dtw_joint_rad": 0.209852397441864,
+        "joint_err_rad": 0.2640897035598755
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3130396902561188
+       },
+       "transfer": {
+        "task_success": 0.16145833333333334,
+        "fall_rate": 0.5338541666666666,
+        "stages_frac": 0.33858935969571274,
+        "dtw_joint_rad": 0.18170210719108582,
+        "joint_err_rad": 0.22607484956582388
+       }
+      },
+      "minutes": 17.240135080019634
+     },
+     "1000": {
+      "ppo_s": 855,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.3149038553237915,
+        "dtw_joint_rad": 0.15572966635227203,
+        "joint_err_rad": 0.1561790406703949
+       },
+       "push": {
+        "task_success": 0.03125,
+        "fall_rate": 0.015625,
+        "stages_frac": 0.3257211446762085,
+        "dtw_joint_rad": 0.15997639298439026,
+        "joint_err_rad": 0.16074033081531525
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.46875,
+        "stages_frac": 0.19471153989434242,
+        "dtw_joint_rad": 0.25852779299020767,
+        "joint_err_rad": 0.24781476706266403
+       },
+       "transfer": {
+        "task_success": 0.5,
+        "fall_rate": 0.0,
+        "stages_frac": 0.5028259630004565,
+        "dtw_joint_rad": 0.15505878875652948,
+        "joint_err_rad": 0.157511738439401
+       }
+      },
+      "minutes": 24.52346841335297
+     },
+     "1500": {
+      "ppo_s": 1307,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.3076923191547394,
+        "dtw_joint_rad": 0.15165455639362335,
+        "joint_err_rad": 0.15345105528831482
+       },
+       "push": {
+        "task_success": 0.03125,
+        "fall_rate": 0.046875,
+        "stages_frac": 0.31610578298568726,
+        "dtw_joint_rad": 0.15157894790172577,
+        "joint_err_rad": 0.15369242429733276
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.5,
+        "stages_frac": 0.1923076994717121,
+        "dtw_joint_rad": 0.22030417621135712,
+        "joint_err_rad": 0.2377421334385872
+       },
+       "transfer": {
+        "task_success": 0.5,
+        "fall_rate": 0.0,
+        "stages_frac": 0.5056471402446429,
+        "dtw_joint_rad": 0.15498906622330347,
+        "joint_err_rad": 0.15828365087509155
+       }
+      },
+      "minutes": 32.056801746686304
+     }
+    },
+    "full": {}
+   },
+   "multi": {
+    "checkpoint": "policy_multi/model_1999.pt",
+    "source": "/Users/ethan/Documents/Github/athlete2humanoid/outputs/mc_adapt_inputs/policy_multi/model_1999.pt",
+    "task": "A2H-Tracking-Flat-Unitree-G1",
+    "timing": {
+     "startup_s": 30.006668090820312,
+     "wall_s": 1385.1629383563995,
+     "returncode": 0,
+     "parallel": 1
+    },
+    "curve": {
+     "50": {
+      "ppo_s": 42,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3878207504749298
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3878183364868164
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.4055209755897522
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.0,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3486273065209389
+       }
+      },
+      "minutes": 10.973444468180338
+     },
+     "100": {
+      "ppo_s": 83,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.36129632592201233
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.36140912771224976
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.4037977159023285
+       },
+       "transfer": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.1520432693262895,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3367110937833786
+       }
+      },
+      "minutes": 11.656777801513671
+     },
+     "300": {
+      "ppo_s": 251,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3080151677131653
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.3080142140388489
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.90625,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": 0.364193856716156,
+        "joint_err_rad": 0.326568603515625
+       },
+       "transfer": {
+        "task_success": 0.020833333333333332,
+        "fall_rate": 0.9505208333333334,
+        "stages_frac": 0.20163929089903831,
+        "dtw_joint_rad": 0.22909429669380188,
+        "joint_err_rad": 0.28729483236869174
+       }
+      },
+      "minutes": 14.456777801513672
+     },
+     "500": {
+      "ppo_s": 419,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 1.0,
+        "stages_frac": 0.07692307978868484,
+        "dtw_joint_rad": null,
+        "joint_err_rad": 0.2545749843120575
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.984375,
+        "stages_frac": 0.0805288553237915,
+        "dtw_joint_rad": 0.1964377909898758,
+        "joint_err_rad": 0.25359684228897095
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.9375,
+        "stages_frac": 0.11899038776755333,
+        "dtw_joint_rad": 0.33757486939430237,
+        "joint_err_rad": 0.2882952243089676
+       },
+       "transfer": {
+        "task_success": 0.1640625,
+        "fall_rate": 0.6302083333333334,
+        "stages_frac": 0.24883861963947615,
+        "dtw_joint_rad": 0.1980629652738571,
+        "joint_err_rad": 0.22493873536586761
+       }
+      },
+      "minutes": 17.256777801513675
+     },
+     "1000": {
+      "ppo_s": 841,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.3100961446762085,
+        "dtw_joint_rad": 0.13714441657066345,
+        "joint_err_rad": 0.13845089077949524
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.30889421701431274,
+        "dtw_joint_rad": 0.14270301163196564,
+        "joint_err_rad": 0.1439037322998047
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.1640625,
+        "stages_frac": 0.21995193511247635,
+        "dtw_joint_rad": 0.2223265916109085,
+        "joint_err_rad": 0.20162054896354675
+       },
+       "transfer": {
+        "task_success": 0.5,
+        "fall_rate": 0.0,
+        "stages_frac": 0.522016187508901,
+        "dtw_joint_rad": 0.13494834179679552,
+        "joint_err_rad": 0.13849503174424171
+       }
+      },
+      "minutes": 24.290111134847006
+     },
+     "1500": {
+      "ppo_s": 1290,
+      "suites": {
+       "clean": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.30889421701431274,
+        "dtw_joint_rad": 0.11778277903795242,
+        "joint_err_rad": 0.11977434903383255
+       },
+       "push": {
+        "task_success": 0.0,
+        "fall_rate": 0.0,
+        "stages_frac": 0.3076923191547394,
+        "dtw_joint_rad": 0.1234520897269249,
+        "joint_err_rad": 0.12511391937732697
+       },
+       "tempo": {
+        "task_success": 0.0,
+        "fall_rate": 0.140625,
+        "stages_frac": 0.21514423564076424,
+        "dtw_joint_rad": 0.2032427415251732,
+        "joint_err_rad": 0.1842135414481163
+       },
+       "transfer": {
+        "task_success": 0.5,
+        "fall_rate": 0.0,
+        "stages_frac": 0.5056471402446429,
+        "dtw_joint_rad": 0.12158651898304622,
+        "joint_err_rad": 0.12593488519390425
+       }
+      },
+      "minutes": 31.77344446818034
+     }
+    },
+    "full": {}
+   }
+  }
+ }
+]

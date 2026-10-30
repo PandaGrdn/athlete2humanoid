@@ -110,7 +110,7 @@ def test_summarise_and_report(tmp_path):
     assert AC.minutes_to(c, 0.8)[0] == 100
     assert AC.minutes_to(c, 0.95) is None
     md = (out / "curves.md").read_text()
-    assert "| multi | 100 | 6 | 90% (0%) | 60% (20%) | 80% (0%) | - (50%) | 0.100 |" in md
+    assert "| multi | 100 | 6 | 90% (0%) | 60% (20%) | 80% (0%) | - (50%) | 0.100 | 90% |" in md
 
     pytest.importorskip("matplotlib")
     rep = tmp_path / "report"

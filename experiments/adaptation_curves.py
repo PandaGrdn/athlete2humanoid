@@ -381,18 +381,19 @@ def render(results):
         by_clip.setdefault(r["clip"], {}).update(r["starts"])
     lines = []
     for clip, starts in by_clip.items():
-        lines += [f"### {clip}", "", "Task success (fall rate); joint error is the clean clip's, time-locked (rad).", "",
-                  "| Start | Iterations | Minutes | The clip | Held-out variants | Pushed 1 m/s | Tempo 0.5x / 2x | Joint error |",
-                  "|---|---|---|---|---|---|---|---|"]
+        lines += [f"### {clip}", "", "Task success (fall rate); joint error and key moments reached are the clean clip's (joint error time-locked, rad).", "",
+                  "| Start | Iterations | Minutes | The clip | Held-out variants | Pushed 1 m/s | Tempo 0.5x / 2x | Joint error | Key moments |",
+                  "|---|---|---|---|---|---|---|---|---|"]
         for name, s in starts.items():
             for n in sorted(s["curve"], key=int):
                 p = s["curve"][n]
                 su = p["suites"]
                 cells = [f"{pct(su.get(k, {}).get('task_success'))} ({pct(su.get(k, {}).get('fall_rate'))})" for k in SHORT]
                 je = su.get("clean", {}).get("joint_err_rad")
+                km = su.get("clean", {}).get("stages_frac")
                 m = p.get("minutes")
                 lines.append(f"| {name} | {n} | {'-' if m is None else f'{m:.0f}'} | " + " | ".join(cells)
-                             + f" | {'-' if je is None else f'{je:.3f}'} |")
+                             + f" | {'-' if je is None else f'{je:.3f}'} | {pct(km)} |")
         lines.append("")
         fulls = {n: s["full"] for n, s in starts.items() if s.get("full")}
         if fulls:
