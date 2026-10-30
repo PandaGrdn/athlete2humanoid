@@ -63,7 +63,8 @@ def main(a):
     if a.latents:
         cmd += f" --latents {i}/wm"
     if a.stage != "train":  # the real predictor call, on a tiny model, before any GPU time goes to it
-        cmd = (f"python3 -c 'import tests.test_world_model as t; t.test_the_predictor_never_reads_the_target_slots(); "
+        cmd = (f"python3 -c 'import sys, types; sys.modules[\"pytest\"] = types.SimpleNamespace(importorskip=__import__); "
+               f"import tests.test_world_model as t; t.test_the_predictor_never_reads_the_target_slots(); "
                f"print(\"predictor test passed\")' && " + cmd)
     if a.smoke:
         cmd += " --smoke --num-envs 256 --reps 4"
