@@ -65,3 +65,45 @@ clip itself, its held-out variants, 0.5x / 2x tempo, 1 m/s pushes. Trained clips
 punches, discus. Each policy reads its own latent table, and an eval run holds one, so each clip is evaluated in four
 runs that share the motions, the held-out variants, the conditions and their seeds: {`multi_vjp`, `multi`},
 {`multi_vjl`}, {`multi_vjc`}, {`multi_vj`}.
+
+## Is the imagined future any good? (`outputs/remote_wm_lat1`, ~5 min on an L40S)
+
+`wm_quality.md`. The imagined latent *h* steps ahead against the true trailing latent at *s* + *h* (from the real
+video), in the PCA of the layer-normed trailing latents (32 components, 98% of the variance), centred on the training
+clips' mean. The baseline is **copying the present**: the trailing latent at *s*. Error is squared error relative to the
+copy's (below 1 beats it). Change is the cosine between the predicted change from now and the true one (0 means it
+doesn't know which way the motion goes).
+
+| Clips | Ahead | Copy the present: cos | V-JEPA 2 predictor: cos / error / change | Learned ridge: cos / error / change |
+|---|---|---|---|---|
+| trained (cross-fitted) | 0.53 s | 0.74 | 0.70 / 2.04 / 0.06 | 0.74 / 1.15 / 0.12 |
+| trained (cross-fitted) | 1.00 s | 0.50 | 0.47 / 2.80 / −0.04 | 0.50 / 1.19 / 0.15 |
+| zero-shot | 0.53 s | 0.84 | 0.68 / 3.12 / −0.06 | 0.84 / 0.94 / 0.18 |
+| zero-shot | 1.00 s | 0.75 | 0.48 / 5.13 / −0.10 | 0.76 / 0.92 / 0.22 |
+
+Per clip, the learned predictor's error is 0.88–0.98 of the copy's on seven of the eight clips. The exception is arms
+(1.8–2.1): a 1.7 s clip, extrapolated by a fit on the other four. That exception is what lifts its trained-clip average
+above 1.
+
+**V-JEPA 2's predictor can't imagine the future of these videos: it is worse than copying the present.** Its error is
+2–6 times the copy's, and its predicted change is uncorrelated with the real one (−0.15 to 0.10).
+- **It is offset and blurred.** Per time step, its predicted tokens are a near-constant offset away from the real ones:
+  the bias has norm ≈ 14, while the real tokens vary by ≈ 5–6 around their mean. Even with the offset removed, they agree
+  with the real future less than the present does (cosine 0.08–0.31 vs 0.37–0.75 on the full-body clips).
+- **What signal there is, is small.** A ridge readout fitted on the training clips, from [the present, V-JEPA's
+  prediction] to the future, beats one from the present alone by only 1–4 points of relative error on the zero-shot
+  clips.
+- **Why:** it is the self-supervised predictor V-JEPA 2 was pretrained with. It learned to fill in masked tubes that
+  span the clip's whole duration, so every target always had visible context at the same time step. Predicting whole
+  future time steps with no spatial context at all is outside what it learned. `docs/GOAL_RELEVANCE.md` found the same
+  thing from the other side: it falls back on a near-mean prediction that barely uses the context. Meta's
+  action-conditioned V-JEPA 2-AC, trained to predict future frames, is the model built for this. Its checkpoint is a
+  separate download and is not tried here.
+
+**The learned latent world model is only slightly better than copying.** It knows which way the latent will move
+(change cosine 0.10–0.33), but the move it predicts is small. From five clips, it has mostly learned that motions drift
+back towards the average pose.
+
+So the brief's fallback applies: train on the learned predictor's future. The V-JEPA-predicted policy is trained too,
+since it costs nothing extra in the same job (both train at once): a check that an input no better than noise neither
+helps nor hurts.
