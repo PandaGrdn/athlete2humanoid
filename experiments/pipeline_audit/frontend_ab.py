@@ -6,7 +6,7 @@ on the same 30 fps frames, scored with this audit's own metrics:
 - after it, with the current retarget.py (retarget_audit.audit): knee IK error, limit hits, cap hits, root shift,
   phantom-flight decisions.
 
-    python experiments/pipeline_audit/frontend_ab.py      # needs outputs/frontend_ab/sam3d/<clip>.npz (frontends/sam3d_modal.py)
+    python experiments/pipeline_audit/frontend_ab.py      # every clip with outputs/frontend_ab/sam3d/<clip>.npz (frontends/sam3d_modal.py)
 
 Front ends: "mediapipe" (the stored human.npy), "sam3d_camera" (SAM 3D Body's keypoints + its predicted camera
 translation: skeleton and root from the model), "sam3d_image" (SAM 3D Body's skeleton with MediaPipe's root rule:
@@ -91,9 +91,10 @@ def summary(stats, ret):
 
 
 def decide(rows):
-    """The fix 3 rule, per SAM 3D Body variant: halve both numbers on both athletic clips, squat_jump no worse."""
+    """The fix 3 rule, per SAM 3D Body variant: halve both numbers on both athletic clips, squat_jump no worse
+    (on the rule's three clips; the others get the "no worse" check, reported apart)."""
     out = {}
-    for fe in [k for k in next(iter(rows.values())) if k != "mediapipe"]:
+    for fe in ("sam3d_camera", "sam3d_image"):
         checks = {}
         for clip, r in rows.items():
             if fe not in r:
@@ -106,17 +107,19 @@ def decide(rows):
             ok = knee <= limit and (ank is None or ank <= limit)
             checks[clip] = dict(ankle_ratio=None if ank is None else round(ank, 2), knee_ratio=round(knee, 2), passes=bool(ok),
                                 rule="<= 0.5 on both" if clip in ATHLETIC else "<= 1.0 on both")
-        out[fe] = dict(checks=checks, adopt=bool(checks) and all(c["passes"] for c in checks.values()) and len(checks) == len(rows))
+        rule = {c: v for c, v in checks.items() if c in CLIPS}
+        out[fe] = dict(checks=checks, adopt=len(rule) == len(CLIPS) and all(c["passes"] for c in rule.values()),
+                       other_clips_no_worse=[c for c, v in checks.items() if c not in CLIPS and v["passes"]])
     return out
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--clips", nargs="*", default=list(CLIPS))
+    ap.add_argument("--clips", nargs="*", help="default: every clip with a SAM 3D Body npz")
     ap.add_argument("--out", default=RESULTS / "frontend_ab" / "frontend_ab.json")
     a = ap.parse_args(argv)
     rows = {}
-    for name, d in clip_dirs(a.clips).items():
+    for name, d in clip_dirs(a.clips or [f.stem for f in SAM3D.glob("*.npz")]).items():
         fronts, fps = trajectories(name, d)
         rows[name] = {}
         for fe, (P, az, extra) in fronts.items():

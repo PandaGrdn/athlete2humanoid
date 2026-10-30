@@ -481,10 +481,18 @@ Cost: about 1 GPU hour for inference on three short clips; the time is in the lo
 
 ### Fix 3: the front-end A/B, MediaPipe vs SAM 3D Body (2026-10-30)
 
-**Decision: not adopted.** MediaPipe stays the only front end in `pose.py` and `pipeline.py` has no `--frontend`
-flag. SAM 3D Body passes the squat jump by a wide margin but fails the rule on both athletic clips: the knee IK
-error gets worse on shot_put and hurdles instead of halving, and the double-support ankle disagreement gets worse
-on shot_put (hurdles has no MediaPipe baseline for it).
+**Decision: SAM 3D Body is the pipeline's default 3D pose front end where it is set up, with MediaPipe as the
+fallback.** The audit's own rule says no: on the three clips it names, SAM 3D Body passes the squat jump by a wide
+margin but fails both athletic clips. The knee IK error gets worse on shot_put and hurdles instead of halving, and
+the double-support ankle disagreement gets worse on shot_put (hurdles has no MediaPipe baseline for it).
+
+Run on all ten clips, though, SAM 3D Body is clearly better on eight:
+- all seven phone clips, the footage the pipeline is built for;
+- the discus film.
+
+The user's instruction was to integrate it if it makes the pipeline much better, so it is integrated (see
+"Integration" below). The two clips where it loses, shot_put and hurdles, lose on the G1's joint range, not on the
+pose. `pipeline.py --frontend mediapipe` keeps the old path for footage like them.
 
 What was run:
 
@@ -592,15 +600,59 @@ What this says:
     10.7 vs 8.7 on hurdles.
   - A world-grounded model (GVHMR) is the one that would be expected to fix this, and it was not run.
 
-What would change the answer:
+All ten clips, MediaPipe → SAM 3D Body with the 2D-hip root (the variant the pipeline uses). The other seven ran
+the same way on Modal, about 6 GPU-minutes for all ten:
 
-- **Opt-in for clean phone clips.** The squat jump numbers argue for SAM 3D Body on the phone footage the
-  pipeline is built for. The rule covered only one such clip, so the case is unproven. Running `sam3d_modal.py` on
-  the other six phone clips (about 3 GPU-minutes) and re-scoring would settle it; the flag would be
-  `pipeline.py --frontend sam3d` with the 2D-hip root.
-- **Joint range on the films.** The athletic-clip losses are the G1's joint range, not the pose. The retarget
-  would need to handle a shoulder or ankle past its range (as fix 5 did for ankle roll) before a more faithful
-  front end can pay off there.
+| clip | bone CV, mean of 4 (%) | double-support ankle diff (cm) | stance hover (cm) | knee IK, mean L/R (cm) | any joint at limit | frames at 20 rad/s | root shift mean (time-varying) (cm) | no-contact frames |
+|---|---|---|---|---|---|---|---|---|
+| squat_jump | 5.1 → 1.7 | 6.6 → 1.4 | 4.0 → 1.8 | 1.1 → 0.5 | 1% → 0% | 0 → 0 | 9.5 (5.4) → 3.9 (3.3) | 13% → 14% |
+| squat | 5.3 → 1.9 | 6.5 → 1.3 | 2.9 → 1.8 | 1.2 → 0.4 | 0% → 0% | 0 → 0 | 9.7 (4.9) → 4.2 (3.9) | 0% → 0% |
+| lunge | 6.9 → 1.7 | 3.0 → 2.2 | 3.4 → 3.2 | 1.4 → 1.0 | 21% → 28% | 0 → 0 | 9.6 (6.5) → 7.9 (7.3) | 0% → 0% |
+| arms | 6.0 → 1.0 | 3.2 → 0.5 | 2.5 → 0.7 | 0.7 → 0.3 | 0% → 0% | 0 → 0 | 1.7 (0.9) → 1.3 (1.1) | 0% → 0% |
+| front_kick | 4.4 → 1.5 | 3.4 → 1.5 | 1.5 → 1.3 | 1.2 → 0.6 | 5% → 2% | 1 → 0 | 6.1 (3.9) → 3.2 (2.9) | 0% → 0% |
+| jumping_jacks | 9.3 → 1.5 | 4.8 → 1.3 | 2.5 → 1.4 | 0.7 → 0.5 | 0% → 0% | 9 → 7 | 5.5 (3.6) → 6.3 (4.9) | 41% → 6% |
+| punches | 6.7 → 1.4 | 5.9 → 6.5 | 1.3 → 1.5 | 1.6 → 0.6 | 1% → 0% | 0 → 0 | 4.3 (2.7) → 3.0 (1.8) | 0% → 0% |
+| shot_put | 14.4 → 2.3 | 2.8 → 5.9 | 3.4 → 4.0 | 0.9 → 1.0 | 44% → 100% | 3 → 0 | 14.4 (5.5) → 7.8 (5.6) | 58% → 17% |
+| discus | 11.7 → 4.1 | 7.7 → 3.2 | 3.6 → 3.0 | 1.1 → 1.0 | 10% → 0% | 4 → 0 | 10.2 (6.6) → 9.8 (6.9) | 2% → 7% |
+| hurdles | 15.8 → 4.7 | n/a → 5.9 | -0.4 → 0.7 | 1.2 → 2.1 | 11% → 42% | 3 → 0 | 6.8 (5.5) → 8.7 (5.7) | 65% → 63% |
+
+On the phone clips:
+- **Bone-length CV** falls 3-6x.
+- **Double-support ankle disagreement** falls 1.4-6x, except on punches. In 82% of that clip's frames the feet
+  are cut off or hidden, so both front ends guess them.
+- **Knee IK error** falls by up to 3x on every phone clip.
+- **Root shift** falls on six of seven; it rises 0.8 cm on jumping jacks.
+- **Jumping jacks** gets its contacts back: 6% no-contact frames instead of 41%.
+- **Knee and hip angle errors** against the human skeleton halve on most clips (`frontend_ab.json`).
+- **Joint limits:** the lunge's rear ankle pitch is at its limit more often (21% to 28%). That is the one
+  phone-clip regression.
+
+Of the films, discus improves on every row except no-contact frames (2% to 7%). Shot put and hurdles are as
+described above.
+
+Integration (`pipeline.py`):
+- **`--frontend auto|sam3d|mediapipe`**, default `auto`: SAM 3D Body where it can run, else MediaPipe.
+  - It can run when `A2H_SAM3D_PYTHON` points at an env made by `scripts/setup_sam3d.sh`, or when `sam_3d_body`
+    imports in-process with a GPU.
+  - Explicit `sam3d` fails with the setup instructions if it can't run.
+  - `meta.json` records the choice as `frontend`, and the raw output is kept as `sam3d.npz`.
+- **Boxes:** SAM 3D Body runs on the athlete's SAM 3.1 mask boxes (or `--athlete`'s masks). Without a mask it
+  falls back to its own person detector.
+- **Landmarks:** its keypoints become MediaPipe's `world` / `image_xy` / `boxes` (`sam3d_body.landmarks`), so
+  camera compensation, the intake checks, `human_trajectory` and the retarget are unchanged. This is the 2D-hip
+  root variant. The model's own root was better only on the two squats, and it cannot be compensated for a
+  panning camera.
+- **GPU jobs:** `scripts/setup_colab.sh --with-sam`, `scripts/pro_clips.sh` and `scripts/remote_run.py` build the
+  env and set `A2H_SAM3D_PYTHON`, so `process` and `pro` jobs use it. The live web demo (`server/live_worker.py`,
+  CPU) stays on MediaPipe.
+- **Checked end to end on Modal:** `pipeline.py --no-sam` on squat_jump, in an image whose env came from
+  `setup_sam3d.sh`, through the subprocess path. Locally, the pipeline's `human.npy` with SAM 3D Body's output
+  equals the A/B trajectory exactly.
+- **Not changed:** the stored clips in `outputs/` and their `qpos.npy`. Re-processing them, and retraining on the
+  result, is a separate run.
+
+Remaining work: the films' losses are the G1's joint range, not the pose. The retarget would need to handle a
+shoulder or ankle past its range, as fix 5 did for ankle roll, before a more faithful front end pays off there.
 
 Caveats:
 

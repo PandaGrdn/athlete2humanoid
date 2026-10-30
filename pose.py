@@ -1,8 +1,8 @@
 """MediaPipe Pose on SAM-cropped frames -> a smoothed, metric, z-up human trajectory.
 
 Uses the MediaPipe Tasks API (PoseLandmarker); recent mediapipe releases dropped the legacy
-mp.solutions.pose. frontends/sam3d_body.py turns SAM 3D Body's output into the same trajectory (fix 3 of
-docs/PIPELINE_ACCURACY.md: not adopted).
+mp.solutions.pose. Where SAM 3D Body is set up, pipeline.py uses it instead (frontends/sam3d_body.py gives the
+same landmarks; fix 3 of docs/PIPELINE_ACCURACY.md); this is the fallback and the live demo's front end.
 """
 
 import mediapipe as mp

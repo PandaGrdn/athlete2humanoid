@@ -1,8 +1,10 @@
 """frontends/sam3d_body.py: SAM 3D Body's MHR70 keypoints -> the (T, 33, 3) trajectory retarget.py reads."""
 
 import numpy as np
+import pytest
 
-from frontends import sam3d_body
+pytest.importorskip("mediapipe")  # sam3d_body builds on pose.py, which imports it (CI's light deps don't have it)
+from frontends import sam3d_body  # noqa: E402
 
 # A standing person in camera axes (x right, y down, z depth), facing the camera, by MHR70 index.
 STAND = {0: (0, -0.65, -0.1), 1: (0.03, -0.68, -0.08), 2: (-0.03, -0.68, -0.08), 3: (0.07, -0.66, 0.0), 4: (-0.07, -0.66, 0.0),
@@ -41,3 +43,31 @@ def test_both_roots_give_an_upright_trajectory_with_the_hop():
         assert (head[:, 2] > hip[:, 2]).all() and (hip[:, 2] > ankle[:, 2]).all()  # z up
         rise = hip[:, 2].max() - hip[0, 2]
         assert 0.2 < rise < 0.4, (root, rise)  # the 0.3 m hop, metric either way
+
+
+def test_landmarks_are_what_the_mediapipe_path_takes():
+    import pose
+
+    d = fake()
+    world, image_xy, boxes = sam3d_body.landmarks(d)
+    assert world.shape == (40, 33, 3) and image_xy.shape == (40, 33, 2) and boxes.shape == (40, 3)
+    assert np.allclose(world[:, [23, 24]].mean(1), 0)  # hip-centred, like MediaPipe's world landmarks
+    assert np.allclose(pose.landmark_pixels(image_xy, boxes), d["kp2d"][:, sam3d_body.MHR70_TO_MP33])
+
+
+def test_mask_boxes_fill_frames_without_the_athlete():
+    masks = np.zeros((3, 20, 30), bool)
+    masks[0, 2:10, 5:9] = True
+    masks[2, 4:12, 9:13] = True
+    b = sam3d_body.mask_boxes(masks)
+    assert list(b[0]) == [5, 2, 9, 10] and list(b[2]) == [9, 4, 13, 12]
+    assert list(b[1]) == [7, 3, 11, 11]  # interpolated
+
+
+def test_auto_falls_back_to_mediapipe_where_sam3d_body_is_not_set_up(monkeypatch):
+    monkeypatch.setattr(sam3d_body, "available", lambda: False)
+    assert sam3d_body.choose("auto") == "mediapipe" and sam3d_body.choose("mediapipe") == "mediapipe"
+    with pytest.raises(RuntimeError, match="setup_sam3d.sh"):
+        sam3d_body.choose("sam3d")
+    monkeypatch.setattr(sam3d_body, "available", lambda: True)
+    assert sam3d_body.choose("auto") == "sam3d"

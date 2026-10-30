@@ -213,6 +213,7 @@ else:
     subprocess.run(["git", "-C", R, "fetch", "-q", "origin", "{BRANCH}"], check=True)
     subprocess.run(["git", "-C", R, "checkout", "-q", "-B", "{BRANCH}", "FETCH_HEAD"], check=True)
 env = dict(os.environ, MUJOCO_GL="egl", A2H_SAM_PYTHON="/content/sam_env/bin/python",
+           A2H_SAM3D_PYTHON="/content/sam3d_env/bin/python", A2H_SAM3D_DIR="/content/sam-3d-body",
            A2H_OUTPUT_DIR="{REMOTE}/outputs", A2H_SECRETS_DIR="{REMOTE}/env", A2H_ASSETS_DIR=R + "/assets")
 subprocess.Popen(["python3", R + "/scripts/job.py", "{SESSION}", "--", "bash", "-c", {inner!r}], env=env,
                  start_new_session=True, cwd="/content", stdout=open("{REMOTE}/job_{SESSION}.out", "w"),

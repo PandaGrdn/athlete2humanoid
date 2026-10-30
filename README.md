@@ -17,7 +17,7 @@ Copying a video frame by frame is brittle. Monocular pose is noisy, human and ro
 ```mermaid
 flowchart LR
     V[Phone video] --> SAM[SAM 3.1<br/>track the person]
-    SAM --> POSE[MediaPipe 3D pose]
+    SAM --> POSE[SAM 3D Body 3D pose]
     POSE --> IK[Proportion-aware retarget<br/>G1 bone lengths, planted feet]
     SAM --> SIL[Silhouette video] --> VJ[V-JEPA 2<br/>video latent]
     MUSE[Muse<br/>skill reader]:::wip -.-> SPEC
@@ -32,7 +32,7 @@ flowchart LR
 ```
 
 1. **Track.** SAM 3.1 segments the person from a text prompt and keeps the main track ([`track.py`](track.py), [`sam_track.py`](sam_track.py)).
-2. **Retarget, in the robot's proportions.** MediaPipe 3D pose is rebuilt on the G1's own bone lengths with the person's bone directions, so joint angles carry over, and planted feet stay pinned. Joint-angle error is 3–10× lower than uniform scaling and foot sliding drops from 29 to 0.4 cm/s ([`retarget.py`](retarget.py), [`docs/RETARGET.md`](docs/RETARGET.md)).
+2. **Retarget, in the robot's proportions.** The 3D pose (SAM 3D Body on a GPU, MediaPipe otherwise; [`frontends/`](frontends/), fix 3 in [`docs/PIPELINE_ACCURACY.md`](docs/PIPELINE_ACCURACY.md)) is rebuilt on the G1's own bone lengths with the person's bone directions, so joint angles carry over, and planted feet stay pinned. Joint-angle error is 3–10× lower than uniform scaling and foot sliding drops from 29 to 0.4 cm/s ([`retarget.py`](retarget.py), [`docs/RETARGET.md`](docs/RETARGET.md)).
 3. **Read off the action.** The retarget's kinematics become an ordered **task spec**: stand → squat → jump → land → stand, with goals in G1 units (squat depth, jump clearance clipped to what the G1 can do). Muse's skill spec names the stages and is cross-checked ([`skill/task.py`](skill/task.py), [`docs/SEMANTIC_REWARD.md`](docs/SEMANTIC_REWARD.md)).
 4. **Reward the action.** A batched reward machine pays potential-based progress toward the current stage, a bonus when it's done (for a jump, scaled by a target height band) and a finish bonus, all gated on staying upright. The stage is part of the policy's observation. Timing and poses are free.
 5. **Look like the video, where it matters.** V-JEPA 2's latent, distilled into a fast reward net, is a weak style term, weighted in time by **goal relevance**: physics attribution of which moments and body parts change the outcome (the push before takeoff, the landing; not arm-waving for the crowd) ([`skill/importance.py`](skill/importance.py), [`docs/GOAL_RELEVANCE.md`](docs/GOAL_RELEVANCE.md)).
@@ -143,7 +143,7 @@ python3 scripts/remote_run.py robust --reuse outputs/remote_latent_final --targe
 |---|---|
 | [`pipeline.py`](pipeline.py) | Video to G1 motion CSV + side-by-side preview |
 | [`track.py`](track.py), [`sam_track.py`](sam_track.py) | SAM 3.1 tracking (its own Python 3.12 env, since sam3 pins `numpy<2`) |
-| [`pose.py`](pose.py), [`retarget.py`](retarget.py) | MediaPipe 3D pose; proportion-aware mink IK onto the G1, mjlab CSV export |
+| [`frontends/`](frontends/), [`pose.py`](pose.py), [`retarget.py`](retarget.py) | 3D pose (SAM 3D Body, MediaPipe fallback); proportion-aware mink IK onto the G1, mjlab CSV export |
 | [`skill/`](skill) | Task spec + reward machine (`task.py`), goal relevance (`importance.py`), commanded targets (`commands.py`) |
 | [`latent/`](latent) | Silhouettes, V-JEPA 2 wrapper and predictor diagnostic, motion bank, distillation, reward net |
 | [`mjlab_tasks.py`](mjlab_tasks.py) | A2H tasks: Hybrid, Latent, LatentPhase, Task, TaskPhase, TaskCmd; stability terms |

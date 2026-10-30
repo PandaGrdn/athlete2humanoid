@@ -7,14 +7,9 @@ turns that into the pipeline's (T, 33, 3) human trajectory). Fix 3 of docs/PIPEL
 
 `modal run` is ephemeral: the app stops when the call returns. The checkpoint (facebook/sam-3d-body-dinov3, gated:
 accept its licence on Hugging Face first) downloads inside the container with the HF_TOKEN from .env, passed as an
-in-memory secret. Per clip:
-
-1. the frames, decoded with mediapy as pipeline.py does (feed the 30 fps / 720p resample for films, as
-   experiments/process_clips.py does, so frame t matches the stored human.npy);
-2. the athlete's box per frame: torchvision's COCO Faster R-CNN, the person box that overlaps the previous one most
-   (the first frame takes the highest-scoring person). All three A/B clips have one person;
-3. one focal length for the clip (static camera): MoGe-2's, median over 8 frames;
-4. SAM 3D Body (body decoder, no hand refinement) on each frame with that box and focal.
+in-memory secret. The frames are decoded with mediapy as pipeline.py does (feed the 30 fps / 720p resample for films,
+as experiments/process_clips.py does, so frame t matches the stored human.npy); frontends/sam3d_run.py does the rest
+(boxes from a person detector, one MoGe-2 focal length, SAM 3D Body per frame).
 """
 
 import io
@@ -23,8 +18,8 @@ from pathlib import Path
 
 import modal
 
-SAM3D_COMMIT = "b5c765a0d89d789985e186d396315e7590887b94"  # facebookresearch/sam-3d-body
-REPO = "facebook/sam-3d-body-dinov3"
+HERE = Path(__file__).resolve().parent
+SAM3D_COMMIT = "b5c765a0d89d789985e186d396315e7590887b94"  # facebookresearch/sam-3d-body, as in sam3d_run.py
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -33,20 +28,14 @@ image = (
     .pip_install("torch==2.7.1", "torchvision==0.22.1", "pytorch-lightning", "yacs", "scikit-image", "einops", "timm", "dill", "pandas", "rich", "hydra-core",
                  "pyrootutils", "webdataset", "networkx==3.2.1", "roma", "joblib", "loguru", "optree", "fvcore",
                  "huggingface_hub", "opencv-python-headless", "braceexpand", "omegaconf", "mediapy", "termcolor",
-                 "git+https://github.com/microsoft/MoGe.git")
+                 "git+https://github.com/microsoft/MoGe.git@74fbce054ebed49800de42d0ad0e83495065719a")
     .run_commands(f"git clone -q https://github.com/facebookresearch/sam-3d-body.git /opt/sam3d && "
                   f"git -C /opt/sam3d checkout -q {SAM3D_COMMIT}")
-    .env({"PYTHONPATH": "/opt/sam3d", "MOMENTUM_ENABLED": "0"})  # set = use the TorchScript MHR in the checkpoint
+    .env({"PYTHONPATH": "/opt/a2h", "A2H_SAM3D_DIR": "/opt/sam3d"})
+    .add_local_file(HERE / "sam3d_run.py", "/opt/a2h/sam3d_run.py")  # the inference itself, shared with pipeline.py
 )
 app = modal.App("a2h-frontend-ab", image=image)
 vol = modal.Volume.from_name("a2h-frontend-ab", create_if_missing=True)  # results survive a dropped client
-
-
-def _iou(a, b):
-    x0, y0 = max(a[0], b[0]), max(a[1], b[1])
-    x1, y1 = min(a[2], b[2]), min(a[3], b[3])
-    inter = max(0.0, x1 - x0) * max(0.0, y1 - y0)
-    return inter / ((a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter + 1e-9)
 
 
 @app.function(gpu="L40S", timeout=3600, cpu=8, memory=32768, volumes={"/vol": vol})
@@ -64,67 +53,19 @@ def _stem(name):
 
 def run_clip(name: str, video: bytes, hf_token: str) -> bytes:
     import tempfile
-    import time
 
     import mediapy
     import numpy as np
-    import torch
-    import torchvision
+    import sam3d_run
 
     os.environ["HF_TOKEN"] = hf_token
-    t0 = time.time()
     with tempfile.NamedTemporaryFile(suffix=Path(name).suffix) as f:
         f.write(video)
         f.flush()
         frames = np.asarray(mediapy.read_video(f.name))
-    T, H, W = frames.shape[:3]
-    print(f"{name}: {T} frames {W}x{H}", flush=True)
-
-    # 2. the athlete's box
-    det = torchvision.models.detection.fasterrcnn_resnet50_fpn_v2(weights="DEFAULT").cuda().eval()
-    boxes, scores, prev = np.zeros((T, 4)), np.zeros(T), None
-    with torch.no_grad():
-        for t in range(T):
-            x = torch.from_numpy(frames[t]).permute(2, 0, 1).float().cuda() / 255
-            o = det([x])[0]
-            keep = (o["labels"] == 1) & (o["scores"] > 0.3)
-            b, s = o["boxes"][keep].cpu().numpy(), o["scores"][keep].cpu().numpy()
-            if len(b) == 0:
-                boxes[t], scores[t] = (prev if prev is not None else [0, 0, W, H]), 0.0
-                continue
-            i = int(np.argmax(s)) if prev is None else int(np.argmax([_iou(prev, bb) + 1e-3 * ss for bb, ss in zip(b, s)]))
-            boxes[t], scores[t], prev = b[i], s[i], b[i]
-    del det
-    print(f"boxes: person found in {(scores > 0).mean():.0%} of frames ({time.time() - t0:.0f} s)", flush=True)
-
-    # 3. one focal length for the clip
-    from tools.build_fov_estimator import FOVEstimator
-
-    fov = FOVEstimator(name="moge2", device="cuda")
-    focals = [float(fov.get_cam_intrinsics(frames[t])[0, 1, 1]) for t in np.linspace(0, T - 1, 8).astype(int)]
-    focal = float(np.median(focals))
-    del fov
-    cam_int = torch.tensor([[[focal, 0, W / 2], [0, focal, H / 2], [0, 0, 1]]], dtype=torch.float32)
-    print(f"focal {focal:.0f} px (8 frames: {min(focals):.0f}-{max(focals):.0f}; default would be {np.hypot(W, H):.0f})", flush=True)
-
-    # 4. SAM 3D Body per frame
-    from sam_3d_body import SAM3DBodyEstimator, load_sam_3d_body_hf
-
-    model, cfg = load_sam_3d_body_hf(REPO)
-    est = SAM3DBodyEstimator(sam_3d_body_model=model, model_cfg=cfg)
-    keys = {"kp3d": "pred_keypoints_3d", "kp2d": "pred_keypoints_2d", "cam_t": "pred_cam_t", "joints": "pred_joint_coords",
-            "global_rot": "global_rot", "body_pose": "body_pose_params", "scale": "scale_params", "shape": "shape_params"}
-    out = {k: [] for k in keys}
-    for t in range(T):
-        r = est.process_one_image(frames[t], bboxes=boxes[t][None], cam_int=cam_int, inference_type="body")[0]
-        for k, src in keys.items():
-            out[k].append(np.asarray(r[src], np.float32))
-        if t % 20 == 0:
-            print(f"  frame {t}/{T} ({time.time() - t0:.0f} s)", flush=True)
+    print(f"{name}: {len(frames)} frames {frames.shape[2]}x{frames.shape[1]}", flush=True)
     buf = io.BytesIO()
-    np.savez_compressed(buf, **{k: np.stack(v) for k, v in out.items()}, boxes=boxes, box_scores=scores,
-                        focal=focal, focals=np.array(focals), image_wh=np.array([W, H]), repo=REPO, commit=SAM3D_COMMIT)
-    print(f"{name}: done in {time.time() - t0:.0f} s", flush=True)
+    np.savez_compressed(buf, **sam3d_run.estimate(frames, log=lambda m: print(m, flush=True)))
     return buf.getvalue()
 
 
