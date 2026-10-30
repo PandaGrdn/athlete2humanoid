@@ -517,11 +517,14 @@ def launch(a):
                     try:
                         mr.download(remote, mr.out / local)
                     except Exception as e:  # noqa: BLE001
+                        (mr.out / local).unlink(missing_ok=True)  # download() opens the file before reading
                         mr.log(f"could not download {local}: {str(e)[-200:]}")
                 if (mr.out / "results.tar.gz").exists():
                     with tarfile.open(mr.out / "results.tar.gz") as tar:
                         tar.extractall(mr.out, filter="data")
                     mr.log("unpacked results.tar.gz")
+                if st == "failed" and not (mr.out / "results.tar.gz").exists():
+                    mr.log(f"failed: rerun with --clips {clip}")
                 mr.cleanup()
                 del jobs[clip]
     except KeyboardInterrupt:
