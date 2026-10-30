@@ -1,7 +1,7 @@
 """Run SAM 3.1 on a video and save the athlete's masks. Runs in SAM's own environment
 (Python 3.12, numpy<2), which pipeline.py calls as a subprocess:
 
-    $A2H_SAM_PYTHON sam_track.py clip.mp4 --prompt athlete --out masks.npz
+    $A2H_SAM_PYTHON sam_track.py clip.mp4 --prompt athlete --out masks.npz [--athlete 640,360]
 """
 
 import argparse
@@ -15,6 +15,7 @@ if __name__ == "__main__":
     ap.add_argument("video")
     ap.add_argument("--prompt", default="athlete")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--athlete", help="pick the athlete on the first frame: x,y | x0,y0,x1,y1 | index (athlete.py)")
     a = ap.parse_args()
     # "athlete" can miss an ordinary person in a home video, or latch onto something seen only
     # briefly; fall back to "person" and keep whichever prompt tracks someone most of the time.
@@ -22,7 +23,7 @@ if __name__ == "__main__":
     for prompt in dict.fromkeys([a.prompt, "person"]):
         outputs = track.track(a.video, prompt=prompt)
         try:
-            masks, obj_id = track.main_track_masks(outputs, max(outputs) + 1)
+            masks, obj_id = track.main_track_masks(outputs, max(outputs) + 1, select=a.athlete)
         except RuntimeError as e:
             print(f"prompt {prompt!r}: {e}")
             continue
