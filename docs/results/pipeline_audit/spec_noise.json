@@ -1,0 +1,242 @@
+{
+ "squat_jump": {
+  "stages": 12,
+  "2cm": {
+   "as_is": "12.0/12 pass 100%",
+   "no_hold": "12.0/12 pass 100%",
+   "tol_x2": "12.0/12 pass 100%",
+   "tol_x3": "12.0/12 pass 100%",
+   "no_hold_tol_x2": "12.0/12 pass 100%"
+  },
+  "4cm": {
+   "as_is": "12.0/12 pass 100%",
+   "no_hold": "12.0/12 pass 100%",
+   "tol_x2": "12.0/12 pass 100%",
+   "tol_x3": "12.0/12 pass 100%",
+   "no_hold_tol_x2": "12.0/12 pass 100%"
+  },
+  "6cm": {
+   "as_is": "12.0/12 pass 100%",
+   "no_hold": "12.0/12 pass 100%",
+   "tol_x2": "12.0/12 pass 100%",
+   "tol_x3": "12.0/12 pass 100%",
+   "no_hold_tol_x2": "12.0/12 pass 100%"
+  }
+ },
+ "squat": {
+  "stages": 9,
+  "2cm": {
+   "as_is": "9.0/9 pass 100%",
+   "no_hold": "9.0/9 pass 100%",
+   "tol_x2": "9.0/9 pass 100%",
+   "tol_x3": "9.0/9 pass 100%",
+   "no_hold_tol_x2": "9.0/9 pass 100%"
+  },
+  "4cm": {
+   "as_is": "9.0/9 pass 100%",
+   "no_hold": "9.0/9 pass 100%",
+   "tol_x2": "9.0/9 pass 100%",
+   "tol_x3": "9.0/9 pass 100%",
+   "no_hold_tol_x2": "9.0/9 pass 100%"
+  },
+  "6cm": {
+   "as_is": "9.0/9 pass 100%",
+   "no_hold": "9.0/9 pass 100%",
+   "tol_x2": "9.0/9 pass 100%",
+   "tol_x3": "9.0/9 pass 100%",
+   "no_hold_tol_x2": "9.0/9 pass 100%"
+  }
+ },
+ "lunge": {
+  "stages": 16,
+  "2cm": {
+   "as_is": "13.4/16 pass 75%",
+   "no_hold": "16.0/16 pass 100%",
+   "tol_x2": "16.0/16 pass 100%",
+   "tol_x3": "16.0/16 pass 100%",
+   "no_hold_tol_x2": "16.0/16 pass 100%"
+  },
+  "4cm": {
+   "as_is": "7.5/16 pass 25%",
+   "no_hold": "16.0/16 pass 100%",
+   "tol_x2": "16.0/16 pass 100%",
+   "tol_x3": "16.0/16 pass 100%",
+   "no_hold_tol_x2": "16.0/16 pass 100%"
+  },
+  "6cm": {
+   "as_is": "8.5/16 pass 25%",
+   "no_hold": "13.1/16 pass 75%",
+   "tol_x2": "16.0/16 pass 100%",
+   "tol_x3": "16.0/16 pass 100%",
+   "no_hold_tol_x2": "16.0/16 pass 100%"
+  }
+ },
+ "arms": {
+  "stages": 3,
+  "2cm": {
+   "as_is": "3.0/3 pass 100%",
+   "no_hold": "3.0/3 pass 100%",
+   "tol_x2": "3.0/3 pass 100%",
+   "tol_x3": "3.0/3 pass 100%",
+   "no_hold_tol_x2": "3.0/3 pass 100%"
+  },
+  "4cm": {
+   "as_is": "3.0/3 pass 100%",
+   "no_hold": "3.0/3 pass 100%",
+   "tol_x2": "3.0/3 pass 100%",
+   "tol_x3": "3.0/3 pass 100%",
+   "no_hold_tol_x2": "3.0/3 pass 100%"
+  },
+  "6cm": {
+   "as_is": "3.0/3 pass 100%",
+   "no_hold": "3.0/3 pass 100%",
+   "tol_x2": "3.0/3 pass 100%",
+   "tol_x3": "3.0/3 pass 100%",
+   "no_hold_tol_x2": "3.0/3 pass 100%"
+  }
+ },
+ "front_kick": {
+  "stages": 6,
+  "2cm": {
+   "as_is": "6.0/6 pass 100%",
+   "no_hold": "6.0/6 pass 100%",
+   "tol_x2": "6.0/6 pass 100%",
+   "tol_x3": "6.0/6 pass 100%",
+   "no_hold_tol_x2": "6.0/6 pass 100%"
+  },
+  "4cm": {
+   "as_is": "5.4/6 pass 88%",
+   "no_hold": "6.0/6 pass 100%",
+   "tol_x2": "6.0/6 pass 100%",
+   "tol_x3": "6.0/6 pass 100%",
+   "no_hold_tol_x2": "6.0/6 pass 100%"
+  },
+  "6cm": {
+   "as_is": "6.0/6 pass 100%",
+   "no_hold": "6.0/6 pass 100%",
+   "tol_x2": "6.0/6 pass 100%",
+   "tol_x3": "6.0/6 pass 100%",
+   "no_hold_tol_x2": "6.0/6 pass 100%"
+  }
+ },
+ "jumping_jacks": {
+  "stages": 13,
+  "2cm": {
+   "as_is": "13.0/13 pass 100%",
+   "no_hold": "13.0/13 pass 100%",
+   "tol_x2": "13.0/13 pass 100%",
+   "tol_x3": "13.0/13 pass 100%",
+   "no_hold_tol_x2": "13.0/13 pass 100%"
+  },
+  "4cm": {
+   "as_is": "13.0/13 pass 100%",
+   "no_hold": "13.0/13 pass 100%",
+   "tol_x2": "13.0/13 pass 100%",
+   "tol_x3": "13.0/13 pass 100%",
+   "no_hold_tol_x2": "13.0/13 pass 100%"
+  },
+  "6cm": {
+   "as_is": "13.0/13 pass 100%",
+   "no_hold": "13.0/13 pass 100%",
+   "tol_x2": "13.0/13 pass 100%",
+   "tol_x3": "13.0/13 pass 100%",
+   "no_hold_tol_x2": "13.0/13 pass 100%"
+  }
+ },
+ "punches": {
+  "stages": 7,
+  "2cm": {
+   "as_is": "7.0/7 pass 100%",
+   "no_hold": "7.0/7 pass 100%",
+   "tol_x2": "7.0/7 pass 100%",
+   "tol_x3": "7.0/7 pass 100%",
+   "no_hold_tol_x2": "7.0/7 pass 100%"
+  },
+  "4cm": {
+   "as_is": "6.8/7 pass 88%",
+   "no_hold": "7.0/7 pass 100%",
+   "tol_x2": "7.0/7 pass 100%",
+   "tol_x3": "7.0/7 pass 100%",
+   "no_hold_tol_x2": "7.0/7 pass 100%"
+  },
+  "6cm": {
+   "as_is": "5.9/7 pass 25%",
+   "no_hold": "6.5/7 pass 50%",
+   "tol_x2": "6.9/7 pass 88%",
+   "tol_x3": "7.0/7 pass 100%",
+   "no_hold_tol_x2": "6.8/7 pass 75%"
+  }
+ },
+ "shot_put": {
+  "stages": 4,
+  "2cm": {
+   "as_is": "3.1/4 pass 62%",
+   "no_hold": "4.0/4 pass 100%",
+   "tol_x2": "4.0/4 pass 100%",
+   "tol_x3": "4.0/4 pass 100%",
+   "no_hold_tol_x2": "4.0/4 pass 100%"
+  },
+  "4cm": {
+   "as_is": "2.6/4 pass 50%",
+   "no_hold": "3.4/4 pass 75%",
+   "tol_x2": "4.0/4 pass 100%",
+   "tol_x3": "4.0/4 pass 100%",
+   "no_hold_tol_x2": "4.0/4 pass 100%"
+  },
+  "6cm": {
+   "as_is": "2.8/4 pass 50%",
+   "no_hold": "4.0/4 pass 100%",
+   "tol_x2": "4.0/4 pass 100%",
+   "tol_x3": "4.0/4 pass 100%",
+   "no_hold_tol_x2": "4.0/4 pass 100%"
+  }
+ },
+ "discus": {
+  "stages": 2,
+  "2cm": {
+   "as_is": "2.0/2 pass 100%",
+   "no_hold": "2.0/2 pass 100%",
+   "tol_x2": "2.0/2 pass 100%",
+   "tol_x3": "2.0/2 pass 100%",
+   "no_hold_tol_x2": "2.0/2 pass 100%"
+  },
+  "4cm": {
+   "as_is": "2.0/2 pass 100%",
+   "no_hold": "2.0/2 pass 100%",
+   "tol_x2": "2.0/2 pass 100%",
+   "tol_x3": "2.0/2 pass 100%",
+   "no_hold_tol_x2": "2.0/2 pass 100%"
+  },
+  "6cm": {
+   "as_is": "2.0/2 pass 100%",
+   "no_hold": "2.0/2 pass 100%",
+   "tol_x2": "2.0/2 pass 100%",
+   "tol_x3": "2.0/2 pass 100%",
+   "no_hold_tol_x2": "2.0/2 pass 100%"
+  }
+ },
+ "hurdles": {
+  "stages": 4,
+  "2cm": {
+   "as_is": "2.0/4 pass 0%",
+   "no_hold": "2.0/4 pass 0%",
+   "tol_x2": "2.0/4 pass 0%",
+   "tol_x3": "2.0/4 pass 0%",
+   "no_hold_tol_x2": "2.0/4 pass 0%"
+  },
+  "4cm": {
+   "as_is": "2.0/4 pass 0%",
+   "no_hold": "2.0/4 pass 0%",
+   "tol_x2": "2.0/4 pass 0%",
+   "tol_x3": "2.0/4 pass 0%",
+   "no_hold_tol_x2": "2.0/4 pass 0%"
+  },
+  "6cm": {
+   "as_is": "2.0/4 pass 0%",
+   "no_hold": "2.0/4 pass 0%",
+   "tol_x2": "2.0/4 pass 0%",
+   "tol_x3": "2.0/4 pass 0%",
+   "no_hold_tol_x2": "2.0/4 pass 0%"
+  }
+ }
+}

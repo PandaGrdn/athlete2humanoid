@@ -1,0 +1,875 @@
+{
+ "squat_jump": {
+  "summary": "7 key moments, 2 jumps: ready -> crouch, right hand forward -> jump -> land -> crouch, left foot down -> right hand back, right foot back -> crouch -> rise, left hand back -> jump -> land -> crouch, left hand forward -> rise (finish)",
+  "stages": 12,
+  "poses": 7,
+  "required": 8,
+  "flights": 2,
+  "rdp_eps_cm": 4.8,
+  "down_ref_cm": 5.0,
+  "self_check": "12/12",
+  "self_check_robot_thresholds": "12/12",
+  "noise_sigma_cm": {
+   "pelvis": 0.29,
+   "wrist": 0.36,
+   "foot_h": 0.07,
+   "ankle_xy": 0.46
+  },
+  "tol_over_sigma": {
+   "min": 13.9,
+   "median": 29.3
+  },
+  "wrist_tol_cm": {
+   "min": 10.0,
+   "median": 12.5,
+   "n": 8
+  },
+  "holds_s": [
+   0.217,
+   0.4,
+   0.4,
+   0.233,
+   0.067,
+   0.267,
+   0.233
+  ],
+  "ref_dwell_s": [
+   0.433,
+   2.167,
+   1.6,
+   0.467,
+   0.133,
+   0.533,
+   0.467
+  ],
+  "levels": [
+   1.74,
+   0.78,
+   1.37,
+   1.34,
+   1.16,
+   0.92,
+   99.0
+  ],
+  "optional": [
+   false,
+   true,
+   false,
+   true,
+   true,
+   true,
+   false
+  ],
+  "noise_stability": {
+   "1cm": {
+    "ref_passes": 0.67,
+    "stages_done_mean": 9.0,
+    "keymoments_matched": 0.79,
+    "keymoment_count_ratio": 0.98
+   },
+   "2cm": {
+    "ref_passes": 0.0,
+    "stages_done_mean": 1.0,
+    "keymoments_matched": 0.76,
+    "keymoment_count_ratio": 1.26
+   },
+   "3cm": {
+    "ref_passes": 0.0,
+    "stages_done_mean": 1.0,
+    "keymoments_matched": 0.69,
+    "keymoment_count_ratio": 1.38
+   }
+  },
+  "tempo_stages_done": {
+   "x0.7": 12,
+   "x1.4": 12
+  },
+  "names": [
+   "ready",
+   "crouch, right hand forward",
+   "jump",
+   "land",
+   "crouch, left foot down",
+   "right hand back, right foot back",
+   "crouch",
+   "rise, left hand back",
+   "jump",
+   "land",
+   "crouch, left hand forward",
+   "rise (finish)"
+  ]
+ },
+ "squat": {
+  "summary": "7 key moments: ready -> crouch, right hand forward -> rise, right hand back -> rise -> left hand down, right hand down -> crouch -> rise -> rise, right foot back -> finish",
+  "stages": 9,
+  "poses": 7,
+  "required": 5,
+  "flights": 0,
+  "rdp_eps_cm": 3.8,
+  "down_ref_cm": 5.0,
+  "self_check": "9/9",
+  "self_check_robot_thresholds": "9/9",
+  "noise_sigma_cm": {
+   "pelvis": 0.02,
+   "wrist": 0.17,
+   "foot_h": 0.05,
+   "ankle_xy": 0.16
+  },
+  "tol_over_sigma": {
+   "min": 63.8,
+   "median": 111.0
+  },
+  "wrist_tol_cm": {
+   "min": 10.0,
+   "median": 18.4,
+   "n": 10
+  },
+  "holds_s": [
+   0.4,
+   0.4,
+   0.4,
+   0.4,
+   0.4,
+   0.4,
+   0.4
+  ],
+  "ref_dwell_s": [
+   0.833,
+   2.6,
+   2.167,
+   4.2,
+   0.9,
+   1.967,
+   1.733
+  ],
+  "levels": [
+   2.25,
+   0.97,
+   1.02,
+   1.66,
+   1.9,
+   0.91,
+   99.0
+  ],
+  "optional": [
+   false,
+   true,
+   true,
+   true,
+   false,
+   true,
+   false
+  ],
+  "noise_stability": {
+   "1cm": {
+    "ref_passes": 0.67,
+    "stages_done_mean": 7.8,
+    "keymoments_matched": 0.6,
+    "keymoment_count_ratio": 0.93
+   },
+   "2cm": {
+    "ref_passes": 0.0,
+    "stages_done_mean": 1.0,
+    "keymoments_matched": 0.64,
+    "keymoment_count_ratio": 1.83
+   },
+   "3cm": {
+    "ref_passes": 0.0,
+    "stages_done_mean": 1.0,
+    "keymoments_matched": 0.33,
+    "keymoment_count_ratio": 1.5
+   }
+  },
+  "tempo_stages_done": {
+   "x0.7": 9,
+   "x1.4": 9
+  },
+  "names": [
+   "ready",
+   "crouch, right hand forward",
+   "rise, right hand back",
+   "rise",
+   "left hand down, right hand down",
+   "crouch",
+   "rise",
+   "rise, right foot back",
+   "finish"
+  ]
+ },
+ "lunge": {
+  "summary": "15 key moments: ready -> right foot right, step forward -> crouch -> step forward, step right -> step back, left foot left -> rise, step left -> right foot back, step back -> left foot up, left foot forward -> left foot left, left foot forward -> crouch, left foot down -> rise, left foot up -> left foot back, right foot forward -> crouch, left foot back -> crouch, left hand back -> rise, turn left -> right foot left, left hand left (finish)",
+  "stages": 16,
+  "poses": 15,
+  "required": 4,
+  "flights": 0,
+  "rdp_eps_cm": 7.0,
+  "down_ref_cm": 15.0,
+  "self_check": "16/16",
+  "self_check_robot_thresholds": "16/16",
+  "noise_sigma_cm": {
+   "pelvis": 0.26,
+   "wrist": 0.38,
+   "foot_h": 0.16,
+   "ankle_xy": 0.55
+  },
+  "tol_over_sigma": {
+   "min": 15.7,
+   "median": 35.8
+  },
+  "wrist_tol_cm": {
+   "min": 14.1,
+   "median": 20.0,
+   "n": 6
+  },
+  "holds_s": [
+   0.333,
+   0.1,
+   0.083,
+   0.4,
+   0.4,
+   0.4,
+   0.183,
+   0.2,
+   0.383,
+   0.4,
+   0.4,
+   0.183,
+   0.333,
+   0.4,
+   0.134
+  ],
+  "ref_dwell_s": [
+   0.667,
+   0.2,
+   0.167,
+   1.033,
+   2.033,
+   2.0,
+   0.367,
+   0.4,
+   0.767,
+   1.9,
+   3.767,
+   0.367,
+   0.667,
+   1.0,
+   0.533
+  ],
+  "levels": [
+   0.99,
+   1.17,
+   1.84,
+   1.42,
+   1.39,
+   0.95,
+   0.7,
+   0.71,
+   1.53,
+   0.99,
+   1.02,
+   0.95,
+   1.83,
+   1.09,
+   99.0
+  ],
+  "optional": [
+   true,
+   true,
+   false,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   false,
+   true,
+   false
+  ],
+  "noise_stability": {
+   "1cm": {
+    "ref_passes": 0.67,
+    "stages_done_mean": 12.0,
+    "keymoments_matched": 0.86,
+    "keymoment_count_ratio": 0.97
+   },
+   "2cm": {
+    "ref_passes": 0.0,
+    "stages_done_mean": 3.0,
+    "keymoments_matched": 0.71,
+    "keymoment_count_ratio": 0.92
+   },
+   "3cm": {
+    "ref_passes": 0.0,
+    "stages_done_mean": 1.7,
+    "keymoments_matched": 0.58,
+    "keymoment_count_ratio": 0.86
+   }
+  },
+  "tempo_stages_done": {
+   "x0.7": 16,
+   "x1.4": 3
+  },
+  "names": [
+   "ready",
+   "right foot right, step forward",
+   "crouch",
+   "step forward, step right",
+   "step back, left foot left",
+   "rise, step left",
+   "right foot back, step back",
+   "left foot up, left foot forward",
+   "left foot left, left foot forward",
+   "crouch, left foot down",
+   "rise, left foot up",
+   "left foot back, right foot forward",
+   "crouch, left foot back",
+   "crouch, left hand back",
+   "rise, turn left",
+   "right foot left, left hand left (finish)"
+  ]
+ },
+ "arms": {
+  "summary": "1 key moment: ready -> left hand down, right hand down -> finish",
+  "stages": 3,
+  "poses": 1,
+  "required": 3,
+  "flights": 0,
+  "rdp_eps_cm": 3.1,
+  "down_ref_cm": 5.0,
+  "self_check": "3/3",
+  "self_check_robot_thresholds": "3/3",
+  "noise_sigma_cm": {
+   "pelvis": 0.04,
+   "wrist": 0.17,
+   "foot_h": 0.06,
+   "ankle_xy": 0.11
+  },
+  "tol_over_sigma": {
+   "min": 159.9,
+   "median": 163.2
+  },
+  "wrist_tol_cm": {
+   "min": 20.0,
+   "median": 20.5,
+   "n": 2
+  },
+  "holds_s": [
+   0.4
+  ],
+  "ref_dwell_s": [
+   1.5
+  ],
+  "levels": [
+   99.0
+  ],
+  "optional": [
+   false
+  ],
+  "noise_stability": {
+   "1cm": {
+    "ref_passes": 1.0,
+    "stages_done_mean": 3.0,
+    "keymoments_matched": 1.0,
+    "keymoment_count_ratio": 1.17
+   },
+   "2cm": {
+    "ref_passes": 0.33,
+    "stages_done_mean": 1.7,
+    "keymoments_matched": 1.0,
+    "keymoment_count_ratio": 5.33
+   },
+   "3cm": {
+    "ref_passes": 0.0,
+    "stages_done_mean": 1.0,
+    "keymoments_matched": 1.0,
+    "keymoment_count_ratio": 8.33
+   }
+  },
+  "tempo_stages_done": {
+   "x0.7": 3,
+   "x1.4": 3
+  },
+  "names": [
+   "ready",
+   "left hand down, right hand down",
+   "finish"
+  ]
+ },
+ "front_kick": {
+  "summary": "4 key moments: ready -> right foot up, right foot forward -> right foot down, right foot back -> right foot up, right foot right -> right foot down, right foot left -> finish",
+  "stages": 6,
+  "poses": 4,
+  "required": 5,
+  "flights": 0,
+  "rdp_eps_cm": 6.6,
+  "down_ref_cm": 15.0,
+  "self_check": "6/6",
+  "self_check_robot_thresholds": "6/6",
+  "noise_sigma_cm": {
+   "pelvis": 0.09,
+   "wrist": 0.45,
+   "foot_h": 0.12,
+   "ankle_xy": 0.47
+  },
+  "tol_over_sigma": {
+   "min": 33.9,
+   "median": 51.7
+  },
+  "wrist_tol_cm": null,
+  "holds_s": [
+   0.15,
+   0.4,
+   0.183,
+   0.4
+  ],
+  "ref_dwell_s": [
+   0.3,
+   2.067,
+   0.367,
+   0.967
+  ],
+  "levels": [
+   2.59,
+   2.61,
+   2.45,
+   99.0
+  ],
+  "optional": [
+   false,
+   false,
+   true,
+   false
+  ],
+  "noise_stability": {
+   "1cm": {
+    "ref_passes": 0.67,
+    "stages_done_mean": 4.5,
+    "keymoments_matched": 1.0,
+    "keymoment_count_ratio": 1.08
+   },
+   "2cm": {
+    "ref_passes": 0.0,
+    "stages_done_mean": 1.2,
+    "keymoments_matched": 1.0,
+    "keymoment_count_ratio": 1.5
+   },
+   "3cm": {
+    "ref_passes": 0.0,
+    "stages_done_mean": 1.3,
+    "keymoments_matched": 1.0,
+    "keymoment_count_ratio": 2.12
+   }
+  },
+  "tempo_stages_done": {
+   "x0.7": 6,
+   "x1.4": 6
+  },
+  "names": [
+   "ready",
+   "right foot up, right foot forward",
+   "right foot down, right foot back",
+   "right foot up, right foot right",
+   "right foot down, right foot left",
+   "finish"
+  ]
+ },
+ "jumping_jacks": {
+  "summary": "10 key moments, 1 jump: ready -> right hand up, left hand up -> right hand down, left hand down -> right hand up, left hand up -> rise, right hand down -> left hand down, crouch -> jump -> land -> right hand down, left hand down -> crouch, right hand up -> left hand down, right hand down -> left hand up, right hand up -> right hand down, left hand down (finish)",
+  "stages": 13,
+  "poses": 10,
+  "required": 6,
+  "flights": 1,
+  "rdp_eps_cm": 6.8,
+  "down_ref_cm": 7.7,
+  "self_check": "13/13",
+  "self_check_robot_thresholds": "13/13",
+  "noise_sigma_cm": {
+   "pelvis": 1.14,
+   "wrist": 2.91,
+   "foot_h": 2.1,
+   "ankle_xy": 1.03
+  },
+  "tol_over_sigma": {
+   "min": 2.9,
+   "median": 5.8
+  },
+  "wrist_tol_cm": {
+   "min": 10.0,
+   "median": 18.4,
+   "n": 31
+  },
+  "holds_s": [
+   0.183,
+   0.167,
+   0.167,
+   0.083,
+   0.083,
+   0.05,
+   0.117,
+   0.167,
+   0.183,
+   0.167
+  ],
+  "ref_dwell_s": [
+   0.367,
+   0.333,
+   0.333,
+   0.167,
+   0.167,
+   0.1,
+   0.233,
+   0.333,
+   0.367,
+   0.333
+  ],
+  "levels": [
+   1.79,
+   1.58,
+   1.31,
+   0.95,
+   1.22,
+   1.12,
+   1.28,
+   1.59,
+   1.58,
+   99.0
+  ],
+  "optional": [
+   false,
+   true,
+   true,
+   true,
+   true,
+   true,
+   true,
+   false,
+   true,
+   false
+  ],
+  "noise_stability": {
+   "1cm": {
+    "ref_passes": 1.0,
+    "stages_done_mean": 13.0,
+    "keymoments_matched": 0.52,
+    "keymoment_count_ratio": 0.6
+   },
+   "2cm": {
+    "ref_passes": 0.0,
+    "stages_done_mean": 4.0,
+    "keymoments_matched": 0.78,
+    "keymoment_count_ratio": 1.2
+   },
+   "3cm": {
+    "ref_passes": 0.0,
+    "stages_done_mean": 1.3,
+    "keymoments_matched": 0.67,
+    "keymoment_count_ratio": 1.02
+   }
+  },
+  "tempo_stages_done": {
+   "x0.7": 13,
+   "x1.4": 13
+  },
+  "names": [
+   "ready",
+   "right hand up, left hand up",
+   "right hand down, left hand down",
+   "right hand up, left hand up",
+   "rise, right hand down",
+   "left hand down, crouch",
+   "jump",
+   "land",
+   "right hand down, left hand down",
+   "crouch, right hand up",
+   "left hand down, right hand down",
+   "left hand up, right hand up",
+   "right hand down, left hand down (finish)"
+  ]
+ },
+ "punches": {
+  "summary": "6 key moments: ready -> right hand up, left hand up -> left hand right, left foot back -> left hand left, right hand right -> left hand right, right hand back -> left hand left, right hand down -> turn left, step forward (finish)",
+  "stages": 7,
+  "poses": 6,
+  "required": 4,
+  "flights": 0,
+  "rdp_eps_cm": 5.3,
+  "down_ref_cm": 5.0,
+  "self_check": "7/7",
+  "self_check_robot_thresholds": "7/7",
+  "noise_sigma_cm": {
+   "pelvis": 0.12,
+   "wrist": 0.66,
+   "foot_h": 0.16,
+   "ankle_xy": 0.37
+  },
+  "tol_over_sigma": {
+   "min": 8.7,
+   "median": 30.4
+  },
+  "wrist_tol_cm": {
+   "min": 10.0,
+   "median": 12.3,
+   "n": 17
+  },
+  "holds_s": [
+   0.4,
+   0.233,
+   0.25,
+   0.25,
+   0.117,
+   0.033
+  ],
+  "ref_dwell_s": [
+   4.867,
+   0.467,
+   0.5,
+   0.5,
+   0.233,
+   0.067
+  ],
+  "levels": [
+   1.02,
+   1.12,
+   1.1,
+   1.03,
+   1.68,
+   99.0
+  ],
+  "optional": [
+   true,
+   false,
+   true,
+   true,
+   false,
+   false
+  ],
+  "noise_stability": {
+   "1cm": {
+    "ref_passes": 1.0,
+    "stages_done_mean": 7.0,
+    "keymoments_matched": 0.72,
+    "keymoment_count_ratio": 0.86
+   },
+   "2cm": {
+    "ref_passes": 0.0,
+    "stages_done_mean": 2.8,
+    "keymoments_matched": 0.72,
+    "keymoment_count_ratio": 1.33
+   },
+   "3cm": {
+    "ref_passes": 0.0,
+    "stages_done_mean": 3.7,
+    "keymoments_matched": 0.61,
+    "keymoment_count_ratio": 1.89
+   }
+  },
+  "tempo_stages_done": {
+   "x0.7": 7,
+   "x1.4": 7
+  },
+  "names": [
+   "ready",
+   "right hand up, left hand up",
+   "left hand right, left foot back",
+   "left hand left, right hand right",
+   "left hand right, right hand back",
+   "left hand left, right hand down",
+   "turn left, step forward (finish)"
+  ]
+ },
+ "shot_put": {
+  "summary": "3 key moments: ready -> right foot back, turn right -> step forward, rise -> turn left, right foot forward (finish)",
+  "stages": 4,
+  "poses": 3,
+  "required": 4,
+  "flights": 0,
+  "rdp_eps_cm": 15.5,
+  "down_ref_cm": 15.0,
+  "self_check": "4/4",
+  "self_check_robot_thresholds": "4/4",
+  "noise_sigma_cm": {
+   "pelvis": 0.41,
+   "wrist": 0.83,
+   "foot_h": 0.36,
+   "ankle_xy": 0.97
+  },
+  "tol_over_sigma": {
+   "min": 19.0,
+   "median": 36.4
+  },
+  "wrist_tol_cm": {
+   "min": 26.2,
+   "median": 26.9,
+   "n": 3
+  },
+  "holds_s": [
+   0.317,
+   0.2,
+   0.4
+  ],
+  "ref_dwell_s": [
+   0.633,
+   2.933,
+   1.0
+  ],
+  "levels": [
+   0.99,
+   1.2,
+   99.0
+  ],
+  "optional": [
+   false,
+   false,
+   false
+  ],
+  "noise_stability": {
+   "1cm": {
+    "ref_passes": 0.83,
+    "stages_done_mean": 3.5,
+    "keymoments_matched": 0.83,
+    "keymoment_count_ratio": 1.0
+   },
+   "2cm": {
+    "ref_passes": 0.0,
+    "stages_done_mean": 1.5,
+    "keymoments_matched": 0.67,
+    "keymoment_count_ratio": 1.0
+   },
+   "3cm": {
+    "ref_passes": 0.0,
+    "stages_done_mean": 1.0,
+    "keymoments_matched": 0.28,
+    "keymoment_count_ratio": 1.06
+   }
+  },
+  "tempo_stages_done": {
+   "x0.7": 4,
+   "x1.4": 2
+  },
+  "names": [
+   "ready",
+   "right foot back, turn right",
+   "step forward, rise",
+   "turn left, right foot forward (finish)"
+  ]
+ },
+ "discus": {
+  "summary": "1 key moment: ready -> turn left, step left (finish)",
+  "stages": 2,
+  "poses": 1,
+  "required": 2,
+  "flights": 0,
+  "rdp_eps_cm": 27.4,
+  "down_ref_cm": 15.0,
+  "self_check": "2/2",
+  "self_check_robot_thresholds": "2/2",
+  "noise_sigma_cm": {
+   "pelvis": 0.45,
+   "wrist": 1.67,
+   "foot_h": 0.57,
+   "ankle_xy": 1.36
+  },
+  "tol_over_sigma": {
+   "min": 50.4,
+   "median": 51.0
+  },
+  "wrist_tol_cm": null,
+  "holds_s": [
+   0.4
+  ],
+  "ref_dwell_s": [
+   1.133
+  ],
+  "levels": [
+   99.0
+  ],
+  "optional": [
+   false
+  ],
+  "noise_stability": {
+   "1cm": {
+    "ref_passes": 1.0,
+    "stages_done_mean": 2.0,
+    "keymoments_matched": 1.0,
+    "keymoment_count_ratio": 1.0
+   },
+   "2cm": {
+    "ref_passes": 0.33,
+    "stages_done_mean": 1.5,
+    "keymoments_matched": 1.0,
+    "keymoment_count_ratio": 1.0
+   },
+   "3cm": {
+    "ref_passes": 0.0,
+    "stages_done_mean": 1.3,
+    "keymoments_matched": 1.0,
+    "keymoment_count_ratio": 1.0
+   }
+  },
+  "tempo_stages_done": {
+   "x0.7": 2,
+   "x1.4": 2
+  },
+  "names": [
+   "ready",
+   "turn left, step left (finish)"
+  ]
+ },
+ "hurdles": {
+  "summary": "0 key moments, 1 jump: ready -> jump -> land -> finish",
+  "stages": 4,
+  "poses": 0,
+  "required": 4,
+  "flights": 1,
+  "rdp_eps_cm": 35.5,
+  "down_ref_cm": 15.0,
+  "self_check": "2/4",
+  "self_check_robot_thresholds": "2/4",
+  "noise_sigma_cm": {
+   "pelvis": 0.84,
+   "wrist": 1.67,
+   "foot_h": 0.97,
+   "ankle_xy": 1.72
+  },
+  "tol_over_sigma": null,
+  "wrist_tol_cm": null,
+  "holds_s": [],
+  "ref_dwell_s": [],
+  "levels": [],
+  "optional": [],
+  "noise_stability": {
+   "1cm": {
+    "ref_passes": 0.0,
+    "stages_done_mean": 2.0,
+    "keymoments_matched": 0.0,
+    "keymoment_count_ratio": 0.0
+   },
+   "2cm": {
+    "ref_passes": 0.0,
+    "stages_done_mean": 1.7,
+    "keymoments_matched": 0.0,
+    "keymoment_count_ratio": 0.0
+   },
+   "3cm": {
+    "ref_passes": 0.0,
+    "stages_done_mean": 1.0,
+    "keymoments_matched": 0.0,
+    "keymoment_count_ratio": 0.0
+   }
+  },
+  "tempo_stages_done": {
+   "x0.7": 2,
+   "x1.4": 2
+  },
+  "names": [
+   "ready",
+   "jump",
+   "land",
+   "finish"
+  ]
+ }
+}
