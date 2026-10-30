@@ -20,7 +20,7 @@ FPS = 30.0
 
 def traj(segments, hands=None):
     """segments: [(seconds, pelvis_z_end, feet_z_end)] linearly interpolated from a 0.8 m stand
-    -> (T, 14, 3) body positions: torso 0.3 m above the pelvis, feet at 0.05 m + clearance."""
+    -> (T, 14, 3) body positions: torso 0.3 m and shoulders 0.4 m above the pelvis, feet at 0.05 m + clearance."""
     z, f = [0.8], [0.0]
     for sec, z1, f1 in segments:
         n = max(int(round(sec * FPS)), 1)
@@ -31,6 +31,8 @@ def traj(segments, hands=None):
     pos[:, :, 2] = z[:, None]
     pos[:, T.PELVIS, 2] = z
     pos[:, T.TORSO, 2] = z + 0.3
+    pos[:, [T.L_SHOULDER, T.R_SHOULDER], 2] = (z + 0.4)[:, None]  # the upright axis is pelvis -> shoulders
+    pos[:, T.L_SHOULDER, 1], pos[:, T.R_SHOULDER, 1] = 0.15, -0.15
     pos[:, [T.L_ANKLE, T.R_ANKLE], 2] = 0.05 + f[:, None]
     pos[:, T.L_ANKLE, 1], pos[:, T.R_ANKLE, 1] = 0.1, -0.1
     for h in (T.L_HAND, T.R_HAND):
