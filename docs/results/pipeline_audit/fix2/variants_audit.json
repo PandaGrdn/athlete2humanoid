@@ -1,17 +1,16 @@
 {
  "lunge": {
-  "kept": 21,
-  "dropped": 15,
+  "kept": 24,
+  "dropped": 12,
   "drop_reasons": {
-   "limits": 8,
-   "self-check": 7
+   "limits": 12
   },
   "base_flights": [],
   "kept_flights": 0,
   "kept_flights_unballistic": 0,
   "kept_variants_lost_a_flight": 0,
   "kept_variants_over_cap": 0,
-  "max_joint_speed_kept": 13.3,
+  "max_joint_speed_kept": 14.3,
   "pose_count_spread": [
    9,
    14,
@@ -64,6 +63,15 @@
     "poses": 15
    },
    {
+    "name": "o_t1_a0.85_w0.25",
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.5,
+    "limit_clipped": 0.0,
+    "poses": 15
+   },
+   {
     "name": "o_t1_a1",
     "flights": 0,
     "flight_ratios": [],
@@ -98,6 +106,15 @@
     "max_joint_speed": 11.3,
     "limit_clipped": 0.0,
     "poses": 14
+   },
+   {
+    "name": "o_t1.33_a1",
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 14.3,
+    "limit_clipped": 0.0,
+    "poses": 15
    },
    {
     "name": "o_t1.33_a1_w0.25",
@@ -197,6 +214,15 @@
     "max_joint_speed": 12.2,
     "limit_clipped": 0.0,
     "poses": 14
+   },
+   {
+    "name": "m_t1.33_a1",
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 14.3,
+    "limit_clipped": 0.0,
+    "poses": 15
    },
    {
     "name": "m_t1.33_a1_w0.25",
@@ -554,8 +580,7 @@
   "kept": 24,
   "dropped": 12,
   "drop_reasons": {
-   "limits": 6,
-   "self-check": 6
+   "limits": 12
   },
   "base_flights": [],
   "kept_flights": 0,

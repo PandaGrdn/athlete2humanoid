@@ -362,17 +362,21 @@ def calibrate(spec, calib):
     return out
 
 
-def fit_holds(spec, pos, fps, tries=8):
+def fit_holds(spec, pos, fps, tries=24):
     """The reference must complete its own spec. A hold it can't make (its dwell window started before the
-    previous stage let go, or the clip ends) is halved until it can; below 0.05 s it's dropped."""
+    previous stage let go, or the clip ends) is halved until it can; below 0.05 s it's dropped. When the stage it
+    is stuck at has no hold left, the culprit is an earlier one: a hold completed late delays the stages after it
+    and moves the next stage's root anchor, so the latest earlier pose hold is halved instead (variant-physics:
+    lunge variants at tempo 1.33 completed stage 2 at 4.0 s, not at its 1.4 s key moment)."""
     for _ in range(tries):
         sc = T.evaluate({**spec, "down": spec["down_ref"], "air": spec["air_ref"]}, pos, fps)
         n = sc["stages_completed"]
         if sc["success"] or n >= len(spec["stages"]):
             break
-        st = spec["stages"][n]
-        if st["kind"] != "pose" or not st.get("hold_s"):
-            break  # not a hold: leave it to the self-check to report
+        held = [i for i in range(n, 0, -1) if spec["stages"][i]["kind"] == "pose" and spec["stages"][i].get("hold_s")]
+        if not held:
+            break  # no hold left to shorten: leave it to the self-check to report
+        st = spec["stages"][held[0]]
         st["hold_s"] = round(st["hold_s"] / 2, 3) if st["hold_s"] >= 0.1 else 0.0
     return spec
 

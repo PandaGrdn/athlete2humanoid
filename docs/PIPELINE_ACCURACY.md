@@ -601,13 +601,13 @@ reproduce the GPU eval's (punches clean 0%, joint error 0.079 / 0.099 / 0.104 ra
 - The reward machine is the same one the task-first tasks train on (`mjlab_tasks.TaskReward`), so holds, the
   upright gate and the landing threshold also change their training reward; the stock and A2H tracking tasks do not
   use it. Existing task-first checkpoints were trained on the old machine.
-- `skill/variations.py`'s self-check filter uses the same `evaluate()` (`variants_audit.py`, unchanged
-  `variations.py`): the lunge keeps 21 of 36 TRAIN variants instead of 15 (self-check drops 13 -> 7). Of the 7, 4
-  also clip their joint limits and 3 fail only the self-check, all at the step ("left foot up, left foot forward",
-  tempo 1.33 or warped timing): the foot height is 2.2-3.3x its tolerance and never reached while the machine is in
-  that stage, i.e. the variant's foot passes its apex while the previous stage is still being completed. That is a
-  stage-ordering problem the holds don't cover; left for the variants fix. The shot put still drops 6 on the
-  self-check (root forward 1.2x), all of which also clip 9% of joint samples, so they go either way. Punches keeps
-  36/36 as before.
+- `skill/variations.py`'s self-check filter uses the same `evaluate()`. With main's `variations.py`
+  (`variants_audit.py`): no lunge or shot-put TRAIN variant fails its own spec any more (self-check drops: lunge
+  13 -> 0, shot put 6 -> 0), so the lunge keeps 24 of 36 instead of 15 and the shot put 24 of 36; what is left
+  dropped is the joint-limit filter (12 each). Punches keeps 36/36 as before. The last of these came from
+  `fit_holds`, after the variant-physics session found that the stage a failing variant is stuck at already has
+  its hold at 0: the culprit is an earlier stage's hold, completed late, which delays the later stages and moves
+  the next stage's root anchor. `fit_holds` now halves the latest earlier pose hold when the stuck stage has none
+  left, instead of stopping. The ten clips' own specs are unchanged by it (they pass their self-check first time).
 - What was not done: no Colab or GPU was used (mjlab 1.6.0 on CPU is the same version the Colab VMs install, at 16
   instead of 64 envs per policy); no V-JEPA scoring; no policy was retrained.
