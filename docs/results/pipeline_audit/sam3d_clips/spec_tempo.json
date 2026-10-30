@@ -1,0 +1,736 @@
+{
+ "squat_jump": {
+  "lean_max_deg": 43.5,
+  "gate_min": 1.0,
+  "keypose": {
+   "x0.7": {
+    "done": "12/12",
+    "pass": true,
+    "abandoned": [
+     {
+      "stage": 5,
+      "name": "right hand forward, crouch",
+      "kind": "pose",
+      "why": "skipped"
+     },
+     {
+      "stage": 6,
+      "name": "right hand back, right hand down",
+      "kind": "pose",
+      "why": "skipped",
+      "feature": "pelvis height",
+      "error_tol": 1.26,
+      "rms_tol": 0.42,
+      "reached": false
+     }
+    ]
+   },
+   "x1": {
+    "done": "12/12",
+    "pass": true,
+    "abandoned": [
+     {
+      "stage": 5,
+      "name": "right hand forward, crouch",
+      "kind": "pose",
+      "why": "skipped"
+     },
+     {
+      "stage": 6,
+      "name": "right hand back, right hand down",
+      "kind": "pose",
+      "why": "skipped",
+      "feature": "pelvis height",
+      "error_tol": 1.9,
+      "rms_tol": 0.88,
+      "reached": false
+     }
+    ]
+   },
+   "x1.4": {
+    "done": "12/12",
+    "pass": true,
+    "abandoned": []
+   }
+  },
+  "holds_s": [
+   0.267,
+   0.067,
+   0.267,
+   0.25,
+   0.25,
+   0.067,
+   0.267
+  ],
+  "stage_spec": {
+   "x0.7": {
+    "done": "9/9",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1": {
+    "done": "9/9",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1.4": {
+    "done": "9/9",
+    "pass": true,
+    "abandoned": []
+   }
+  }
+ },
+ "squat": {
+  "lean_max_deg": 34.5,
+  "gate_min": 1.0,
+  "keypose": {
+   "x0.7": {
+    "done": "6/6",
+    "pass": true,
+    "abandoned": [
+     {
+      "stage": 3,
+      "name": "crouch, right hand down",
+      "kind": "pose",
+      "why": "skipped"
+     }
+    ]
+   },
+   "x1": {
+    "done": "6/6",
+    "pass": true,
+    "abandoned": [
+     {
+      "stage": 3,
+      "name": "crouch, right hand down",
+      "kind": "pose",
+      "why": "skipped"
+     }
+    ]
+   },
+   "x1.4": {
+    "done": "6/6",
+    "pass": true,
+    "abandoned": [
+     {
+      "stage": 3,
+      "name": "crouch, right hand down",
+      "kind": "pose",
+      "why": "skipped"
+     }
+    ]
+   }
+  },
+  "holds_s": [
+   0.4,
+   0.4,
+   0.4,
+   0.4
+  ],
+  "stage_spec": {
+   "x0.7": {
+    "done": "5/5",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1": {
+    "done": "5/5",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1.4": {
+    "done": "5/5",
+    "pass": true,
+    "abandoned": []
+   }
+  }
+ },
+ "lunge": {
+  "lean_max_deg": 16.3,
+  "gate_min": 1.0,
+  "keypose": {
+   "x0.7": {
+    "done": "14/14",
+    "pass": true,
+    "abandoned": [
+     {
+      "stage": 3,
+      "name": "crouch, right hand up",
+      "kind": "pose",
+      "why": "skipped"
+     },
+     {
+      "stage": 6,
+      "name": "left foot up",
+      "kind": "pose",
+      "why": "skipped"
+     }
+    ]
+   },
+   "x1": {
+    "done": "14/14",
+    "pass": true,
+    "abandoned": [
+     {
+      "stage": 3,
+      "name": "crouch, right hand up",
+      "kind": "pose",
+      "why": "skipped"
+     },
+     {
+      "stage": 6,
+      "name": "left foot up",
+      "kind": "pose",
+      "why": "skipped"
+     }
+    ]
+   },
+   "x1.4": {
+    "done": "14/14",
+    "pass": true,
+    "abandoned": [
+     {
+      "stage": 3,
+      "name": "crouch, right hand up",
+      "kind": "pose",
+      "why": "skipped"
+     },
+     {
+      "stage": 6,
+      "name": "left foot up",
+      "kind": "pose",
+      "why": "skipped"
+     }
+    ]
+   }
+  },
+  "holds_s": [
+   0.333,
+   0.183,
+   0.4,
+   0.317,
+   0.15,
+   0.15,
+   0.183,
+   0.367,
+   0.4,
+   0.383,
+   0.367,
+   0.4,
+   0.1
+  ],
+  "stage_spec": {
+   "x0.7": {
+    "done": "7/7",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1": {
+    "done": "7/7",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1.4": {
+    "done": "7/7",
+    "pass": true,
+    "abandoned": []
+   }
+  }
+ },
+ "arms": {
+  "lean_max_deg": 7.4,
+  "gate_min": 1.0,
+  "keypose": {
+   "x0.7": {
+    "done": "3/3",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1": {
+    "done": "3/3",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1.4": {
+    "done": "3/3",
+    "pass": true,
+    "abandoned": []
+   }
+  },
+  "holds_s": [
+   0.4
+  ],
+  "stage_spec": {
+   "x0.7": {
+    "done": "1/1",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1": {
+    "done": "1/1",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1.4": {
+    "done": "1/1",
+    "pass": true,
+    "abandoned": []
+   }
+  }
+ },
+ "front_kick": {
+  "lean_max_deg": 34.3,
+  "gate_min": 1.0,
+  "keypose": {
+   "x0.7": {
+    "done": "6/6",
+    "pass": true,
+    "abandoned": [
+     {
+      "stage": 3,
+      "name": "right foot up, right foot forward",
+      "kind": "pose",
+      "why": "skipped"
+     }
+    ]
+   },
+   "x1": {
+    "done": "6/6",
+    "pass": true,
+    "abandoned": [
+     {
+      "stage": 3,
+      "name": "right foot up, right foot forward",
+      "kind": "pose",
+      "why": "skipped"
+     }
+    ]
+   },
+   "x1.4": {
+    "done": "6/6",
+    "pass": true,
+    "abandoned": [
+     {
+      "stage": 3,
+      "name": "right foot up, right foot forward",
+      "kind": "pose",
+      "why": "skipped"
+     }
+    ]
+   }
+  },
+  "holds_s": [
+   0.133,
+   0.283,
+   0.15,
+   0.317
+  ],
+  "stage_spec": {
+   "x0.7": {
+    "done": "1/1",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1": {
+    "done": "1/1",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1.4": {
+    "done": "1/1",
+    "pass": true,
+    "abandoned": []
+   }
+  }
+ },
+ "jumping_jacks": {
+  "lean_max_deg": 12.3,
+  "gate_min": 1.0,
+  "keypose": {
+   "x0.7": {
+    "done": "12/12",
+    "pass": true,
+    "abandoned": [
+     {
+      "stage": 1,
+      "name": "right hand up, left hand up",
+      "kind": "pose",
+      "why": "skipped"
+     },
+     {
+      "stage": 3,
+      "name": "right hand up, left hand up",
+      "kind": "pose",
+      "why": "skipped"
+     },
+     {
+      "stage": 5,
+      "name": "right hand up, left hand up",
+      "kind": "pose",
+      "why": "skipped"
+     },
+     {
+      "stage": 9,
+      "name": "rise, left hand up",
+      "kind": "pose",
+      "why": "skipped",
+      "feature": "pelvis height",
+      "error_tol": 1.79,
+      "rms_tol": 0.96,
+      "reached": false
+     }
+    ]
+   },
+   "x1": {
+    "done": "12/12",
+    "pass": true,
+    "abandoned": [
+     {
+      "stage": 1,
+      "name": "right hand up, left hand up",
+      "kind": "pose",
+      "why": "skipped"
+     },
+     {
+      "stage": 3,
+      "name": "right hand up, left hand up",
+      "kind": "pose",
+      "why": "skipped"
+     },
+     {
+      "stage": 5,
+      "name": "right hand up, left hand up",
+      "kind": "pose",
+      "why": "skipped"
+     },
+     {
+      "stage": 9,
+      "name": "rise, left hand up",
+      "kind": "pose",
+      "why": "skipped",
+      "feature": "pelvis height",
+      "error_tol": 1.79,
+      "rms_tol": 0.96,
+      "reached": false
+     }
+    ]
+   },
+   "x1.4": {
+    "done": "12/12",
+    "pass": true,
+    "abandoned": [
+     {
+      "stage": 1,
+      "name": "right hand up, left hand up",
+      "kind": "pose",
+      "why": "skipped"
+     },
+     {
+      "stage": 3,
+      "name": "right hand up, left hand up",
+      "kind": "pose",
+      "why": "skipped"
+     },
+     {
+      "stage": 5,
+      "name": "right hand up, left hand up",
+      "kind": "pose",
+      "why": "skipped"
+     },
+     {
+      "stage": 9,
+      "name": "rise, left hand up",
+      "kind": "pose",
+      "why": "skipped",
+      "feature": "pelvis height",
+      "error_tol": 1.8,
+      "rms_tol": 0.97,
+      "reached": false
+     }
+    ]
+   }
+  },
+  "holds_s": [
+   0.217,
+   0.15,
+   0.2,
+   0.167,
+   0.2,
+   0.167,
+   0.217,
+   0.167,
+   0.083,
+   0.1,
+   0.167
+  ],
+  "stage_spec": {
+   "x0.7": {
+    "done": "1/1",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1": {
+    "done": "1/1",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1.4": {
+    "done": "1/1",
+    "pass": true,
+    "abandoned": []
+   }
+  }
+ },
+ "punches": {
+  "lean_max_deg": 8.7,
+  "gate_min": 1.0,
+  "keypose": {
+   "x0.7": {
+    "done": "12/12",
+    "pass": true,
+    "abandoned": [
+     {
+      "stage": 6,
+      "name": "right hand forward, left hand back",
+      "kind": "pose",
+      "why": "skipped"
+     },
+     {
+      "stage": 8,
+      "name": "right hand forward, left hand back",
+      "kind": "pose",
+      "why": "skipped"
+     }
+    ]
+   },
+   "x1": {
+    "done": "12/12",
+    "pass": true,
+    "abandoned": [
+     {
+      "stage": 6,
+      "name": "right hand forward, left hand back",
+      "kind": "pose",
+      "why": "skipped"
+     },
+     {
+      "stage": 8,
+      "name": "right hand forward, left hand back",
+      "kind": "pose",
+      "why": "skipped"
+     },
+     {
+      "stage": 9,
+      "name": "right hand back, left hand forward",
+      "kind": "pose",
+      "why": "skipped",
+      "feature": "left wrist x",
+      "error_tol": 0.73,
+      "rms_tol": 0.55,
+      "reached": true
+     }
+    ]
+   },
+   "x1.4": {
+    "done": "12/12",
+    "pass": true,
+    "abandoned": [
+     {
+      "stage": 6,
+      "name": "right hand forward, left hand back",
+      "kind": "pose",
+      "why": "skipped"
+     },
+     {
+      "stage": 7,
+      "name": "right hand back, left hand forward",
+      "kind": "pose",
+      "why": "skipped",
+      "feature": "left wrist x",
+      "error_tol": 0.15,
+      "rms_tol": 0.1,
+      "reached": true
+     },
+     {
+      "stage": 9,
+      "name": "right hand back, left hand forward",
+      "kind": "pose",
+      "why": "skipped"
+     }
+    ]
+   }
+  },
+  "holds_s": [
+   0.15,
+   0.117,
+   0.133,
+   0.167,
+   0.183,
+   0.167,
+   0.2,
+   0.15,
+   0.15,
+   0.167,
+   0.233
+  ],
+  "stage_spec": {
+   "x0.7": {
+    "done": "1/1",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1": {
+    "done": "1/1",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1.4": {
+    "done": "1/1",
+    "pass": true,
+    "abandoned": []
+   }
+  }
+ },
+ "shot_put": {
+  "lean_max_deg": 41.3,
+  "gate_min": 1.0,
+  "keypose": {
+   "x0.7": {
+    "done": "3/3",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1": {
+    "done": "3/3",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1.4": {
+    "done": "3/3",
+    "pass": true,
+    "abandoned": []
+   }
+  },
+  "holds_s": [
+   0.4
+  ],
+  "stage_spec": {
+   "x0.7": {
+    "done": "2/2",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1": {
+    "done": "2/2",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1.4": {
+    "done": "2/2",
+    "pass": true,
+    "abandoned": []
+   }
+  }
+ },
+ "discus": {
+  "lean_max_deg": 22.4,
+  "gate_min": 1.0,
+  "keypose": {
+   "x0.7": {
+    "done": "2/2",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1": {
+    "done": "2/2",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1.4": {
+    "done": "2/2",
+    "pass": true,
+    "abandoned": []
+   }
+  },
+  "holds_s": [
+   0.2
+  ],
+  "stage_spec": {
+   "x0.7": {
+    "done": "1/1",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1": {
+    "done": "1/1",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1.4": {
+    "done": "1/1",
+    "pass": true,
+    "abandoned": []
+   }
+  }
+ },
+ "hurdles": {
+  "lean_max_deg": 15.3,
+  "gate_min": 1.0,
+  "keypose": {
+   "x0.7": {
+    "done": "2/2",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1": {
+    "done": "2/2",
+    "pass": true,
+    "abandoned": []
+   },
+   "x1.4": {
+    "done": "2/2",
+    "pass": true,
+    "abandoned": []
+   }
+  },
+  "holds_s": [],
+  "stage_spec": {
+   "x0.7": {
+    "done": "1/3",
+    "pass": false,
+    "abandoned": [
+     {
+      "stage": 1,
+      "name": "stand",
+      "kind": "stand",
+      "why": "clip ended"
+     }
+    ]
+   },
+   "x1": {
+    "done": "1/3",
+    "pass": false,
+    "abandoned": [
+     {
+      "stage": 1,
+      "name": "stand",
+      "kind": "stand",
+      "why": "clip ended"
+     }
+    ]
+   },
+   "x1.4": {
+    "done": "1/3",
+    "pass": false,
+    "abandoned": [
+     {
+      "stage": 1,
+      "name": "stand",
+      "kind": "stand",
+      "why": "clip ended"
+     }
+    ]
+   }
+  }
+ }
+}

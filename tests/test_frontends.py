@@ -71,3 +71,13 @@ def test_auto_falls_back_to_mediapipe_where_sam3d_body_is_not_set_up(monkeypatch
         sam3d_body.choose("sam3d")
     monkeypatch.setattr(sam3d_body, "available", lambda: True)
     assert sam3d_body.choose("auto") == "sam3d"
+
+
+def test_a_stored_npz_is_reused_only_for_the_same_frames(tmp_path):
+    d = fake()
+    np.savez(tmp_path / "sam3d.npz", **d, image_wh=np.array([1280, 720]))
+    frames = np.zeros((40, 720, 1280, 3), np.uint8)
+    assert sam3d_body.cached(tmp_path / "sam3d.npz", frames) is not None
+    assert sam3d_body.cached(tmp_path / "sam3d.npz", frames[:39]) is None
+    assert sam3d_body.cached(tmp_path / "sam3d.npz", np.zeros((40, 720, 960, 3), np.uint8)) is None
+    assert sam3d_body.cached(tmp_path / "missing.npz", frames) is None

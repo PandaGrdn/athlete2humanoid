@@ -671,6 +671,50 @@ python experiments/pipeline_audit/frontend_ab.py
 
   The `*30.mp4` files are `ffmpeg -i clips_pro/<clip>.mp4 -vf fps=30,scale=-2:720 -an`.
 
+#### The ten stored clips re-processed with SAM 3D Body (2026-10-30)
+
+The clip folders in `outputs/mc_inputs/clips` and `outputs/remote_process_pro/clips` now hold SAM 3D Body
+references. That covers `human.npy`, `qpos.npy`, `motion.csv`, `meta.json`, `retarget_report.json`,
+`side_by_side.mp4`, and the new `camera.json` and `sam3d.npz`.
+
+How:
+- `experiments/reprocess_clips.py` re-ran `pipeline.py` on each clip, using the A/B's `sam3d.npz` for the same
+  frames. The pipeline reuses a `sam3d.npz` already in its output folder when the frames match, so no GPU was
+  needed. Everything after pose ran with the current code.
+- The files it replaced are in `outputs/_backup_pre_sam3d/<clip>/`.
+- `silhouette.mp4` and `video_latent.npz` are unchanged: they come from the SAM 3.1 masks and the video, not the
+  pose.
+- SAM 3D Body's boxes came from its person detector, not SAM 3.1 masks. All ten clips have one person;
+  `meta.json` records this under `reprocessed`.
+
+Checks on the new references (JSON in `docs/results/pipeline_audit/sam3d_clips/`; "before" is
+`combined/`):
+- A fresh retarget of each new `human.npy` equals the stored `qpos.npy` (0.0 rad).
+- The keypose spec passes its own reference at 0.7x, 1x and 1.4x on all ten clips, as before.
+
+| clip | keypose stages (all pass) | TRAIN variants kept, of 36 | main drops after |
+|---|---|---|---|
+| squat_jump | 12 → 12 | 36 → 36 | - |
+| squat | 9 → 6 | 36 → 36 | - |
+| lunge | 15 → 14 | 36 → 36 | - |
+| arms | 3 → 3 | 36 → 36 | - |
+| front_kick | 6 → 6 | 36 → 36 | - |
+| jumping_jacks | 12 → 12 | **11 → 20** | speed 16 (was lost flight 13, speed 12) |
+| punches | 6 → **12** | 36 → 36 | - |
+| shot_put | 4 → 3 | **24 → 36** | - (was joint limits 12) |
+| discus | 2 → 2 | 36 → 36 | - |
+| hurdles | 2 → 2 | 0 → 0 | ballistic 36, limits 12 (the open flight at the clip's end, as before) |
+
+Notes on the table:
+- **Stage counts** are the key moments the spec finds; they change with the pose.
+- **Squat** goes from 9 to 6. Why was not investigated; all six pass.
+- **Punches** goes from 6 to 12: the new stages alternate "right hand forward, left hand back" and the reverse,
+  one per punch.
+- **Jumping jacks** no longer has variants dropped for losing their hop (13 before, none now).
+
+Not done: no policy was retrained on the new references. Policies in `outputs/` and the web examples built from
+them were trained on the MediaPipe references.
+
 ### Fix 4: physical variant filter and ballistic re-timing (`skill/variations.py`, 2026-10-30)
 
 Each variant now records the rules it broke (`rules`) and the reasons in words (`why`). The new rules are:

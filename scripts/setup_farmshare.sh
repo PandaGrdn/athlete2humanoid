@@ -29,6 +29,7 @@ if [ "$MODE" = "--with-sam" ]; then
   [ -d "$ROOT/envs/sam" ] || uv venv -q -p 3.12 "$ROOT/envs/sam"
   uv pip install -q -p "$ROOT/envs/sam/bin/python" --torch-backend "$TORCH_BACKEND" torch torchvision \
     "setuptools<81" -e "$ROOT/sam3[notebooks]"
+  bash "$REPO/scripts/setup_sam3d.sh" "$ROOT"  # the 3D pose front end: $ROOT/sam3d_env, $ROOT/sam-3d-body
 fi
 # Gated weights are fetched here, on the login node, in case compute nodes can't reach the Hub.
 if [ -f "$ROOT/env/HF_TOKEN" ] && [ -x "$ROOT/envs/main/bin/python" ]; then
@@ -39,7 +40,8 @@ if importlib.util.find_spec("huggingface_hub"):
     import config
     from huggingface_hub import snapshot_download
     token = config.get_secret("HF_TOKEN", required=False)
-    for repo in ("facebook/vjepa2-vitl-fpc64-256", "facebook/sam3.1"):
+    for repo in ("facebook/vjepa2-vitl-fpc64-256", "facebook/sam3.1", "facebook/sam-3d-body-dinov3",
+                 "Ruicheng/moge-2-vitl-normal"):
         snapshot_download(repo, token=token)
         print("cached", repo)
 PY
