@@ -144,6 +144,102 @@ class Contacts(unittest.TestCase):
         np.testing.assert_allclose(r, jroot)
         np.testing.assert_allclose(f, jump)
 
+    def test_running_contacts_need_root_speed_and_touch_downs(self):
+        # A run at 4 m/s: each foot is down 2 frames per stride (a sprinter's 0.07 s) with 0.4 m/s of
+        # pose jitter on the planted ankle, and swings at twice the body's speed in between.
+        fps, T, v = 30.0, 60, 4.0
+        rng = np.random.default_rng(1)
+        t = np.arange(T)
+        root = np.c_[v * t / fps, np.zeros(T), np.full(T, 0.9)]
+        feet = np.zeros((T, 2, 3))
+        for f, phase in ((0, 0), (1, 5)):
+            down = ((t - phase) % 10) < 2
+            x, last = np.zeros(T), 0.0
+            for i in range(T):  # planted: stays put; in the air: catches up past the body
+                last = last if down[i] else last + 2 * v / fps
+                x[i] = last
+            feet[:, f, 0] = x
+            feet[:, f, 1] = 0.1 * (1 - 2 * f)
+            lift = np.where(down, 0.0, np.sin(np.pi * (((t - phase) % 10) - 1) / 9).clip(0))
+            feet[:, f, 2] = 0.08 + 0.15 * lift
+        feet[..., :2] += rng.normal(0, 0.4 / fps, (T, 2, 2)).cumsum(0) * 0  # keep it deterministic
+        feet[..., 0] += np.where(feet[..., 2] < 0.081, rng.normal(0, 0.005, (T, 2)), 0)
+        stance = retarget.stance_mask(feet, fps, root=root)
+        old = retarget.stance_mask(feet, fps, min_frames=4)  # the old window: no contacts survive
+        for f, phase in ((0, 0), (1, 5)):
+            down = ((t - phase) % 10) < 2
+            self.assertGreater((stance[:, f] & down).sum() / down.sum(), 0.8)  # the touch-downs are found
+            self.assertFalse((stance[:, f] & (feet[:, f, 2] > 0.15)).any())  # swing is never stance
+        self.assertLess(old.mean(), 0.1)
+
+    def test_missed_contacts_then_a_jump_keep_the_clearance(self):
+        # Hurdles: contacts at the start, then a run-up whose touch-downs were all missed (the lowest
+        # foot dips to 3 cm above the floor every 0.33 s), then a take-off and a rise of 50 cm that the
+        # clip ends in. The old rule grounded the whole stretch; now the dips are interpolated
+        # and the clearance kept.
+        fps, T, floor = 30.0, 90, 0.035
+        t = np.arange(T)
+        stance = np.zeros((T, 2), bool)
+        stance[:10] = True
+        root = np.c_[np.zeros(T), np.zeros(T), np.full(T, 0.75)]
+        low = 0.03 + 0.12 * np.abs(np.sin(np.pi * (t - 10) / 10))  # a stride every 10 frames
+        low[:10] = 0
+        root[60:, 2] += np.linspace(0, 0.5, T - 60)
+        low[60:] += np.linspace(0, 0.5, T - 60)
+        feet = np.stack([floor + low, floor + low + 0.1], 1)[..., None] * [0, 0, 1]
+        report = []
+        r, f = retarget.ground_phantom_flights(root, feet, stance, floor, fps, report=report)
+        self.assertAlmostEqual(r[-1, 2] - r[10:60, 2].mean(), root[-1, 2] - root[10:60, 2].mean(), delta=0.035)
+        for k in range(20, 60, 10):  # each missed touch-down put back on the floor
+            self.assertAlmostEqual(f[k, 0, 2], floor, delta=1e-6)
+        self.assertGreater(f[15, 0, 2] - floor, 0.08)  # the stride between still lifts the foot
+        self.assertEqual(len(report), 1)
+        self.assertTrue(report[0]["flights"][-1]["ends_clip"])
+        self.assertIn("ends in the air", report[0]["warning"])
+
+    def test_clip_ending_in_the_air_is_never_lowered(self):
+        fps, T, floor = 30.0, 40, 0.035
+        stance = np.ones((T, 2), bool)
+        stance[30:] = False
+        root = np.c_[np.zeros(T), np.zeros(T), np.full(T, 0.7)]
+        feet = np.full((T, 2, 3), floor)
+        rise = np.linspace(0, 0.1, 10)  # 0.33 s up, still rising when the clip stops
+        root[30:, 2] += rise
+        feet[30:, :, 2] += rise[:, None] + 0.02
+        r, f = retarget.ground_phantom_flights(root, feet, stance, floor, fps)
+        np.testing.assert_allclose(r, root)
+        np.testing.assert_allclose(f, feet)
+
+    def test_short_lifted_stance_is_grounded(self):
+        fps, T, floor = 30.0, 60, 0.035
+        stance = np.ones((T, 2), bool)
+        stance[20:29] = False  # 0.3 s
+        root = np.c_[np.zeros(T), np.zeros(T), np.full(T, 0.7)]
+        feet = np.full((T, 2, 3), floor)
+        feet[20:29, :, 2] += 0.05
+        report = []
+        r, f = retarget.ground_phantom_flights(root, feet, stance, floor, fps, report=report)
+        np.testing.assert_allclose(f[..., 2].min(1), floor, atol=1e-9)
+        self.assertEqual(report[0]["decision"], "lowered")
+        self.assertNotIn("warning", report[0])
+
+    def test_hops_survive_contacts_and_flights(self):
+        # Jumping jacks: a 0.27 s hop of a few cm between stances, the feet spreading 25 cm each in
+        # the air; the apex (near the floor, below the dwell window's 10 cm) is not a contact, and a
+        # hop rising as its airtime needs is a flight.
+        fps, floor = 30.0, 0.08
+        T, hop = 60, np.arange(22, 30)
+        z = np.full(T, floor)
+        s = (hop - 21.5) / fps
+        z[hop] += 9.81 / 2 * s * (len(hop) / fps - s) + 0.01
+        spread = np.interp(np.arange(T), [21, 30], [0.0, 0.25])
+        feet = np.stack([np.c_[np.zeros(T), y * (0.1 + spread), z] for y in (1, -1)], 1)
+        stance = retarget.stance_mask(feet, fps, root=np.c_[np.zeros(T), np.zeros(T), np.full(T, 0.7)])
+        self.assertFalse(stance[24:28].any())
+        root = np.c_[np.zeros(T), np.zeros(T), 0.7 + z - floor]
+        r, _ = retarget.ground_phantom_flights(root, feet, stance, floor, fps)
+        np.testing.assert_allclose(r, root)
+
     def test_level_feet_keeps_leg_angles(self):
         J = retarget.rescale_bones(synthetic_squat(T=10), G1_LIKE)
         J["left_ankle"] = J["left_ankle"] + [0, 0, 0.04]  # depth error: one foot looks higher
@@ -183,6 +279,67 @@ class OnTheG1(unittest.TestCase):
         for k in human:
             self.assertLess(np.abs(human[k] - target[k]).max(), 1.0, k)
 
+    def test_ankle_roll_matches_the_g1_joint(self):
+        import mujoco
+        m, d = self.rt.model, mujoco.MjData(self.rt.model)
+        rng = np.random.default_rng(0)
+        err, off = [], []
+        for _ in range(100):
+            mujoco.mj_resetDataKeyframe(m, d, m.key("stand").id)
+            for j in ("hip_pitch", "hip_roll", "hip_yaw", "knee", "ankle_pitch", "ankle_roll"):
+                jid = m.joint(f"left_{j}_joint").id
+                lo, hi = m.jnt_range[jid]
+                lo, hi = (0.2, 1.5) if j == "knee" else (max(lo, -0.6), min(hi, 0.6)) if j.startswith("hip") else (lo, hi)
+                d.qpos[m.jnt_qposadr[jid]] = rng.uniform(lo, hi)  # athletic ranges, not a full split
+            mujoco.mj_kinematics(m, d)
+            hip = d.body("pelvis").xpos + d.body("pelvis").xmat.reshape(3, 3) @ self.rt.hip_centre
+            ankle, foot = d.body("left_ankle_roll_link").xpos, d.body("left_ankle_roll_link").xmat.reshape(3, 3)
+            err.append(float(retarget.ankle_roll(hip, ankle, foot)) - float(d.joint("left_ankle_roll_joint").qpos[0]))
+            # and the G1's own knee is about in the plane knee_in_leg_plane projects onto
+            knee = d.body("left_knee_link").xpos
+            off.append(np.linalg.norm(retarget.knee_in_leg_plane(hip[None], ankle[None], foot[None], knee[None])[0] - knee))
+        # Approximate: the G1's hip is three offset hinges, whose effective centre sits ~2 cm (1 sd) off
+        # the knee's plane depending on hip yaw and roll: a degree or two, which ANKLE_ROLL_MARGIN covers.
+        self.assertLess(np.abs(err).mean(), 0.03)  # measured 1.0 degree mean, 4.6 max
+        self.assertLess(np.abs(err).max(), 0.1)
+        self.assertLess(np.mean(off), 0.02)
+
+    def test_leg_heading(self):
+        T, yaw = 4, np.zeros(4)
+        c, s = np.cos(np.radians(30)), np.sin(np.radians(30))
+        ankle = np.zeros((T, 3))
+        hip = np.tile([0.0, 0, 0.6], (T, 1))
+        bent = np.tile([0.1 * c, 0.1 * s, 0.3], (T, 1))  # the knee forward along a 30 degree heading
+        h = retarget.leg_heading(hip, bent, ankle, yaw, 0.33, 0.32)
+        np.testing.assert_allclose(np.degrees(h), 30, atol=1e-6)
+        straight = np.tile([0.0, 0, 0.3], (T, 1))
+        np.testing.assert_allclose(retarget.leg_heading(hip, straight, ankle, yaw + 0.2, 0.33, 0.32), 0.2)
+
+    def test_wide_stance_keeps_ankle_roll_in_range(self):
+        # A wide squat with the knees out: the old foot target (flat, pelvis yaw) asked the ankle for
+        # more roll than its 15 degrees and the IK gave up the knee instead.
+        P = synthetic_squat(T=30)
+        for i, y in ((0, 1), (1, -1)):
+            P[:, 27 + i, 1] += y * 0.12
+            P[:, 25 + i, 1] += y * 0.10
+        rt = retarget.G1Retargeter()
+        m = retarget.proportional_motion(P, rt)
+        lim = rt.model.jnt_range[rt.model.joint("left_ankle_roll_joint").id][1]
+        for f, s in enumerate(("left", "right")):
+            roll = retarget.ankle_roll(m["joints"][f"{s}_hip"], m["joints"][f"{s}_ankle"], m["foot_rot"][:, f])
+            self.assertLessEqual(np.abs(roll).max(), lim - retarget.ANKLE_ROLL_MARGIN + 1e-3)
+        qpos = rt.retarget_sequence(*retarget.human_to_targets(P, rt))
+        q = qpos[:, [rt.model.jnt_qposadr[rt.model.joint(f"{s}_ankle_roll_joint").id] for s in ("left", "right")]]
+        self.assertLess(np.abs(q).max(), lim - np.radians(1))
+        report = retarget.tracking_report(rt, qpos, retarget.human_to_targets(P, retarget.G1Retargeter())[0])
+        self.assertLess(max(report["left_knee"][0], report["right_knee"][0]), 2.0)
+
+    def test_code_version(self):
+        v = retarget.code_version()
+        self.assertEqual(v["version"], retarget.RETARGET_VERSION)
+        self.assertEqual(v["params"]["flight_rise_frac"], retarget.FLIGHT_RISE_FRAC)
+        self.assertIn("git", v)
+
     def test_ik_follows_angles_better_than_uniform(self):
         err = {}
         human = retarget.flexion_angles(human_joints(self.P))
@@ -199,6 +356,23 @@ class OnTheG1(unittest.TestCase):
         for k in ("left_knee", "left_elbow", "left_shoulder"):
             self.assertLess(err[True][k], 5.0, k)
         self.assertLess(err[True]["left_elbow"], err[False]["left_elbow"])
+
+
+@unittest.skipUnless(importlib.util.find_spec("mediapipe") and importlib.util.find_spec("imageio_ffmpeg") and not SKIP,
+                     "pipeline.py needs mediapipe and imageio-ffmpeg")
+class VideoFps(unittest.TestCase):
+    def test_rate_from_timestamps(self):
+        import tempfile
+
+        import mediapy
+
+        import pipeline
+        with tempfile.TemporaryDirectory() as d:
+            path = f"{d}/clip.mp4"
+            mediapy.write_video(path, np.zeros((20, 32, 32, 3), np.uint8), fps=25)
+            timing = pipeline.video_fps(path)
+        self.assertAlmostEqual(timing["fps"], 25.0, places=2)
+        self.assertEqual(timing["frames"], 20)
 
 
 if __name__ == "__main__":

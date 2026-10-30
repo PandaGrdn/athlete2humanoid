@@ -7,6 +7,8 @@
 
 import argparse
 import json
+import re
+import subprocess
 from pathlib import Path
 
 import mediapy
@@ -19,13 +21,37 @@ import retarget
 import track
 
 
+def video_fps(video_path):
+    """The video's real frame rate, from its decoded frames' timestamps: (frames - 1) / (last - first
+    timestamp). The rate in the container header (what mediapy reports) can be off: our phone clips
+    say 27.7-29.6 fps but their frames are 1/30 s apart. -> {"fps", "frames", "container_fps",
+    "irregular_gaps": intervals over 1.5x the median (dropped frames)}."""
+    import imageio_ffmpeg
+
+    cmd = [imageio_ffmpeg.get_ffmpeg_exe(), "-hide_banner", "-i", str(video_path), "-map", "0:v:0", "-vf", "showinfo", "-f", "null", "-"]
+    log = subprocess.run(cmd, capture_output=True, text=True).stderr
+    t = np.array([float(x) for x in re.findall(r"pts_time:\s*(-?[\d.]+)", log)])
+    nominal = re.search(r"Video:.*?([\d.]+) fps", log)
+    if len(t) < 2 or t[-1] <= t[0]:
+        raise ValueError(f"{video_path}: no frame timestamps from ffmpeg")
+    dt = np.diff(t)
+    return {"fps": round(float((len(t) - 1) / (t[-1] - t[0])), 4), "frames": len(t),
+            "container_fps": float(nominal.group(1)) if nominal else None,
+            "irregular_gaps": int((dt > 1.5 * np.median(dt)).sum())}
+
+
 def video_to_motion(video_path, out_dir=None, use_sam=True, prompt=config.SAM_PROMPT):
     video_path = Path(video_path)
     out_dir = Path(out_dir or config.OUTPUT_DIR / video_path.stem)
     out_dir.mkdir(parents=True, exist_ok=True)
     video = mediapy.read_video(str(video_path))
-    fps = video.metadata.fps
     frames = np.asarray(video)
+    timing = video_fps(video_path)
+    fps = timing["fps"]
+    if timing["frames"] != len(frames):
+        print(f"warning: ffmpeg timestamped {timing['frames']} frames, mediapy read {len(frames)}")
+    if abs(fps - video.metadata.fps) > 0.01 * fps:
+        print(f"frame rate: {fps:.3f} fps from the timestamps; the file's header says {video.metadata.fps:g}")
 
     if use_sam:
         masks = track.athlete_masks(video_path, len(frames), prompt=prompt)
@@ -42,7 +68,10 @@ def video_to_motion(video_path, out_dir=None, use_sam=True, prompt=config.SAM_PR
     np.save(out_dir / "human.npy", human)
 
     rt = retarget.G1Retargeter()
-    targets, rotations = retarget.human_to_targets(human, rt, fps=fps)
+    contacts = {}
+    targets, rotations = retarget.human_to_targets(human, rt, fps=fps, report=contacts)
+    for w in contacts["warnings"]:
+        print("retarget warning:", w)
     qpos = rt.retarget_sequence(targets, rotations, fps=fps)
     report = retarget.tracking_report(rt, qpos, targets)
     (out_dir / "retarget_report.json").write_text(json.dumps(report, indent=1))
@@ -52,7 +81,9 @@ def video_to_motion(video_path, out_dir=None, use_sam=True, prompt=config.SAM_PR
     csv = retarget.export_mjlab_csv(qpos, out_dir / "motion.csv")
     robot = render.render_qpos_sequence(rt.model, qpos, size=(480, 480))
     render.save_video(render.side_by_side(frames, robot), out_dir / "side_by_side.mp4", fps=fps)
-    meta = {"fps": fps, "frames": len(qpos), "view_azimuth": view_azimuth, "sam": use_sam}
+    meta = {"fps": fps, "frames": len(qpos), "view_azimuth": view_azimuth, "sam": use_sam,
+            "video_timing": timing, "retarget": "proportional", "retarget_version": retarget.code_version(),
+            "retarget_warnings": contacts["warnings"], "stance_frac": contacts["stance_frac"]}
     (out_dir / "meta.json").write_text(json.dumps(meta, indent=1))
     return {"csv": csv, "out_dir": out_dir, **meta}
 
