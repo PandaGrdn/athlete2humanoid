@@ -45,7 +45,11 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from experiments.latent_policy import log, mirror_checkpoints  # noqa: E402
+
+
+def log(msg):  # as experiments/latent_policy.py's, which this can't import in mjlab's env (no mink there)
+    print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
+
 
 REAL_TRAIN = ("squat_jump", "front_kick", "squat", "arms", "lunge", "shot_put", "hurdles")
 ZERO_SHOT = ("jumping_jacks", "punches", "discus")  # shared by the four frontier directions
@@ -366,6 +370,7 @@ def eval_clips(a):
 
 
 def train_all(a, out, clips_dir):
+    from experiments.latent_policy import mirror_checkpoints
     procs, roll = {}, clips_dir / (ROLLOUT_CLIP if (clips_dir / ROLLOUT_CLIP).exists() else a.eval_train[0])
     for name in a.policies:
         task, start = POLICIES[name]
