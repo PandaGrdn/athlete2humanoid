@@ -82,6 +82,7 @@ class FarmShare:
                  f"export MUJOCO_GL=egl A2H_OUTPUT_DIR={q(self.run_dir + '/outputs')} A2H_SECRETS_DIR={q(self.root + '/env')}",
                  f"export A2H_ASSETS_DIR={q(self.repo + '/assets')} A2H_JOB_DATA={q(self.run_dir)} HF_HOME={q(self.root + '/hf')}",
                  f"export A2H_MJLAB_PYTHON={q(self.root + '/envs/mjlab/bin/python')} A2H_SAM_PYTHON={q(self.root + '/envs/sam/bin/python')}",
+                 f"export A2H_SAM3D_PYTHON={q(self.root + '/sam3d_env/bin/python')} A2H_SAM3D_DIR={q(self.root + '/sam-3d-body')}",
                  f"source {q(self.root + '/envs/main/bin/activate')}",
                  f"cd {q(self.repo)}",
                  "nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || true",

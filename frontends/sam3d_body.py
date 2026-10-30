@@ -85,6 +85,17 @@ def mask_boxes(masks):
     return np.stack([np.interp(t_all, t_all[seen], boxes[seen, j]) for j in range(4)], 1)
 
 
+def cached(path, frames):
+    """A stored sam3d.npz for these frames (same count and size), else None: pipeline.py re-runs the stages after
+    pose without the GPU when its out_dir already has one."""
+    path = Path(path)
+    if not path.is_file():
+        return None
+    d = load(path)
+    T, H, W = frames.shape[:3]
+    return d if len(d["kp3d"]) == T and list(d["image_wh"]) == [W, H] else None
+
+
 def run(video_path, n_frames, boxes=None):
     """SAM 3D Body on the video (frontends/sam3d_run.py), in its own env when config.SAM3D_PYTHON is set.
     boxes: (T, 4) athlete boxes (mask_boxes), else its person detector picks them. -> the npz as a dict."""

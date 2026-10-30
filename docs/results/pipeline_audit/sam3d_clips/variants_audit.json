@@ -1,0 +1,3950 @@
+{
+ "squat_jump": {
+  "kept": 36,
+  "dropped": 0,
+  "drop_reasons": {},
+  "base_flights": [
+   {
+    "air_s": 0.4648,
+    "rise": 0.215,
+    "ratio": 0.81,
+    "open": false
+   },
+   {
+    "air_s": 0.4516,
+    "rise": 0.2044,
+    "ratio": 0.82,
+    "open": false
+   }
+  ],
+  "base_max_joint_speed": 9.4,
+  "kept_flights": 72,
+  "kept_flight_ratio_range": [
+   0.8,
+   1.01
+  ],
+  "kept_flights_unballistic": 0,
+  "kept_variants_lost_a_flight": 0,
+  "kept_variants_over_cap": 0,
+  "max_joint_speed_kept": 16.5,
+  "max_penetration_kept_cm": 0.0,
+  "pose_count_spread": [
+   4,
+   5,
+   6,
+   7,
+   8,
+   9
+  ],
+  "per_variant": [
+   {
+    "name": "o_t0.75_a0.85",
+    "frames": 346,
+    "flights": 2,
+    "flight_ratios": [
+     0.99,
+     0.97
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 6
+   },
+   {
+    "name": "o_t0.75_a0.85_w0.25",
+    "frames": 348,
+    "flights": 2,
+    "flight_ratios": [
+     0.97,
+     0.98
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 7
+   },
+   {
+    "name": "o_t0.75_a1",
+    "frames": 351,
+    "flights": 2,
+    "flight_ratios": [
+     0.81,
+     0.81
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 8
+   },
+   {
+    "name": "o_t0.75_a1_w0.25",
+    "frames": 389,
+    "flights": 2,
+    "flight_ratios": [
+     0.8,
+     0.8
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 8
+   },
+   {
+    "name": "o_t0.75_a1.1",
+    "frames": 349,
+    "flights": 2,
+    "flight_ratios": [
+     0.99,
+     0.99
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 7
+   },
+   {
+    "name": "o_t0.75_a1.1_w0.25",
+    "frames": 359,
+    "flights": 2,
+    "flight_ratios": [
+     0.98,
+     0.98
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 8
+   },
+   {
+    "name": "o_t1_a0.85",
+    "frames": 266,
+    "flights": 2,
+    "flight_ratios": [
+     0.99,
+     0.98
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 5
+   },
+   {
+    "name": "o_t1_a0.85_w0.25",
+    "frames": 279,
+    "flights": 2,
+    "flight_ratios": [
+     0.99,
+     0.98
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 8
+   },
+   {
+    "name": "o_t1_a1",
+    "frames": 271,
+    "flights": 2,
+    "flight_ratios": [
+     0.81,
+     0.82
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.4,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 7
+   },
+   {
+    "name": "o_t1_a1_w0.25",
+    "frames": 242,
+    "flights": 2,
+    "flight_ratios": [
+     0.81,
+     0.82
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 10.4,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 6
+   },
+   {
+    "name": "o_t1_a1.1",
+    "frames": 269,
+    "flights": 2,
+    "flight_ratios": [
+     0.99,
+     1.0
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 10.4,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 7
+   },
+   {
+    "name": "o_t1_a1.1_w0.25",
+    "frames": 311,
+    "flights": 2,
+    "flight_ratios": [
+     0.99,
+     0.99
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 10.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 6
+   },
+   {
+    "name": "o_t1.33_a0.85",
+    "frames": 206,
+    "flights": 2,
+    "flight_ratios": [
+     0.99,
+     0.98
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 10.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1.33_a0.85_w0.25",
+    "frames": 201,
+    "flights": 2,
+    "flight_ratios": [
+     1.0,
+     0.99
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1.33_a1",
+    "frames": 210,
+    "flights": 2,
+    "flight_ratios": [
+     0.82,
+     0.82
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 12.3,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1.33_a1_w0.25",
+    "frames": 207,
+    "flights": 2,
+    "flight_ratios": [
+     0.82,
+     0.82
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 6
+   },
+   {
+    "name": "o_t1.33_a1.1",
+    "frames": 209,
+    "flights": 2,
+    "flight_ratios": [
+     1.0,
+     1.0
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 6
+   },
+   {
+    "name": "o_t1.33_a1.1_w0.25",
+    "frames": 210,
+    "flights": 2,
+    "flight_ratios": [
+     1.0,
+     1.0
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 6
+   },
+   {
+    "name": "m_t0.75_a0.85",
+    "frames": 346,
+    "flights": 2,
+    "flight_ratios": [
+     0.99,
+     0.97
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 6
+   },
+   {
+    "name": "m_t0.75_a0.85_w0.25",
+    "frames": 357,
+    "flights": 2,
+    "flight_ratios": [
+     0.97,
+     0.98
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.4,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 6
+   },
+   {
+    "name": "m_t0.75_a1",
+    "frames": 351,
+    "flights": 2,
+    "flight_ratios": [
+     0.81,
+     0.81
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 8
+   },
+   {
+    "name": "m_t0.75_a1_w0.25",
+    "frames": 335,
+    "flights": 2,
+    "flight_ratios": [
+     0.81,
+     0.8
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 8
+   },
+   {
+    "name": "m_t0.75_a1.1",
+    "frames": 349,
+    "flights": 2,
+    "flight_ratios": [
+     0.99,
+     0.99
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 7
+   },
+   {
+    "name": "m_t0.75_a1.1_w0.25",
+    "frames": 360,
+    "flights": 2,
+    "flight_ratios": [
+     0.97,
+     1.0
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 9
+   },
+   {
+    "name": "m_t1_a0.85",
+    "frames": 266,
+    "flights": 2,
+    "flight_ratios": [
+     0.99,
+     0.98
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 5
+   },
+   {
+    "name": "m_t1_a0.85_w0.25",
+    "frames": 298,
+    "flights": 2,
+    "flight_ratios": [
+     0.99,
+     0.99
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 6
+   },
+   {
+    "name": "m_t1_a1",
+    "frames": 271,
+    "flights": 2,
+    "flight_ratios": [
+     0.81,
+     0.82
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.4,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 7
+   },
+   {
+    "name": "m_t1_a1_w0.25",
+    "frames": 282,
+    "flights": 2,
+    "flight_ratios": [
+     0.81,
+     0.8
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 6
+   },
+   {
+    "name": "m_t1_a1.1",
+    "frames": 269,
+    "flights": 2,
+    "flight_ratios": [
+     0.99,
+     1.0
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 10.4,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 7
+   },
+   {
+    "name": "m_t1_a1.1_w0.25",
+    "frames": 308,
+    "flights": 2,
+    "flight_ratios": [
+     0.99,
+     1.0
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 10.3,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 7
+   },
+   {
+    "name": "m_t1.33_a0.85",
+    "frames": 206,
+    "flights": 2,
+    "flight_ratios": [
+     0.99,
+     0.98
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 10.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1.33_a0.85_w0.25",
+    "frames": 206,
+    "flights": 2,
+    "flight_ratios": [
+     0.99,
+     0.98
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 10.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 6
+   },
+   {
+    "name": "m_t1.33_a1",
+    "frames": 210,
+    "flights": 2,
+    "flight_ratios": [
+     0.82,
+     0.82
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 12.3,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1.33_a1_w0.25",
+    "frames": 203,
+    "flights": 2,
+    "flight_ratios": [
+     0.83,
+     0.82
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 6
+   },
+   {
+    "name": "m_t1.33_a1.1",
+    "frames": 209,
+    "flights": 2,
+    "flight_ratios": [
+     1.0,
+     1.0
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 6
+   },
+   {
+    "name": "m_t1.33_a1.1_w0.25",
+    "frames": 219,
+    "flights": 2,
+    "flight_ratios": [
+     1.01,
+     0.99
+    ],
+    "flights_unballistic": 0,
+    "max_joint_speed": 16.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 6
+   }
+  ],
+  "dropped_variants": []
+ },
+ "squat": {
+  "kept": 36,
+  "dropped": 0,
+  "drop_reasons": {},
+  "base_flights": [],
+  "base_max_joint_speed": 6.0,
+  "kept_flights": 0,
+  "kept_flight_ratio_range": null,
+  "kept_flights_unballistic": 0,
+  "kept_variants_lost_a_flight": 0,
+  "kept_variants_over_cap": 0,
+  "max_joint_speed_kept": 10.5,
+  "max_penetration_kept_cm": 0.0,
+  "pose_count_spread": [
+   4,
+   5
+  ],
+  "per_variant": [
+   {
+    "name": "o_t0.75_a0.85",
+    "frames": 407,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 3.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 5
+   },
+   {
+    "name": "o_t0.75_a0.85_w0.25",
+    "frames": 417,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 3.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 5
+   },
+   {
+    "name": "o_t0.75_a1",
+    "frames": 407,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 4.4,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t0.75_a1_w0.25",
+    "frames": 458,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 5.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t0.75_a1.1",
+    "frames": 407,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 4.9,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t0.75_a1.1_w0.25",
+    "frames": 402,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 5.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1_a0.85",
+    "frames": 306,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 5.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 5
+   },
+   {
+    "name": "o_t1_a0.85_w0.25",
+    "frames": 295,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 5.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 5
+   },
+   {
+    "name": "o_t1_a1",
+    "frames": 306,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1_a1_w0.25",
+    "frames": 279,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.2,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1_a1.1",
+    "frames": 306,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1_a1.1_w0.25",
+    "frames": 349,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1.33_a0.85",
+    "frames": 230,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 5
+   },
+   {
+    "name": "o_t1.33_a0.85_w0.25",
+    "frames": 218,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 5
+   },
+   {
+    "name": "o_t1.33_a1",
+    "frames": 230,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1.33_a1_w0.25",
+    "frames": 229,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1.33_a1.1",
+    "frames": 230,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1.33_a1.1_w0.25",
+    "frames": 228,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t0.75_a0.85",
+    "frames": 407,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 3.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 5
+   },
+   {
+    "name": "m_t0.75_a0.85_w0.25",
+    "frames": 437,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 3.3,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 5
+   },
+   {
+    "name": "m_t0.75_a1",
+    "frames": 407,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 4.4,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t0.75_a1_w0.25",
+    "frames": 384,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 4.9,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t0.75_a1.1",
+    "frames": 407,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 4.9,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t0.75_a1.1_w0.25",
+    "frames": 418,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 4.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1_a0.85",
+    "frames": 306,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 5.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 5
+   },
+   {
+    "name": "m_t1_a0.85_w0.25",
+    "frames": 371,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 4.3,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 5
+   },
+   {
+    "name": "m_t1_a1",
+    "frames": 306,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1_a1_w0.25",
+    "frames": 310,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 4.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1_a1.1",
+    "frames": 306,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1_a1.1_w0.25",
+    "frames": 354,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1.33_a0.85",
+    "frames": 230,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 5
+   },
+   {
+    "name": "m_t1.33_a0.85_w0.25",
+    "frames": 215,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.2,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 5
+   },
+   {
+    "name": "m_t1.33_a1",
+    "frames": 230,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1.33_a1_w0.25",
+    "frames": 224,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.3,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1.33_a1.1",
+    "frames": 230,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1.33_a1.1_w0.25",
+    "frames": 233,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 10.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   }
+  ],
+  "dropped_variants": []
+ },
+ "lunge": {
+  "kept": 36,
+  "dropped": 0,
+  "drop_reasons": {},
+  "base_flights": [],
+  "base_max_joint_speed": 8.1,
+  "kept_flights": 0,
+  "kept_flight_ratio_range": null,
+  "kept_flights_unballistic": 0,
+  "kept_variants_lost_a_flight": 0,
+  "kept_variants_over_cap": 0,
+  "max_joint_speed_kept": 14.6,
+  "max_penetration_kept_cm": 0.2,
+  "pose_count_spread": [
+   11,
+   12,
+   13,
+   14,
+   15
+  ],
+  "per_variant": [
+   {
+    "name": "o_t0.75_a0.85",
+    "frames": 395,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 5.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 12
+   },
+   {
+    "name": "o_t0.75_a0.85_w0.25",
+    "frames": 404,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 4.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 12
+   },
+   {
+    "name": "o_t0.75_a1",
+    "frames": 395,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 14
+   },
+   {
+    "name": "o_t0.75_a1_w0.25",
+    "frames": 417,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 5.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 14
+   },
+   {
+    "name": "o_t0.75_a1.1",
+    "frames": 395,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.6,
+    "limit_clipped": 0.0144,
+    "penetration_cm": 0.2,
+    "poses": 15
+   },
+   {
+    "name": "o_t0.75_a1.1_w0.25",
+    "frames": 421,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.4,
+    "limit_clipped": 0.0144,
+    "penetration_cm": 0.2,
+    "poses": 15
+   },
+   {
+    "name": "o_t1_a0.85",
+    "frames": 297,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 12
+   },
+   {
+    "name": "o_t1_a0.85_w0.25",
+    "frames": 294,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 12
+   },
+   {
+    "name": "o_t1_a1",
+    "frames": 297,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 13
+   },
+   {
+    "name": "o_t1_a1_w0.25",
+    "frames": 306,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 12
+   },
+   {
+    "name": "o_t1_a1.1",
+    "frames": 297,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.9,
+    "limit_clipped": 0.0144,
+    "penetration_cm": 0.2,
+    "poses": 14
+   },
+   {
+    "name": "o_t1_a1.1_w0.25",
+    "frames": 304,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.6,
+    "limit_clipped": 0.0144,
+    "penetration_cm": 0.2,
+    "poses": 13
+   },
+   {
+    "name": "o_t1.33_a0.85",
+    "frames": 223,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 12
+   },
+   {
+    "name": "o_t1.33_a0.85_w0.25",
+    "frames": 217,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 12
+   },
+   {
+    "name": "o_t1.33_a1",
+    "frames": 223,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 10.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 11
+   },
+   {
+    "name": "o_t1.33_a1_w0.25",
+    "frames": 223,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 13
+   },
+   {
+    "name": "o_t1.33_a1.1",
+    "frames": 223,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.8,
+    "limit_clipped": 0.0144,
+    "penetration_cm": 0.2,
+    "poses": 13
+   },
+   {
+    "name": "o_t1.33_a1.1_w0.25",
+    "frames": 232,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.3,
+    "limit_clipped": 0.0144,
+    "penetration_cm": 0.2,
+    "poses": 13
+   },
+   {
+    "name": "m_t0.75_a0.85",
+    "frames": 395,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 5.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 12
+   },
+   {
+    "name": "m_t0.75_a0.85_w0.25",
+    "frames": 398,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 4.9,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 12
+   },
+   {
+    "name": "m_t0.75_a1",
+    "frames": 395,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 14
+   },
+   {
+    "name": "m_t0.75_a1_w0.25",
+    "frames": 379,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 13
+   },
+   {
+    "name": "m_t0.75_a1.1",
+    "frames": 395,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.6,
+    "limit_clipped": 0.0144,
+    "penetration_cm": 0.2,
+    "poses": 15
+   },
+   {
+    "name": "m_t0.75_a1.1_w0.25",
+    "frames": 415,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 5.6,
+    "limit_clipped": 0.0144,
+    "penetration_cm": 0.2,
+    "poses": 15
+   },
+   {
+    "name": "m_t1_a0.85",
+    "frames": 297,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 12
+   },
+   {
+    "name": "m_t1_a0.85_w0.25",
+    "frames": 322,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.3,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 12
+   },
+   {
+    "name": "m_t1_a1",
+    "frames": 297,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 13
+   },
+   {
+    "name": "m_t1_a1_w0.25",
+    "frames": 310,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 13
+   },
+   {
+    "name": "m_t1_a1.1",
+    "frames": 297,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.9,
+    "limit_clipped": 0.0144,
+    "penetration_cm": 0.2,
+    "poses": 14
+   },
+   {
+    "name": "m_t1_a1.1_w0.25",
+    "frames": 327,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.0,
+    "limit_clipped": 0.0144,
+    "penetration_cm": 0.2,
+    "poses": 15
+   },
+   {
+    "name": "m_t1.33_a0.85",
+    "frames": 223,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 12
+   },
+   {
+    "name": "m_t1.33_a0.85_w0.25",
+    "frames": 222,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 12
+   },
+   {
+    "name": "m_t1.33_a1",
+    "frames": 223,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 10.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 11
+   },
+   {
+    "name": "m_t1.33_a1_w0.25",
+    "frames": 239,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.2,
+    "poses": 13
+   },
+   {
+    "name": "m_t1.33_a1.1",
+    "frames": 223,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.8,
+    "limit_clipped": 0.0144,
+    "penetration_cm": 0.2,
+    "poses": 13
+   },
+   {
+    "name": "m_t1.33_a1.1_w0.25",
+    "frames": 215,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 14.6,
+    "limit_clipped": 0.0144,
+    "penetration_cm": 0.2,
+    "poses": 12
+   }
+  ],
+  "dropped_variants": []
+ },
+ "arms": {
+  "kept": 36,
+  "dropped": 0,
+  "drop_reasons": {},
+  "base_flights": [],
+  "base_max_joint_speed": 6.8,
+  "kept_flights": 0,
+  "kept_flight_ratio_range": null,
+  "kept_flights_unballistic": 0,
+  "kept_variants_lost_a_flight": 0,
+  "kept_variants_over_cap": 0,
+  "max_joint_speed_kept": 11.4,
+  "max_penetration_kept_cm": 0.0,
+  "pose_count_spread": [
+   1
+  ],
+  "per_variant": [
+   {
+    "name": "o_t0.75_a0.85",
+    "frames": 135,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 4.3,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "o_t0.75_a0.85_w0.25",
+    "frames": 126,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 4.3,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "o_t0.75_a1",
+    "frames": 135,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 5.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "o_t0.75_a1_w0.25",
+    "frames": 165,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 4.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "o_t0.75_a1.1",
+    "frames": 135,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 5.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "o_t0.75_a1.1_w0.25",
+    "frames": 117,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.3,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "o_t1_a0.85",
+    "frames": 102,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 5.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "o_t1_a0.85_w0.25",
+    "frames": 92,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "o_t1_a1",
+    "frames": 102,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "o_t1_a1_w0.25",
+    "frames": 96,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.9,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "o_t1_a1.1",
+    "frames": 102,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "o_t1_a1.1_w0.25",
+    "frames": 116,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "o_t1.33_a0.85",
+    "frames": 76,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.4,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "o_t1.33_a0.85_w0.25",
+    "frames": 65,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "o_t1.33_a1",
+    "frames": 76,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "o_t1.33_a1_w0.25",
+    "frames": 68,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "o_t1.33_a1.1",
+    "frames": 76,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "o_t1.33_a1.1_w0.25",
+    "frames": 75,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.4,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "m_t0.75_a0.85",
+    "frames": 135,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 4.3,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "m_t0.75_a0.85_w0.25",
+    "frames": 130,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 4.2,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "m_t0.75_a1",
+    "frames": 135,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 5.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "m_t0.75_a1_w0.25",
+    "frames": 122,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 5.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "m_t0.75_a1.1",
+    "frames": 135,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 5.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "m_t0.75_a1.1_w0.25",
+    "frames": 124,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "m_t1_a0.85",
+    "frames": 102,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 5.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "m_t1_a0.85_w0.25",
+    "frames": 127,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 4.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "m_t1_a1",
+    "frames": 102,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "m_t1_a1_w0.25",
+    "frames": 100,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.4,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "m_t1_a1.1",
+    "frames": 102,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "m_t1_a1.1_w0.25",
+    "frames": 120,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 5.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "m_t1.33_a0.85",
+    "frames": 76,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.4,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "m_t1.33_a0.85_w0.25",
+    "frames": 76,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "m_t1.33_a1",
+    "frames": 76,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "m_t1.33_a1_w0.25",
+    "frames": 77,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "m_t1.33_a1.1",
+    "frames": 76,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   },
+   {
+    "name": "m_t1.33_a1.1_w0.25",
+    "frames": 81,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.9,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 1
+   }
+  ],
+  "dropped_variants": []
+ },
+ "front_kick": {
+  "kept": 36,
+  "dropped": 0,
+  "drop_reasons": {},
+  "base_flights": [],
+  "base_max_joint_speed": 13.2,
+  "kept_flights": 0,
+  "kept_flight_ratio_range": null,
+  "kept_flights_unballistic": 0,
+  "kept_variants_lost_a_flight": 0,
+  "kept_variants_over_cap": 0,
+  "max_joint_speed_kept": 19.9,
+  "max_penetration_kept_cm": 0.0,
+  "pose_count_spread": [
+   4,
+   5
+  ],
+  "per_variant": [
+   {
+    "name": "o_t0.75_a0.85",
+    "frames": 222,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.4,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t0.75_a0.85_w0.25",
+    "frames": 235,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.2,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t0.75_a1",
+    "frames": 222,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.9,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t0.75_a1_w0.25",
+    "frames": 235,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 10.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t0.75_a1.1",
+    "frames": 222,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 10.9,
+    "limit_clipped": 0.0019,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t0.75_a1.1_w0.25",
+    "frames": 222,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 12.6,
+    "limit_clipped": 0.0019,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1_a0.85",
+    "frames": 167,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.2,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1_a0.85_w0.25",
+    "frames": 159,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1_a1",
+    "frames": 167,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.2,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1_a1_w0.25",
+    "frames": 154,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 15.4,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1_a1.1",
+    "frames": 167,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 14.6,
+    "limit_clipped": 0.0019,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1_a1.1_w0.25",
+    "frames": 183,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.3,
+    "limit_clipped": 0.0019,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1.33_a0.85",
+    "frames": 125,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1.33_a0.85_w0.25",
+    "frames": 118,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 16.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1.33_a1",
+    "frames": 125,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 16.3,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1.33_a1_w0.25",
+    "frames": 129,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 18.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1.33_a1.1",
+    "frames": 125,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 17.9,
+    "limit_clipped": 0.0019,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "o_t1.33_a1.1_w0.25",
+    "frames": 126,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 19.7,
+    "limit_clipped": 0.0019,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t0.75_a0.85",
+    "frames": 222,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.4,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t0.75_a0.85_w0.25",
+    "frames": 242,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t0.75_a1",
+    "frames": 222,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.9,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t0.75_a1_w0.25",
+    "frames": 210,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t0.75_a1.1",
+    "frames": 222,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 10.9,
+    "limit_clipped": 0.0019,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t0.75_a1.1_w0.25",
+    "frames": 239,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.6,
+    "limit_clipped": 0.0019,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1_a0.85",
+    "frames": 167,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.2,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1_a0.85_w0.25",
+    "frames": 200,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.3,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1_a1",
+    "frames": 167,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.2,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1_a1_w0.25",
+    "frames": 178,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1_a1.1",
+    "frames": 167,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 14.6,
+    "limit_clipped": 0.0019,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1_a1.1_w0.25",
+    "frames": 186,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 12.8,
+    "limit_clipped": 0.0019,
+    "penetration_cm": 0.0,
+    "poses": 5
+   },
+   {
+    "name": "m_t1.33_a0.85",
+    "frames": 125,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1.33_a0.85_w0.25",
+    "frames": 118,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 16.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1.33_a1",
+    "frames": 125,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 16.3,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1.33_a1_w0.25",
+    "frames": 119,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 18.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1.33_a1.1",
+    "frames": 125,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 17.9,
+    "limit_clipped": 0.0019,
+    "penetration_cm": 0.0,
+    "poses": 4
+   },
+   {
+    "name": "m_t1.33_a1.1_w0.25",
+    "frames": 121,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 19.9,
+    "limit_clipped": 0.0019,
+    "penetration_cm": 0.0,
+    "poses": 4
+   }
+  ],
+  "dropped_variants": []
+ },
+ "jumping_jacks": {
+  "kept": 20,
+  "dropped": 16,
+  "drop_reasons": {
+   "speed": 16
+  },
+  "base_flights": [],
+  "base_max_joint_speed": 23.8,
+  "kept_flights": 0,
+  "kept_flight_ratio_range": null,
+  "kept_flights_unballistic": 0,
+  "kept_variants_lost_a_flight": 0,
+  "kept_variants_over_cap": 0,
+  "max_joint_speed_kept": 20.0,
+  "max_penetration_kept_cm": 0.1,
+  "pose_count_spread": [
+   6,
+   8,
+   11,
+   12,
+   15
+  ],
+  "per_variant": [
+   {
+    "name": "o_t0.75_a0.85",
+    "frames": 210,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 15.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 12
+   },
+   {
+    "name": "o_t0.75_a0.85_w0.25",
+    "frames": 207,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 17.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 11
+   },
+   {
+    "name": "o_t0.75_a1",
+    "frames": 210,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 17.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 11
+   },
+   {
+    "name": "o_t0.75_a1_w0.25",
+    "frames": 230,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 15.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 11
+   },
+   {
+    "name": "o_t0.75_a1.1",
+    "frames": 210,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 19.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 11
+   },
+   {
+    "name": "o_t0.75_a1.1_w0.25",
+    "frames": 218,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 20.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 12
+   },
+   {
+    "name": "o_t1_a0.85_w0.25",
+    "frames": 159,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 19.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 12
+   },
+   {
+    "name": "o_t1_a1.1_w0.25",
+    "frames": 177,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 20.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 11
+   },
+   {
+    "name": "o_t1.33_a0.85_w0.25",
+    "frames": 122,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 20.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 8
+   },
+   {
+    "name": "o_t1.33_a1",
+    "frames": 123,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 20.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 6
+   },
+   {
+    "name": "m_t0.75_a0.85",
+    "frames": 210,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 15.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 12
+   },
+   {
+    "name": "m_t0.75_a0.85_w0.25",
+    "frames": 209,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 14.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 11
+   },
+   {
+    "name": "m_t0.75_a1",
+    "frames": 210,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 17.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 11
+   },
+   {
+    "name": "m_t0.75_a1_w0.25",
+    "frames": 213,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 18.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 11
+   },
+   {
+    "name": "m_t0.75_a1.1",
+    "frames": 210,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 19.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 11
+   },
+   {
+    "name": "m_t0.75_a1.1_w0.25",
+    "frames": 219,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 19.4,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 12
+   },
+   {
+    "name": "m_t1_a0.85_w0.25",
+    "frames": 174,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 18.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 15
+   },
+   {
+    "name": "m_t1_a1_w0.25",
+    "frames": 167,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 20.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 11
+   },
+   {
+    "name": "m_t1.33_a0.85_w0.25",
+    "frames": 126,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 20.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 8
+   },
+   {
+    "name": "m_t1.33_a1",
+    "frames": 123,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 20.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 6
+   }
+  ],
+  "dropped_variants": [
+   {
+    "name": "o_t1_a0.85",
+    "why": "a joint at 20.2 rad/s (cap 20)"
+   },
+   {
+    "name": "o_t1_a1",
+    "why": "a joint at 23.8 rad/s (cap 20)"
+   },
+   {
+    "name": "o_t1_a1_w0.25",
+    "why": "a joint at 20.3 rad/s (cap 20)"
+   },
+   {
+    "name": "o_t1_a1.1",
+    "why": "a joint at 21.6 rad/s (cap 20)"
+   },
+   {
+    "name": "o_t1.33_a0.85",
+    "why": "a joint at 20.1 rad/s (cap 20)"
+   },
+   {
+    "name": "o_t1.33_a1_w0.25",
+    "why": "a joint at 20.9 rad/s (cap 20)"
+   },
+   {
+    "name": "o_t1.33_a1.1",
+    "why": "a joint at 22.7 rad/s (cap 20)"
+   },
+   {
+    "name": "o_t1.33_a1.1_w0.25",
+    "why": "a joint at 21.1 rad/s (cap 20)"
+   },
+   {
+    "name": "m_t1_a0.85",
+    "why": "a joint at 20.2 rad/s (cap 20)"
+   },
+   {
+    "name": "m_t1_a1",
+    "why": "a joint at 23.8 rad/s (cap 20)"
+   },
+   {
+    "name": "m_t1_a1.1",
+    "why": "a joint at 21.6 rad/s (cap 20)"
+   },
+   {
+    "name": "m_t1_a1.1_w0.25",
+    "why": "a joint at 21.8 rad/s (cap 20)"
+   },
+   {
+    "name": "m_t1.33_a0.85",
+    "why": "a joint at 20.1 rad/s (cap 20)"
+   },
+   {
+    "name": "m_t1.33_a1_w0.25",
+    "why": "a joint at 22.1 rad/s (cap 20)"
+   },
+   {
+    "name": "m_t1.33_a1.1",
+    "why": "a joint at 22.7 rad/s (cap 20)"
+   },
+   {
+    "name": "m_t1.33_a1.1_w0.25",
+    "why": "a joint at 21.2 rad/s (cap 20)"
+   }
+  ]
+ },
+ "punches": {
+  "kept": 36,
+  "dropped": 0,
+  "drop_reasons": {},
+  "base_flights": [],
+  "base_max_joint_speed": 9.1,
+  "kept_flights": 0,
+  "kept_flight_ratio_range": null,
+  "kept_flights_unballistic": 0,
+  "kept_variants_lost_a_flight": 0,
+  "kept_variants_over_cap": 0,
+  "max_joint_speed_kept": 15.8,
+  "max_penetration_kept_cm": 0.0,
+  "pose_count_spread": [
+   10,
+   11
+  ],
+  "per_variant": [
+   {
+    "name": "o_t0.75_a0.85",
+    "frames": 223,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 5.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 10
+   },
+   {
+    "name": "o_t0.75_a0.85_w0.25",
+    "frames": 228,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 10
+   },
+   {
+    "name": "o_t0.75_a1",
+    "frames": 223,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 11
+   },
+   {
+    "name": "o_t0.75_a1_w0.25",
+    "frames": 239,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.3,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 11
+   },
+   {
+    "name": "o_t0.75_a1.1",
+    "frames": 223,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.5,
+    "limit_clipped": 0.0002,
+    "penetration_cm": 0.0,
+    "poses": 11
+   },
+   {
+    "name": "o_t0.75_a1.1_w0.25",
+    "frames": 237,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.1,
+    "limit_clipped": 0.0002,
+    "penetration_cm": 0.0,
+    "poses": 11
+   },
+   {
+    "name": "o_t1_a0.85",
+    "frames": 168,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 10
+   },
+   {
+    "name": "o_t1_a0.85_w0.25",
+    "frames": 168,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.9,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 11
+   },
+   {
+    "name": "o_t1_a1",
+    "frames": 168,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 11
+   },
+   {
+    "name": "o_t1_a1_w0.25",
+    "frames": 160,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 10.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 10
+   },
+   {
+    "name": "o_t1_a1.1",
+    "frames": 168,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 10.0,
+    "limit_clipped": 0.0002,
+    "penetration_cm": 0.0,
+    "poses": 11
+   },
+   {
+    "name": "o_t1_a1.1_w0.25",
+    "frames": 180,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.7,
+    "limit_clipped": 0.0002,
+    "penetration_cm": 0.0,
+    "poses": 11
+   },
+   {
+    "name": "o_t1.33_a0.85",
+    "frames": 126,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.9,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 10
+   },
+   {
+    "name": "o_t1.33_a0.85_w0.25",
+    "frames": 126,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 12.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 10
+   },
+   {
+    "name": "o_t1.33_a1",
+    "frames": 126,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 10
+   },
+   {
+    "name": "o_t1.33_a1_w0.25",
+    "frames": 128,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 14.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 10
+   },
+   {
+    "name": "o_t1.33_a1.1",
+    "frames": 126,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 12.9,
+    "limit_clipped": 0.0002,
+    "penetration_cm": 0.0,
+    "poses": 10
+   },
+   {
+    "name": "o_t1.33_a1.1_w0.25",
+    "frames": 134,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.6,
+    "limit_clipped": 0.0002,
+    "penetration_cm": 0.0,
+    "poses": 11
+   },
+   {
+    "name": "m_t0.75_a0.85",
+    "frames": 223,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 5.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 10
+   },
+   {
+    "name": "m_t0.75_a0.85_w0.25",
+    "frames": 222,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 10
+   },
+   {
+    "name": "m_t0.75_a1",
+    "frames": 223,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 6.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 11
+   },
+   {
+    "name": "m_t0.75_a1_w0.25",
+    "frames": 224,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 10
+   },
+   {
+    "name": "m_t0.75_a1.1",
+    "frames": 223,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.5,
+    "limit_clipped": 0.0002,
+    "penetration_cm": 0.0,
+    "poses": 11
+   },
+   {
+    "name": "m_t0.75_a1.1_w0.25",
+    "frames": 235,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.0,
+    "limit_clipped": 0.0002,
+    "penetration_cm": 0.0,
+    "poses": 11
+   },
+   {
+    "name": "m_t1_a0.85",
+    "frames": 168,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 10
+   },
+   {
+    "name": "m_t1_a0.85_w0.25",
+    "frames": 182,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 10
+   },
+   {
+    "name": "m_t1_a1",
+    "frames": 168,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 11
+   },
+   {
+    "name": "m_t1_a1_w0.25",
+    "frames": 177,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 10.9,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 11
+   },
+   {
+    "name": "m_t1_a1.1",
+    "frames": 168,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 10.0,
+    "limit_clipped": 0.0002,
+    "penetration_cm": 0.0,
+    "poses": 11
+   },
+   {
+    "name": "m_t1_a1.1_w0.25",
+    "frames": 187,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.3,
+    "limit_clipped": 0.0002,
+    "penetration_cm": 0.0,
+    "poses": 11
+   },
+   {
+    "name": "m_t1.33_a0.85",
+    "frames": 126,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.9,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 10
+   },
+   {
+    "name": "m_t1.33_a0.85_w0.25",
+    "frames": 133,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 12.2,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 10
+   },
+   {
+    "name": "m_t1.33_a1",
+    "frames": 126,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 10
+   },
+   {
+    "name": "m_t1.33_a1_w0.25",
+    "frames": 128,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.0,
+    "poses": 10
+   },
+   {
+    "name": "m_t1.33_a1.1",
+    "frames": 126,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 12.9,
+    "limit_clipped": 0.0002,
+    "penetration_cm": 0.0,
+    "poses": 10
+   },
+   {
+    "name": "m_t1.33_a1.1_w0.25",
+    "frames": 121,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 15.8,
+    "limit_clipped": 0.0002,
+    "penetration_cm": 0.0,
+    "poses": 11
+   }
+  ],
+  "dropped_variants": []
+ },
+ "shot_put": {
+  "kept": 36,
+  "dropped": 0,
+  "drop_reasons": {},
+  "base_flights": [],
+  "base_max_joint_speed": 15.4,
+  "kept_flights": 0,
+  "kept_flight_ratio_range": null,
+  "kept_flights_unballistic": 0,
+  "kept_variants_lost_a_flight": 0,
+  "kept_variants_over_cap": 0,
+  "max_joint_speed_kept": 17.0,
+  "max_penetration_kept_cm": 0.1,
+  "pose_count_spread": [
+   1,
+   2
+  ],
+  "per_variant": [
+   {
+    "name": "o_t0.75_a0.85",
+    "frames": 170,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 2
+   },
+   {
+    "name": "o_t0.75_a0.85_w0.25",
+    "frames": 156,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 8.3,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 2
+   },
+   {
+    "name": "o_t0.75_a1",
+    "frames": 170,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t0.75_a1_w0.25",
+    "frames": 206,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.2,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t0.75_a1.1",
+    "frames": 170,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 12.7,
+    "limit_clipped": 0.0051,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t0.75_a1.1_w0.25",
+    "frames": 147,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.8,
+    "limit_clipped": 0.0051,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t1_a0.85",
+    "frames": 128,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 2
+   },
+   {
+    "name": "o_t1_a0.85_w0.25",
+    "frames": 114,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 2
+   },
+   {
+    "name": "o_t1_a1",
+    "frames": 128,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 15.4,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t1_a1_w0.25",
+    "frames": 122,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 14.2,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t1_a1.1",
+    "frames": 128,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 17.0,
+    "limit_clipped": 0.0051,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t1_a1.1_w0.25",
+    "frames": 144,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.8,
+    "limit_clipped": 0.0051,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t1.33_a0.85",
+    "frames": 96,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 12.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 2
+   },
+   {
+    "name": "o_t1.33_a0.85_w0.25",
+    "frames": 81,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.2,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 2
+   },
+   {
+    "name": "o_t1.33_a1",
+    "frames": 96,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 14.9,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t1.33_a1_w0.25",
+    "frames": 86,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 12.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t1.33_a1.1",
+    "frames": 96,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 16.2,
+    "limit_clipped": 0.0051,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t1.33_a1.1_w0.25",
+    "frames": 96,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 14.3,
+    "limit_clipped": 0.0051,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t0.75_a0.85",
+    "frames": 170,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 9.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 2
+   },
+   {
+    "name": "m_t0.75_a0.85_w0.25",
+    "frames": 162,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 2
+   },
+   {
+    "name": "m_t0.75_a1",
+    "frames": 170,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t0.75_a1_w0.25",
+    "frames": 154,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.2,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t0.75_a1.1",
+    "frames": 170,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 12.7,
+    "limit_clipped": 0.0051,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t0.75_a1.1_w0.25",
+    "frames": 156,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.9,
+    "limit_clipped": 0.0051,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t1_a0.85",
+    "frames": 128,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 2
+   },
+   {
+    "name": "m_t1_a0.85_w0.25",
+    "frames": 160,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 7.9,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 2
+   },
+   {
+    "name": "m_t1_a1",
+    "frames": 128,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 15.4,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t1_a1_w0.25",
+    "frames": 126,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 14.4,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t1_a1.1",
+    "frames": 128,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 17.0,
+    "limit_clipped": 0.0051,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t1_a1.1_w0.25",
+    "frames": 149,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.2,
+    "limit_clipped": 0.0051,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t1.33_a0.85",
+    "frames": 96,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 12.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 2
+   },
+   {
+    "name": "m_t1.33_a0.85_w0.25",
+    "frames": 98,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.1,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 2
+   },
+   {
+    "name": "m_t1.33_a1",
+    "frames": 96,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 14.9,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t1.33_a1_w0.25",
+    "frames": 96,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 14.2,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t1.33_a1.1",
+    "frames": 96,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 16.2,
+    "limit_clipped": 0.0051,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t1.33_a1.1_w0.25",
+    "frames": 102,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 16.4,
+    "limit_clipped": 0.0051,
+    "penetration_cm": 0.1,
+    "poses": 1
+   }
+  ],
+  "dropped_variants": []
+ },
+ "discus": {
+  "kept": 36,
+  "dropped": 0,
+  "drop_reasons": {},
+  "base_flights": [],
+  "base_max_joint_speed": 17.7,
+  "kept_flights": 0,
+  "kept_flight_ratio_range": null,
+  "kept_flights_unballistic": 0,
+  "kept_variants_lost_a_flight": 0,
+  "kept_variants_over_cap": 0,
+  "max_joint_speed_kept": 20.0,
+  "max_penetration_kept_cm": 0.1,
+  "pose_count_spread": [
+   1
+  ],
+  "per_variant": [
+   {
+    "name": "o_t0.75_a0.85",
+    "frames": 135,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.3,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t0.75_a0.85_w0.25",
+    "frames": 134,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.3,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t0.75_a1",
+    "frames": 135,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.2,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t0.75_a1_w0.25",
+    "frames": 170,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 10.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t0.75_a1.1",
+    "frames": 135,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 14.6,
+    "limit_clipped": 0.0105,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t0.75_a1.1_w0.25",
+    "frames": 117,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 16.8,
+    "limit_clipped": 0.0105,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t1_a0.85",
+    "frames": 102,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 15.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t1_a0.85_w0.25",
+    "frames": 96,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 14.9,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t1_a1",
+    "frames": 102,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 17.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t1_a1_w0.25",
+    "frames": 86,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 19.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t1_a1.1",
+    "frames": 102,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 19.4,
+    "limit_clipped": 0.0105,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t1_a1.1_w0.25",
+    "frames": 125,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 15.1,
+    "limit_clipped": 0.0105,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t1.33_a0.85",
+    "frames": 76,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 18.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t1.33_a0.85_w0.25",
+    "frames": 65,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 19.9,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t1.33_a1",
+    "frames": 77,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 19.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t1.33_a1_w0.25",
+    "frames": 70,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 20.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t1.33_a1.1",
+    "frames": 77,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 20.0,
+    "limit_clipped": 0.0105,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "o_t1.33_a1.1_w0.25",
+    "frames": 66,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 20.0,
+    "limit_clipped": 0.0105,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t0.75_a0.85",
+    "frames": 135,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.3,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t0.75_a0.85_w0.25",
+    "frames": 141,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 10.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t0.75_a1",
+    "frames": 135,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 13.2,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t0.75_a1_w0.25",
+    "frames": 119,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 15.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t0.75_a1.1",
+    "frames": 135,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 14.6,
+    "limit_clipped": 0.0105,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t0.75_a1.1_w0.25",
+    "frames": 123,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 14.7,
+    "limit_clipped": 0.0105,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t1_a0.85",
+    "frames": 102,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 15.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t1_a0.85_w0.25",
+    "frames": 122,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 11.6,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t1_a1",
+    "frames": 102,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 17.7,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t1_a1_w0.25",
+    "frames": 92,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 18.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t1_a1.1",
+    "frames": 102,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 19.4,
+    "limit_clipped": 0.0105,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t1_a1.1_w0.25",
+    "frames": 131,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 14.1,
+    "limit_clipped": 0.0105,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t1.33_a0.85",
+    "frames": 76,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 18.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t1.33_a0.85_w0.25",
+    "frames": 64,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 20.0,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t1.33_a1",
+    "frames": 77,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 19.8,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t1.33_a1_w0.25",
+    "frames": 79,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 19.5,
+    "limit_clipped": 0.0,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t1.33_a1.1",
+    "frames": 77,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 20.0,
+    "limit_clipped": 0.0105,
+    "penetration_cm": 0.1,
+    "poses": 1
+   },
+   {
+    "name": "m_t1.33_a1.1_w0.25",
+    "frames": 83,
+    "flights": 0,
+    "flight_ratios": [],
+    "flights_unballistic": 0,
+    "max_joint_speed": 19.9,
+    "limit_clipped": 0.0105,
+    "penetration_cm": 0.1,
+    "poses": 1
+   }
+  ],
+  "dropped_variants": []
+ },
+ "hurdles": {
+  "kept": 0,
+  "dropped": 36,
+  "drop_reasons": {
+   "ballistic": 36,
+   "limits": 12
+  },
+  "base_flights": [
+   {
+    "air_s": 1.6323,
+    "rise": 0.2897,
+    "ratio": 0.09,
+    "open": true
+   }
+  ],
+  "base_max_joint_speed": 9.7,
+  "kept_flights": 0,
+  "kept_flight_ratio_range": null,
+  "kept_flights_unballistic": 0,
+  "kept_variants_lost_a_flight": 0,
+  "kept_variants_over_cap": 0,
+  "max_joint_speed_kept": 0,
+  "max_penetration_kept_cm": 0,
+  "pose_count_spread": [],
+  "per_variant": [],
+  "dropped_variants": [
+   {
+    "name": "o_t0.75_a0.85",
+    "why": "a flight the clip ends in: 1.62 s in the air with a 25 cm rise, which needs at least 0.6 x ballistic (it is 0.08)"
+   },
+   {
+    "name": "o_t0.75_a0.85_w0.25",
+    "why": "a flight the clip ends in: 1.63 s in the air with a 25 cm rise, which needs at least 0.6 x ballistic (it is 0.08)"
+   },
+   {
+    "name": "o_t0.75_a1",
+    "why": "a flight the clip ends in: 1.63 s in the air with a 29 cm rise, which needs at least 0.6 x ballistic (it is 0.09)"
+   },
+   {
+    "name": "o_t0.75_a1_w0.25",
+    "why": "a flight the clip ends in: 1.62 s in the air with a 29 cm rise, which needs at least 0.6 x ballistic (it is 0.09)"
+   },
+   {
+    "name": "o_t0.75_a1.1",
+    "why": "2% of joint samples beyond their limits; a flight the clip ends in: 1.64 s in the air with a 32 cm rise, which needs at least 0.6 x ballistic (it is 0.1)"
+   },
+   {
+    "name": "o_t0.75_a1.1_w0.25",
+    "why": "2% of joint samples beyond their limits; a flight the clip ends in: 1.63 s in the air with a 32 cm rise, which needs at least 0.6 x ballistic (it is 0.1)"
+   },
+   {
+    "name": "o_t1_a0.85",
+    "why": "a flight the clip ends in: 1.64 s in the air with a 25 cm rise, which needs at least 0.6 x ballistic (it is 0.08)"
+   },
+   {
+    "name": "o_t1_a0.85_w0.25",
+    "why": "a flight the clip ends in: 1.62 s in the air with a 25 cm rise, which needs at least 0.6 x ballistic (it is 0.08)"
+   },
+   {
+    "name": "o_t1_a1",
+    "why": "a flight the clip ends in: 1.63 s in the air with a 29 cm rise, which needs at least 0.6 x ballistic (it is 0.09)"
+   },
+   {
+    "name": "o_t1_a1_w0.25",
+    "why": "a flight the clip ends in: 1.60 s in the air with a 29 cm rise, which needs at least 0.6 x ballistic (it is 0.09)"
+   },
+   {
+    "name": "o_t1_a1.1",
+    "why": "2% of joint samples beyond their limits; a flight the clip ends in: 1.64 s in the air with a 32 cm rise, which needs at least 0.6 x ballistic (it is 0.1)"
+   },
+   {
+    "name": "o_t1_a1.1_w0.25",
+    "why": "2% of joint samples beyond their limits; a flight the clip ends in: 1.61 s in the air with a 32 cm rise, which needs at least 0.6 x ballistic (it is 0.1)"
+   },
+   {
+    "name": "o_t1.33_a0.85",
+    "why": "a flight the clip ends in: 1.62 s in the air with a 25 cm rise, which needs at least 0.6 x ballistic (it is 0.08)"
+   },
+   {
+    "name": "o_t1.33_a0.85_w0.25",
+    "why": "a flight the clip ends in: 1.64 s in the air with a 25 cm rise, which needs at least 0.6 x ballistic (it is 0.08)"
+   },
+   {
+    "name": "o_t1.33_a1",
+    "why": "a flight the clip ends in: 1.62 s in the air with a 29 cm rise, which needs at least 0.6 x ballistic (it is 0.09)"
+   },
+   {
+    "name": "o_t1.33_a1_w0.25",
+    "why": "a flight the clip ends in: 1.61 s in the air with a 29 cm rise, which needs at least 0.6 x ballistic (it is 0.09)"
+   },
+   {
+    "name": "o_t1.33_a1.1",
+    "why": "2% of joint samples beyond their limits; a flight the clip ends in: 1.62 s in the air with a 32 cm rise, which needs at least 0.6 x ballistic (it is 0.1)"
+   },
+   {
+    "name": "o_t1.33_a1.1_w0.25",
+    "why": "2% of joint samples beyond their limits; a flight the clip ends in: 1.63 s in the air with a 32 cm rise, which needs at least 0.6 x ballistic (it is 0.1)"
+   },
+   {
+    "name": "m_t0.75_a0.85",
+    "why": "a flight the clip ends in: 1.62 s in the air with a 25 cm rise, which needs at least 0.6 x ballistic (it is 0.08)"
+   },
+   {
+    "name": "m_t0.75_a0.85_w0.25",
+    "why": "a flight the clip ends in: 1.62 s in the air with a 25 cm rise, which needs at least 0.6 x ballistic (it is 0.08)"
+   },
+   {
+    "name": "m_t0.75_a1",
+    "why": "a flight the clip ends in: 1.63 s in the air with a 29 cm rise, which needs at least 0.6 x ballistic (it is 0.09)"
+   },
+   {
+    "name": "m_t0.75_a1_w0.25",
+    "why": "a flight the clip ends in: 1.61 s in the air with a 29 cm rise, which needs at least 0.6 x ballistic (it is 0.09)"
+   },
+   {
+    "name": "m_t0.75_a1.1",
+    "why": "2% of joint samples beyond their limits; a flight the clip ends in: 1.64 s in the air with a 32 cm rise, which needs at least 0.6 x ballistic (it is 0.1)"
+   },
+   {
+    "name": "m_t0.75_a1.1_w0.25",
+    "why": "2% of joint samples beyond their limits; a flight the clip ends in: 1.62 s in the air with a 32 cm rise, which needs at least 0.6 x ballistic (it is 0.1)"
+   },
+   {
+    "name": "m_t1_a0.85",
+    "why": "a flight the clip ends in: 1.64 s in the air with a 25 cm rise, which needs at least 0.6 x ballistic (it is 0.08)"
+   },
+   {
+    "name": "m_t1_a0.85_w0.25",
+    "why": "a flight the clip ends in: 1.62 s in the air with a 25 cm rise, which needs at least 0.6 x ballistic (it is 0.08)"
+   },
+   {
+    "name": "m_t1_a1",
+    "why": "a flight the clip ends in: 1.63 s in the air with a 29 cm rise, which needs at least 0.6 x ballistic (it is 0.09)"
+   },
+   {
+    "name": "m_t1_a1_w0.25",
+    "why": "a flight the clip ends in: 1.62 s in the air with a 29 cm rise, which needs at least 0.6 x ballistic (it is 0.09)"
+   },
+   {
+    "name": "m_t1_a1.1",
+    "why": "2% of joint samples beyond their limits; a flight the clip ends in: 1.64 s in the air with a 32 cm rise, which needs at least 0.6 x ballistic (it is 0.1)"
+   },
+   {
+    "name": "m_t1_a1.1_w0.25",
+    "why": "2% of joint samples beyond their limits; a flight the clip ends in: 1.63 s in the air with a 32 cm rise, which needs at least 0.6 x ballistic (it is 0.1)"
+   },
+   {
+    "name": "m_t1.33_a0.85",
+    "why": "a flight the clip ends in: 1.62 s in the air with a 25 cm rise, which needs at least 0.6 x ballistic (it is 0.08)"
+   },
+   {
+    "name": "m_t1.33_a0.85_w0.25",
+    "why": "a flight the clip ends in: 1.61 s in the air with a 25 cm rise, which needs at least 0.6 x ballistic (it is 0.08)"
+   },
+   {
+    "name": "m_t1.33_a1",
+    "why": "a flight the clip ends in: 1.62 s in the air with a 29 cm rise, which needs at least 0.6 x ballistic (it is 0.09)"
+   },
+   {
+    "name": "m_t1.33_a1_w0.25",
+    "why": "a flight the clip ends in: 1.63 s in the air with a 29 cm rise, which needs at least 0.6 x ballistic (it is 0.09)"
+   },
+   {
+    "name": "m_t1.33_a1.1",
+    "why": "2% of joint samples beyond their limits; a flight the clip ends in: 1.62 s in the air with a 32 cm rise, which needs at least 0.6 x ballistic (it is 0.1)"
+   },
+   {
+    "name": "m_t1.33_a1.1_w0.25",
+    "why": "2% of joint samples beyond their limits; a flight the clip ends in: 1.60 s in the air with a 32 cm rise, which needs at least 0.6 x ballistic (it is 0.1)"
+   }
+  ]
+ }
+}

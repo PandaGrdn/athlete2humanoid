@@ -73,10 +73,16 @@ def video_to_motion(video_path, out_dir=None, use_sam=True, prompt=config.SAM_PR
     else:
         masks = np.ones(frames.shape[:3], bool)
 
-    frontend = sam3d_body.choose(frontend)
-    if frontend == "sam3d":  # SAM 3D Body on the athlete's mask boxes (no mask: its own person detector)
-        d = sam3d_body.run(video_path, len(frames), sam3d_body.mask_boxes(masks) if masks.mean() < 0.9 else None)
-        np.savez_compressed(out_dir / "sam3d.npz", **d)
+    # SAM 3D Body on the athlete's mask boxes (no mask: its own person detector). A sam3d.npz already in out_dir
+    # for these frames is reused, so the later stages re-run without a GPU.
+    d = sam3d_body.cached(out_dir / "sam3d.npz", frames) if frontend != "mediapipe" else None
+    frontend = "sam3d" if d is not None else sam3d_body.choose(frontend)
+    if frontend == "sam3d":
+        if d is None:
+            d = sam3d_body.run(video_path, len(frames), sam3d_body.mask_boxes(masks) if masks.mean() < 0.9 else None)
+            np.savez_compressed(out_dir / "sam3d.npz", **d)
+        else:
+            print(f"pose: reusing {out_dir / 'sam3d.npz'}")
         world, image_xy, boxes = sam3d_body.landmarks(d)
     else:
         crops, boxes = track.crop_to_mask(frames, masks)
