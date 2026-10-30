@@ -98,6 +98,8 @@ HOLD_FILL = 0.8
 # 1 / TEMPO_CUT times early isn't the motion at another tempo but a shortcut (the punches clip starts in the arms
 # clip's one key pose, 12x "early"): that hold counts in full.
 HOLD_STAGE_FRAC, TEMPO_MIN, TEMPO_CUT = 0.5, 0.5, 1 / 3
+LAND_HOLD_S = 0.1  # a landing's settle: feet down and upright this long. A clip that ends sooner after its last
+# touchdown, or in the air (the hurdles: it ends over the hurdle, 51 cm up), has no landing in it to ask for.
 # Tracker calibration (calibrate): each feature's tolerance floor is max(TOL_MIN, CALIB_K x the RMS error of a
 # good tracking policy on that feature on the clean clip), so a tracker that copies the clip passes by
 # construction; at most CALIB_MAX x TOL_MIN, so a poor calibration run can't make every move pass (at 3x, the
@@ -421,8 +423,9 @@ def _compile(pos, fps, skill, max_clearance, name, scale, end=None):
                            "ref_air_s": round(air_s, 3),
                            "pelvis_rise": round(float(np.clip(FLIGHT_RISE_FRAC * rise, 0.0, FLIGHT_RISE_MAX)), 3),
                            "ref_pelvis_rise": round(rise, 3)})
-            stages.append({"kind": "settle", "start_s": round(e / fps, 3), "end_s": round(e / fps, 3),
-                           "name": "land", "hold_s": 0.1, "still": False, "feet_down": [True, True]})
+            if len(pos) - e >= LAND_HOLD_S * fps:  # a landing only if the video shows one
+                stages.append({"kind": "settle", "start_s": round(e / fps, 3), "end_s": round(e / fps, 3),
+                               "name": "land", "hold_s": LAND_HOLD_S, "still": False, "feet_down": [True, True]})
             prev_k, prev_t = e, e
             continue
         k = ev[1]
@@ -430,7 +433,6 @@ def _compile(pos, fps, skill, max_clearance, name, scale, end=None):
         w = relevance(delta, sig)
         if not w.any():
             continue
-        tol = np.maximum(TOL_MIN.numpy(), TOL_FRAC * np.abs(delta)) / np.sqrt(np.maximum(w, 1e-3))
         # root targets: in the previous key moment's heading frame, as root_features() measures them
         dxy, c, s_ = pos[k, PELVIS, :2] - pos[prev_k, PELVIS, :2], np.cos(yaw[prev_k]), np.sin(yaw[prev_k])
         # the turn wrapped into [-pi, pi), as root_features() measures it: a spin past 180 deg (a discus
@@ -438,6 +440,11 @@ def _compile(pos, fps, skill, max_clearance, name, scale, end=None):
         turn = float(np.remainder(yaw[k] - yaw[prev_k] + np.pi, 2 * np.pi) - np.pi)
         root = [c * dxy[0] + s_ * dxy[1], -s_ * dxy[0] + c * dxy[1], YAW_R * turn]
         goal = np.concatenate([F[k, :D_POSE], root])
+        # The tolerance is a share of the excursion the goal itself measures: the root's in the previous key moment's
+        # frame, the turn wrapped. From the unwrapped spin, the discus's one key moment allowed 2.2 rad of turn either
+        # way, and punching while turning a little passed it.
+        tol = np.maximum(TOL_MIN.numpy(), TOL_FRAC * np.abs(np.concatenate([delta[:D_POSE], root])))
+        tol = tol / np.sqrt(np.maximum(w, 1e-3))
         # Required down: a foot the reference has planted by the robot's own rule (T.DOWN), which is what the
         # robot is held to. One the reference merely has low (on its toes, a lunge's back foot, hovering up
         # to down_ref) is left free: required by the looser rule, the robot could never meet it (kp lunge:
@@ -457,9 +464,10 @@ def _compile(pos, fps, skill, max_clearance, name, scale, end=None):
                        "hold_s": round(float(hold), 3), "ref_dwell_s": round(ref_dwell, 3)})
         prev_k, prev_t = k, k
     end_down = [bool(pos[end - 1, a, 2] - foot0 < T.DOWN) for a in (L_ANKLE, R_ANKLE)]
+    airborne_end = stages[-1]["kind"] == "flight"  # the clip ends in the air (the hurdles): no landing, no finish
     if stages[-1]["kind"] == "pose" and end - 1 - stages[-1]["frame"] < MIN_GAP_S * fps:
         stages[-1] |= {"still": True, "optional": False, "name": stages[-1]["name"] + " (finish)"}  # the end pose is the finish
-    else:
+    elif not airborne_end:
         stages.append({"kind": "settle", "start_s": round(prev_t / fps, 3), "end_s": round(len(pos) / fps, 3),
                        "name": "finish", "hold_s": 0.1, "feet_down": end_down if any(end_down) else [True, True]})
     for a, b in zip(stages, stages[1:]):  # strictly increasing starts: stage_at() picks one per time
@@ -470,7 +478,8 @@ def _compile(pos, fps, skill, max_clearance, name, scale, end=None):
             "h0": round(h0, 3), "foot0": round(foot0, 3), "down": T.DOWN, "air": T.AIR,
             "down_ref": round(down_ref, 3), "air_ref": round(air_ref, 3), "weights": dict(WEIGHTS),
             "features": [f[0] for f in FEATURES], "rdp_eps": round(eps, 4), "stages": stages,
-            "summary": summarize(stages), "warnings": []}
+            "summary": summarize(stages),
+            "warnings": ["the clip ends in the air: no landing or finish to do"] if airborne_end else []}
     if skill:
         T.attach_skill(spec, skill)
         for st in spec["stages"]:
@@ -559,8 +568,13 @@ class KeyposeMachine:
         self.root_scale = torch.ones(num_envs, device=device)  # share of the root goal left (mid-stage starts)
         self.anchor_xy, self.anchor_yaw = torch.zeros(num_envs, 2, device=device), z()
         # where the current stage's predicate first held: the next stage's root goal is measured from here,
-        # not from where its hold ended (the body keeps moving during a hold, as the reference's does)
+        # not from where its hold ended (the body keeps moving during a hold, as the reference's does). After a pose
+        # stage, from where the rollout came closest to that pose (near_xy): _compile measures the next root goal
+        # from the reference's key frame, which is the reference's own closest approach at any tempo. The first-held
+        # point is earlier along the path (18 cm behind on the shot put's glide), which made the root goals of a
+        # travelling move depend on the rollout's timing (the shot put at 1.4x never met its "step forward").
         self.held_xy, self.held_yaw = torch.zeros(num_envs, 2, device=device), z()
+        self.near_xy, self.near_yaw = torch.zeros(num_envs, 2, device=device), z()
         self.done = z(torch.bool)
         self.stats = {"advances": z(torch.long), "jump_q": z()}
         self.n_stages = self._size[self.var]
@@ -693,6 +707,8 @@ class KeyposeMachine:
         closer = (k == POSE) & (rms < self.near_rms) & ~self.done
         self.near_rms = torch.where(closer, rms, self.near_rms)
         self.near_x = torch.where(closer[:, None], x, self.near_x)
+        self.near_xy = torch.where(closer[:, None], pos[:, PELVIS, :2], self.near_xy)
+        self.near_yaw = torch.where(closer, heading(pos), self.near_yaw)
         after_flight = self._jump_goal[v, self.stage] > 0
         self.apex = torch.where((k == FLIGHT) | after_flight, torch.maximum(self.apex, lo), torch.zeros_like(lo))
         self.z_apex = torch.where(k == FLIGHT, torch.maximum(self.z_apex, z), torch.zeros_like(z))
@@ -729,7 +745,9 @@ class KeyposeMachine:
         self.stage = torch.minimum(new_stage, self.n_stages - 1)
         moved = (adv & ~just_done).nonzero().squeeze(1)
         if len(moved):
-            self._enter(moved, pos[moved], anchor=(self.held_xy[moved], self.held_yaw[moved]))
+            from_pose = (k[moved] == POSE) & torch.isfinite(self.near_rms[moved])
+            self._enter(moved, pos[moved], anchor=(torch.where(from_pose[:, None], self.near_xy[moved], self.held_xy[moved]),
+                                                   torch.where(from_pose, self.near_yaw[moved], self.held_yaw[moved])))
             p = p.clone()
             p[moved] = 0.0
         self.p = torch.where(adv, torch.zeros_like(p), p)
