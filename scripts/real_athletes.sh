@@ -5,12 +5,14 @@
 #      from inputs/policy_tracking_var (the squat-jump variants tracker); the clips train in parallel
 #   2. per clip, experiments/robustness_eval.py: the clip clean, one 1 m/s push level, and its held-out variants
 #      (--transfer), no V-JEPA scoring; then its recorded pushes for the 3D showcase (experiments/push_showcase.py)
-#   bash scripts/real_athletes.sh <iters> [--from <an interrupted run's outputs/athletes>] [clip...]
-#     (default: every clip in inputs/clips/). --from: reuse its built variants, and start from its newest checkpoints
+#   bash scripts/real_athletes.sh <iters> [--from <an interrupted run's outputs/athletes>] [--reward-config <json>] [clip...]
+#     (default: every clip in inputs/clips/). --from: reuse its built variants, and start from its newest checkpoints.
+#     --reward-config: train_motion.py's reward settings (a path in the repo), e.g. docs/real_athletes/reward_feet_height.json
 set -u
 ITERS=$1; shift
-FROM=""
+FROM="" RC=""
 if [ "${1:-}" = "--from" ]; then FROM=$2; shift 2; fi
+if [ "${1:-}" = "--reward-config" ]; then RC="--reward-config $2"; shift 2; fi
 D=${A2H_JOB_DATA:-/content/a2h}  # Colab sets none
 IN=$D/inputs
 OUT=$D/outputs/athletes
@@ -26,7 +28,7 @@ for c in $CLIPS; do
   fi
   CK=$([ -n "$FROM" ] && ls "$FROM/$c"/policy_tracking_var/latest/model_*.pt 2>/dev/null | tail -1)  # latest/: the newest only
   [ -n "$CK" ] && INIT="tracking_var=$CK"
-  python3 experiments/variant_policy.py "$IN/clips/$c" --out "$OUT/$c" --policies tracking_var --init "$INIT" $REUSE \
+  python3 experiments/variant_policy.py "$IN/clips/$c" --out "$OUT/$c" --policies tracking_var --init "$INIT" $REUSE $RC \
     --iters "$ITERS" > "$OUT/$c.log" 2>&1 &
   echo "=== $c: training (log $OUT/$c.log)"
 done

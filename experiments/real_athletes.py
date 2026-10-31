@@ -171,7 +171,7 @@ def showcase(a):
                  "video": f"{c['author']}'s clip ({c['licence']}). SAM 3.1 segments the person, SAM 3D Body lifts the pose "
                           "to 3D" + (", and the run's forward travel is taken out." if c.get("in_place") else "."),
                  "policy": "PPO in mjlab on 36 automatic variants of the clip, warm-started from the squat-jump tracker, "
-                           (f"{iters.group(1)} iterations. " if iters else "") + "The network's own run in MuJoCo, recorded.",
+                           + (f"{iters.group(1)} iterations. " if iters else "") + "The network's own run in MuJoCo, recorded.",
                  "facts": facts, "credit": {"text": c["credit"], "url": c["page"], "licence": c["licence"]},
                  "fallback": None}
         index["clips"] = [e for e in index["clips"] if e["id"] != sid] + [{k: v for k, v in entry.items() if v is not None}]
@@ -346,6 +346,106 @@ def assemble(a):
               f"held-out {ev['tracking_var']['held_out_success']}, spec {ev['retarget']['task_stages']}")
     return rows
 
+SWING_M = 0.03  # a foot is in the air (a swing) while its ankle is this far above the clip's floor for it
+
+
+def swings(z, fps):
+    """(T,) one ankle's height -> its swings: runs of at least 2 frames more than SWING_M above its floor (the
+    trace's 5th percentile) -> {count, median duration s, median peak above the floor m, air share}."""
+    import numpy as np
+    up = z - np.percentile(z, 5) > SWING_M
+    edges = np.flatnonzero(np.diff(np.r_[0, up.astype(int), 0]))
+    runs = [(a, b) for a, b in zip(edges[::2], edges[1::2]) if b - a >= 2]
+    floor = np.percentile(z, 5)
+    r = lambda x: round(float(x), 3) if x == x else None
+    return {"count": len(runs), "duration_s": r(np.median([(b - a) / fps for a, b in runs]) if runs else np.nan),
+            "peak_m": r(np.median([z[a:b].max() - floor for a, b in runs]) if runs else np.nan),
+            "air_frac": round(float(up.mean()), 3)}
+
+
+def feet(a):
+    """Where a jog's foot lift goes, per clip: each ankle's height per frame (a) in SAM 3D Body's pose on the G1's
+    skeleton (human.npy after level_floor, before any foot is planted: retarget's feet_pose), (b) in the in-place G1
+    reference the policy trains on (its qpos through forward kinematics), (c) in the policy's clean rollouts
+    (robustness_eval's rollouts.npz), with the swings of each (swings()), and the same for the travelling retarget
+    (no --in-place), this checkout's in-place retarget ("in_place_now"), and the stance masks they find, to see whether
+    holding the root on the spot shortens a swing. --clips-dir: the processed clips the policy trained on (their qpos.npy
+    is "reference"). -> docs/results/real_athletes/foot_lift<tag>.json and docs/img/real_athletes_foot_lift<tag>.png"""
+    import matplotlib
+    import numpy as np
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import retarget
+    from skill import task as T
+    res, traces = {"swing_rule": f"ankle more than {SWING_M} m above its 5th percentile, >= 2 frames",
+                   "policy_run": a.policy_run, "sources": {}}, {}
+    for c in a.clips:
+        clip = Path(a.clips_dir) / c
+        meta = json.loads((clip / "meta.json").read_text())
+        P, fps, method = np.load(clip / "human.npy"), meta["fps"], (meta.get("in_place") or {}).get("method")
+        row, tr = {"in_place": method}, {}
+        for name, m in (("in_place", method), ("travelling", None)):
+            mo = retarget.proportional_motion(P, retarget.G1Retargeter(), fps, in_place=m)
+            row[f"stance_{name}"] = {"frac": [round(float(x), 3) for x in mo["stance"].mean(0)],
+                                     "air_runs": [swings(np.where(mo["stance"][:, f], 0.0, 1.0), fps)["count"] for f in range(2)]}
+            if m == method:
+                tr["human"] = mo["feet_pose"][..., 2]
+        rt = retarget.G1Retargeter()
+        q_travel = rt.retarget_sequence(*retarget.human_to_targets(P, rt, fps=fps), fps=fps)
+        rt = retarget.G1Retargeter()
+        q_now = rt.retarget_sequence(*retarget.human_to_targets(P, rt, fps=fps, in_place=method), fps=fps)
+        tr["in_place_now"] = T.body_positions_from_qpos(q_now)[:, [3, 6], 2]
+        tr["reference"] = T.body_positions_from_qpos(np.load(clip / "qpos.npy"))[:, [3, 6], 2]
+        tr["travelling"] = T.body_positions_from_qpos(q_travel)[:, [3, 6], 2]
+        z = np.load(Path(a.policy_run) / c / "robust" / "rollouts.npz")
+        keys = sorted(k for k in z.files if k.startswith("0/tracking_var/") and k.endswith("/body"))
+        tr["policy"] = [z[k][:, [3, 6], 2] for k in keys]
+        pfps = 50.0
+        for k, v in tr.items():
+            f = pfps if k == "policy" else fps
+            vs = v if k == "policy" else [v]
+            row[k] = {side: {"max_m": round(float(max(x[:, i].max() for x in vs)), 3),
+                             "median_m": round(float(np.median(np.concatenate([x[:, i] for x in vs]))), 3),
+                             **{f"swing_{kk}": vv for kk, vv in swings(vs[0][:, i], f).items()}}
+                      for i, side in enumerate(("left", "right"))}
+        row["policy_rollouts"] = len(keys)
+        res[c], traces[c] = row, (tr, fps, pfps, int(z[keys[0].replace("/body", "/start")]))
+    res["sources"] = {"human, reference": f"{a.clips_dir}/<clip>/human.npy, qpos.npy (what the policy trained on)",
+                      "travelling, in_place_now": "the same human.npy retargeted by this checkout, without and with --in-place",
+                      "policy": f"{a.policy_run}/<clip>/robust/rollouts.npz, the clean condition"}
+
+    colors = {"human": "#2a78d6", "reference": "#eb6834", "policy": "#1baf7a"}
+    fig, axes = plt.subplots(len(a.clips), 2, figsize=(11, 3.1 * len(a.clips)), sharey=True, squeeze=False)
+    for r, c in enumerate(a.clips):
+        tr, fps, pfps, start = traces[c]
+        for i, side in enumerate(("left", "right")):
+            ax = axes[r, i]
+            t = np.arange(len(tr["human"])) / fps
+            ax.plot(t, tr["human"][:, i] * 100, color=colors["human"], lw=1.6, label="video pose (SAM 3D Body, G1 scale)")
+            ax.plot(t, tr["reference"][:, i] * 100, color=colors["reference"], lw=2, label="G1 reference (in place)")
+            for j, x in enumerate(tr["policy"]):
+                ax.plot((start + np.arange(len(x))) / pfps, x[:, i] * 100, color=colors["policy"], lw=2 if j == 0 else 1,
+                        alpha=1 if j == 0 else 0.5, label="policy, clean rollout" if j == 0 else None)
+            ax.set_title(f"{c.replace('_', ' ')}: {side} ankle", fontsize=10, loc="left")
+            ax.grid(axis="y", color="#e4e3df", lw=0.8)
+            for s in ("top", "right"):
+                ax.spines[s].set_visible(False)
+            if i == 0:
+                ax.set_ylabel("ankle height (cm)")
+            if r == len(a.clips) - 1:
+                ax.set_xlabel("time (s)")
+    axes[0, 0].legend(frameon=False, fontsize=8, loc="upper left")
+    fig.suptitle(a.title or "Ankle height: the video's pose and the G1 reference lift the feet; the policy does not",
+                 fontsize=11, x=0.01, ha="left")
+    fig.tight_layout()
+    img = ROOT / "docs" / "img" / f"real_athletes_foot_lift{a.tag}.png"
+    fig.savefig(img, dpi=130)
+    out = ROOT / "docs" / "results" / "real_athletes" / f"foot_lift{a.tag}.json"
+    out.write_text(json.dumps(res, indent=1))
+    print("->", out, img)
+    for c in a.clips:
+        print(c, json.dumps({k: res[c][k] for k in ("human", "reference", "in_place_now", "travelling", "policy")}))
+
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
@@ -363,9 +463,15 @@ if __name__ == "__main__":
     p.add_argument("clips", nargs="+")
     p.add_argument("--force", action="store_true", help="also a clip whose policy doesn't pass (to inspect; don't commit it)")
     sub.add_parser("facts")
+    p = sub.add_parser("feet")
+    p.add_argument("--clips", nargs="+", default=["jog_lakeside", "jog_bridge"])
+    p.add_argument("--policy-run", default="outputs/remote_athletes_ra5", help="an athletes job's folder (<clip>/robust)")
+    p.add_argument("--clips-dir", default="outputs/athletes_inputs/clips", help="the processed clips it trained on")
+    p.add_argument("--tag", default="", help="suffix of the json and figure, e.g. _footz")
+    p.add_argument("--title")
     p = sub.add_parser("assemble")
     p.add_argument("results", help="remote_run.py athletes' folder")
     p.add_argument("--iters", type=int, required=True, help="the policies' training iterations (for the run page)")
     p.add_argument("--all", action="store_true", help="also the clips whose policy doesn't complete its clip (to inspect)")
     a = ap.parse_args()
-    {"inputs": inputs, "reretarget": reretarget, "audit": audit, "assemble": assemble, "showcase": showcase, "facts": facts}[a.cmd](a)
+    {"inputs": inputs, "reretarget": reretarget, "audit": audit, "assemble": assemble, "showcase": showcase, "facts": facts, "feet": feet}[a.cmd](a)

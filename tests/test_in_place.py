@@ -148,6 +148,19 @@ class InPlaceMotion(unittest.TestCase):
         root = P[:, [23, 24]].mean(1)
         return root, P[:, [27, 28]] - root[:, None]
 
+    def test_lift_off_trim(self):
+        # one contact frames 2-9: the ankle still 6 cm up as it starts, already 5 and 9 cm up at its end
+        z = np.zeros((14, 2))
+        z[:, 0] = [0.2, 0.1, 0.06, 0.01, 0.0, 0.0, 0.01, 0.02, 0.05, 0.09, 0.2, 0.25, 0.2, 0.1]
+        stance = np.zeros((14, 2), bool)
+        stance[2:10, 0] = stance[:, 1] = True
+        got = retarget.trim_lift_off(stance, z, FPS)
+        np.testing.assert_array_equal(np.flatnonzero(got[:, 0]), [3, 4, 5, 6, 7])  # within 3 cm of its low level
+        self.assertTrue(got[:, 1].all())  # a flat contact keeps every frame
+        high = np.full((14, 2), 0.2)
+        high[5:7, 0] = 0.0  # down for two of its eight frames: those two
+        np.testing.assert_array_equal(np.flatnonzero(retarget.trim_lift_off(stance, high, FPS)[:, 0]), [5, 6])
+
     def test_rejects_unknown_method(self):
         with self.assertRaises(ValueError):
             self.motion("treadmill")

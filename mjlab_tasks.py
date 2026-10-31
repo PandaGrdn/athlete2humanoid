@@ -37,7 +37,8 @@ stays inside its variant (VariantMotionCommand) and the task reward scores it ag
 own keypose spec. mjlab's adaptive sampling over the whole file then favours the variants it fails.
 A2H_REWARD_CONFIG=next_reward_config.json (muse/reward_agent.py's format; train_motion.py
 --reward-config sets it) overrides the latent weight, SIGMA, tracking scale and termination
-thresholds below. The latent-only tasks keep tracking_scale 0.
+thresholds below. The latent-only tasks keep tracking_scale 0. Its "feet_height" adds a foot-height term
+to A2H-Tracking (FEET_HEIGHT; off by default).
 
 The latent-only tasks also get stability_terms(): the latent reward says what the motion should
 look like, not how to stay on your feet doing it (see its docstring). The hybrid task gets them
@@ -210,6 +211,62 @@ def feet_slip(env, contact_height=0.06):
     ids = [robot.body_names.index(n) for n in FEET]
     on_floor = robot.data.body_link_pos_w[:, ids, 2] - env.scene.env_origins[:, None, 2] < contact_height
     return (robot.data.body_link_lin_vel_w[:, ids, :2].square().sum(-1) * on_floor).sum(-1)
+
+
+# Foot height (A2H-Tracking): mjlab's tracking terms score the feet only inside motion_body_pos, an average over 14 bodies
+# at std 0.3 m, where a swing foot left 15 cm low costs ~1/50 of that term; the real-athlete jog trackers learned to
+# shuffle (ankles 3.5 cm up against the reference's 15-25 cm, docs/REAL_ATHLETES.md). This term pays for each foot's
+# height matching the reference's on the frames where the reference's foot is off the floor (swing only), or on every
+# frame (swing_only false). Off (weight 0) unless A2H_REWARD_CONFIG has "feet_height": {"weight": ..., ...}.
+FEET_HEIGHT = {"weight": 0.0,     # 0: no term, the tracking task as mjlab's
+               "std": 0.1,        # m of ankle-height error at which a foot's reward is exp(-1)
+               "clearance": 0.03, # a reference foot this far above its floor (its 5th-percentile height) is in swing
+               "swing_only": True}
+
+
+def feet_height_config():
+    """FEET_HEIGHT, overridden by A2H_REWARD_CONFIG's "feet_height"."""
+    fh = dict(FEET_HEIGHT)
+    path = os.environ.get(REWARD_CONFIG_ENV)
+    if path:
+        user = json.loads(Path(path).read_text()).get("feet_height", {})
+        fh |= {k: bool(v) if k == "swing_only" else float(v) for k, v in user.items() if k in fh}
+    return fh
+
+
+def feet_height_exp(robot_z, ref_z, floor, std, clearance, swing_only=True):
+    """(B, feet) ankle heights of the robot and the reference, (feet,) the reference's floor height per foot ->
+    (B,) the mean over feet of exp(-err^2 / std^2), each foot counted only while the reference's is more than
+    `clearance` above its floor when swing_only (0 when both reference feet are down)."""
+    r = torch.exp(-(robot_z - ref_z).square() / std ** 2)
+    if swing_only:
+        r = r * (ref_z - floor > clearance)
+    return r.mean(-1)
+
+
+class FeetHeight:
+    """feet_height_exp on the motion command's feet; the floor is each reference foot's 5th-percentile height over the
+    whole motion file (the variants laid end to end, which all stand on the same floor)."""
+
+    def __init__(self, cfg, env):
+        self.cmd = env.command_manager.get_term("motion")
+        self.ids = [list(self.cmd.cfg.body_names).index(n) for n in FEET]
+        self.floor = torch.quantile(self.cmd.motion.body_pos_w[:, self.ids, 2].float(), 0.05, dim=0)
+
+    def __call__(self, env, std, clearance, swing_only=True):
+        origin = env.scene.env_origins[:, None, 2]
+        robot = self.cmd.robot_body_pos_w[:, self.ids, 2] - origin
+        ref = self.cmd.body_pos_w[:, self.ids, 2] - origin
+        return feet_height_exp(robot, ref, self.floor, std, clearance, swing_only)
+
+
+def with_feet_height(cfg):
+    """The tracking task with the FeetHeight term when its weight (feet_height_config) is nonzero."""
+    fh = feet_height_config()
+    if fh["weight"]:
+        cfg.rewards["feet_height"] = RewardTermCfg(func=FeetHeight, weight=fh["weight"], params={
+            "std": fh["std"], "clearance": fh["clearance"], "swing_only": fh["swing_only"]})
+    return cfg
 
 
 FEET_CONTACT = "feet_ground_contact"
@@ -721,8 +778,8 @@ for task, scale, phase, cmd, weighted in (("A2H-Task-Flat-Unitree-G1", 0.1, Fals
     register_mjlab_task(task_id=task, env_cfg=use_variants(task_env_cfg(scale, phase_only=phase, commanded=cmd, weighted_tracking=weighted)),
                         play_env_cfg=use_variants(task_env_cfg(scale, play=True, phase_only=phase, commanded=cmd, weighted_tracking=weighted)),
                         rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
-register_mjlab_task(task_id="A2H-Tracking-Flat-Unitree-G1", env_cfg=use_variants(unitree_g1_flat_tracking_env_cfg()),
-                    play_env_cfg=use_variants(unitree_g1_flat_tracking_env_cfg(play=True)),
+register_mjlab_task(task_id="A2H-Tracking-Flat-Unitree-G1", env_cfg=with_feet_height(use_variants(unitree_g1_flat_tracking_env_cfg())),
+                    play_env_cfg=with_feet_height(use_variants(unitree_g1_flat_tracking_env_cfg(play=True))),
                     rl_cfg=unitree_g1_tracking_ppo_runner_cfg(), runner_cls=MotionTrackingOnPolicyRunner)
 for task, name, term in (("A2H-TrackingVJ-Flat-Unitree-G1", "video_latent", video_latent),
                          ("A2H-TrackingVJCausal-Flat-Unitree-G1", "video_latent", video_latent_causal),

@@ -113,6 +113,8 @@ def main(a):
         init = init_checkpoint(name, a.init)
         if init:
             cmd += ["--init", init]
+        if a.reward_config:  # e.g. the tracking task's foot-height term (mjlab_tasks.FEET_HEIGHT)
+            cmd += ["--reward-config", Path(a.reward_config).resolve()]
         if name in TASK_FIRST:
             cmd += ["--task-spec", out / "task_spec.json", "--importance", out / "importance_variants.json",
                     "--rollout-importance", out / "importance.json"]
@@ -157,6 +159,7 @@ if __name__ == "__main__":
     ap.add_argument("--iters", type=int, default=1500)
     ap.add_argument("--num-envs", type=int, default=4096)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--reward-config", help="reward settings (JSON, train_motion.py --reward-config), for every policy")
     ap.add_argument("--build-only", action="store_true", help="make the variants and motion files, train nothing")
     ap.add_argument("--reuse-build", action="store_true", help="--out already has the variants and motion files (an "
                     "interrupted run's): train on them instead of building them again")

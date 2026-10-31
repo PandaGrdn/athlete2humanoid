@@ -93,6 +93,12 @@ CONTACT_ROOT_SPEED_FRAC = 0.5
 IN_PLACE_METHODS = ("world", "stride", "soft")
 IN_PLACE_DEFAULT = "world"
 IN_PLACE_SOFT_M = 0.10
+# In place, a contact starts once the pose's ankle is within IN_PLACE_LIFT_M of the contact's low level (its lower
+# quartile) and ends when it rises past it (trim_lift_off): with the travel restored a planted foot stands still, so
+# stance_mask's 10 cm / slow test also took in the first and last ~0.1 s of each swing, and plant_feet held them on the
+# floor (jog swings 0.37-0.53 s and 15-17 cm high, against 0.43-0.63 s and 18-21 cm trimmed; docs/REAL_ATHLETES.md
+# "Where the foot lift goes").
+IN_PLACE_LIFT_M = 0.03
 
 
 def bent_knee_pose(model, knee=0.5):
@@ -606,6 +612,25 @@ def _bridge(x):
     return flat.reshape(x.shape)
 
 
+def trim_lift_off(stance, z, fps=30.0, lift=None, keep_frames=2):
+    """stance: (T, 2) bool; z: (T, 2) the pose's ankle heights. Each contact's first and last frames whose ankle is more
+    than `lift` (IN_PLACE_LIFT_M) above the contact's low level (its lower quartile: one low frame of pose noise is not
+    the floor) are not stance: the foot is still coming down, or already lifting. A contact keeps at least keep_frames
+    (at 30 fps). -> (T, 2) bool."""
+    lift = IN_PLACE_LIFT_M if lift is None else lift
+    keep = _frames(keep_frames, fps)
+    stance = stance.copy()
+    for f in range(2):
+        for a, b in _runs(stance[:, f]):
+            low, i, j = np.percentile(z[a:b, f], 25), a, b
+            while j - i > keep and z[i, f] - low > lift:
+                i += 1
+            while j - i > keep and z[j - 1, f] - low > lift:
+                j -= 1
+            stance[a:i, f] = stance[j:b, f] = False
+    return stance
+
+
 def plant_feet(root, ankles, stance, floor, hold_root=False):
     """root: (T, 3) hip-midpoint path; ankles: (T, 2, 3) left/right relative to it; stance:
     (T, 2) bool; floor: ankle height on the floor, scalar or (T, 2) (a lifted heel raises it).
@@ -796,7 +821,8 @@ def proportional_motion(P, rt: G1Retargeter, fps=30.0, in_place=None):
     """The human's motion on a G1-proportioned skeleton, in world coordinates on the G1's floor.
     -> {"joints": {joint: (T, 3)}, "stance": (T, 2), "pelvis_rot", "torso_rot": (T, 3, 3),
     "foot_rot": (T, 2, 3, 3), "scale": root scale, "root_pose" / "root_planted": (T, 3) the hip
-    midpoint from the pose estimate and after planting the feet (for measuring the shift), "airborne":
+    midpoint from the pose estimate and after planting the feet (for measuring the shift), "feet_pose":
+    (T, 2, 3) the left/right ankles on the pose's root, before any contact is used (what the video's feet do), "airborne":
     ground_phantom_flights' report, "warnings": [str] for meta.json}.
 
     Bones take the G1's lengths and keep the human's directions (rescale_bones), so joint
@@ -820,7 +846,10 @@ def proportional_motion(P, rt: G1Retargeter, fps=30.0, in_place=None):
     if in_place:  # a camera that tracked the runner (a dolly) loses the travel, and with it the contacts
         root, floor_drift = level_floor(root, ankles, fps)
         root, restored = restore_travel(root, ankles, fps)
-    stance = stance_mask(root[:, None] + ankles, fps, root=root)
+    feet_pose = root[:, None] + ankles
+    stance = stance_mask(feet_pose, fps, root=root)
+    if in_place:
+        stance = trim_lift_off(stance, feet_pose[..., 2], fps)
     J = level_feet(J, stance)
     ankles = np.stack([J["left_ankle"], J["right_ankle"]], 1)
 
@@ -889,7 +918,7 @@ def proportional_motion(P, rt: G1Retargeter, fps=30.0, in_place=None):
     joints["left_knee"], joints["right_knee"] = knees[:, 0], knees[:, 1]
     out = {"joints": joints, "stance": stance, "pelvis_rot": pelvis_rot, "torso_rot": torso_rot,
            "foot_rot": foot_rot, "scale": scale, "root_pose": root_pose - start,
-           "root_planted": root_planted - start, "airborne": airborne,
+           "root_planted": root_planted - start, "feet_pose": feet_pose - start, "airborne": airborne,
            "warnings": [r["warning"] for r in airborne if "warning" in r]}
     if in_place:
         travel = root_pose[-1, :2] - root_pose[0, :2]
@@ -975,7 +1004,7 @@ def stride_drift(root, stride_s, fps=30.0):
 
 
 # Bump with any change to what the retarget produces; code_version() records it with the commit.
-RETARGET_VERSION = "2026-10-31 contacts (touch-downs, per-take-off flights) + leg-plane knees and feet + arm reseeding"
+RETARGET_VERSION = "2026-10-31 contacts (touch-downs, per-take-off flights) + leg-plane knees and feet + arm reseeding; in place: lift-off trim"
 
 
 def code_version():
@@ -1000,7 +1029,7 @@ def code_version():
                        "ankle_roll_margin_deg": deg(ANKLE_ROLL_MARGIN), "leg_yaw_max_deg": deg(LEG_YAW_MAX),
                        "pivot_yaw_deg": deg(PIVOT_YAW), "pelvis_lean": PELVIS_LEAN, "arm_continuity_cost": ARM_CONTINUITY_COST,
                        "arm_bidirectional": ARM_BIDIRECTIONAL, "arm_reseed_err": ARM_RESEED_ERR,
-                       "position_cost": POSITION_COST, "orientation_cost": ORIENTATION_COST}}
+                       "position_cost": POSITION_COST, "orientation_cost": ORIENTATION_COST, "in_place_lift_m": IN_PLACE_LIFT_M}}
 
 
 def tracking_report(rt: G1Retargeter, qpos, targets_seq):

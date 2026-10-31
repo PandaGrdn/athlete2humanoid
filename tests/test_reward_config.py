@@ -54,7 +54,8 @@ def import_mjlab_tasks(reward_config=None, extra_env=None):
         "mjlab.envs.mdp", "mjlab.managers.curriculum_manager", "mjlab.managers.termination_manager",
         "mjlab.managers.reward_manager", "mjlab.managers.observation_manager", "mjlab.tasks.registry", "mjlab.tasks.tracking",
         "mjlab.tasks.tracking.config", "mjlab.tasks.tracking.config.g1", "mjlab.tasks.tracking.config.g1.env_cfgs",
-        "mjlab.tasks.tracking.config.g1.rl_cfg", "mjlab.tasks.tracking.rl", "mjlab.sensor")}
+        "mjlab.tasks.tracking.config.g1.rl_cfg", "mjlab.tasks.tracking.rl", "mjlab.sensor", "mjlab.tasks.tracking.mdp",
+        "mjlab.tasks.tracking.mdp.commands")}
     rn = mods["latent.reward_net"]
     rn.BODIES, rn.FPS, rn.WINDOW, rn.load_bundle, rn.window_center_step = (), 30.0, 32, None, None
     mods["mjlab.managers.reward_manager"].RewardTermCfg = RewardTermCfg
@@ -68,8 +69,10 @@ def import_mjlab_tasks(reward_config=None, extra_env=None):
     mods["mjlab.tasks.registry"].register_mjlab_task = lambda task_id, env_cfg, play_env_cfg, **kw: registered.update(
         {task_id: env_cfg, task_id + "/play": play_env_cfg})
     mods["mjlab.tasks.tracking.config.g1.env_cfgs"].unitree_g1_flat_tracking_env_cfg = stub_env_cfg
-    mods["mjlab.tasks.tracking.config.g1.rl_cfg"].unitree_g1_tracking_ppo_runner_cfg = lambda: SimpleNamespace(num_steps_per_env=24)
+    mods["mjlab.tasks.tracking.config.g1.rl_cfg"].unitree_g1_tracking_ppo_runner_cfg = lambda: SimpleNamespace(
+        num_steps_per_env=24, actor=SimpleNamespace(), critic=SimpleNamespace())
     mods["mjlab.tasks.tracking.rl"].MotionTrackingOnPolicyRunner = object
+    mods["mjlab.tasks.tracking.mdp.commands"].MotionCommand = mods["mjlab.tasks.tracking.mdp.commands"].MotionCommandCfg = object
     env = ({"A2H_REWARD_CONFIG": str(reward_config)} if reward_config else {}) | (extra_env or {})
     with mock.patch.dict(sys.modules, mods), mock.patch.dict(os.environ, env):
         for k in ("A2H_REWARD_CONFIG", "A2H_IMPORTANCE", "A2H_LATENT_BUNDLE"):
@@ -253,6 +256,36 @@ class RewardConfigTest(unittest.TestCase):
         with self.assertRaises(mc.MuseInvalid) as e:  # the fixture's patch sets /tracking_scale
             ra.propose(DATA, c, "latent", self.tmp, frames=False)
         self.assertTrue(any("stays 0" in x for x in e.exception.errors))
+
+    def test_feet_height_term(self):
+        tracking = "A2H-Tracking-Flat-Unitree-G1"
+        mt, tasks = import_mjlab_tasks()
+        self.assertEqual(mt.FEET_HEIGHT["weight"], 0.0)  # off by default: the tracking task as before
+        for task in (tracking, tracking + "/play", HYBRID):
+            self.assertNotIn("feet_height", tasks[task].rewards, task)
+        rc = self.tmp / "rc.json"
+        rc.write_text(json.dumps({"feet_height": {"weight": 2.0, "std": 0.05, "swing_only": 0}}))
+        mt, tasks = import_mjlab_tasks(rc)
+        t = tasks[tracking].rewards["feet_height"]
+        self.assertIs(t.func, mt.FeetHeight)
+        self.assertEqual((t.weight, t.params), (2.0, {"std": 0.05, "clearance": 0.03, "swing_only": False}))
+        self.assertNotIn("feet_height", tasks[HYBRID].rewards)  # the tracking task only
+
+    @unittest.skipUnless(importlib.util.find_spec("torch"), "needs torch")
+    def test_feet_height_reward(self):
+        import torch
+        mt, _ = import_mjlab_tasks()
+        mt.torch = torch  # imported against a stub
+        floor = torch.tensor([0.035, 0.035])
+        ref = torch.tensor([[0.20, 0.035], [0.035, 0.04], [0.20, 0.035]])  # left foot in swing, both down, left in swing
+        robot = torch.tensor([[0.20, 0.035], [0.035, 0.04], [0.035, 0.035]])  # swings, stands, shuffles
+        r = mt.feet_height_exp(robot, ref, floor, std=0.1, clearance=0.03)
+        self.assertAlmostEqual(float(r[0]), 0.5)  # the swing foot matched; the planted one isn't counted
+        self.assertEqual(float(r[1]), 0.0)  # both reference feet down: nothing to pay
+        self.assertAlmostEqual(float(r[2]), 0.5 * float(torch.exp(torch.tensor(-(0.165 / 0.1) ** 2))), places=6)
+        self.assertLess(float(r[2]), 0.05)  # a shuffle while the reference lifts 16.5 cm earns ~nothing
+        every = mt.feet_height_exp(robot, ref, floor, std=0.1, clearance=0.03, swing_only=False)
+        self.assertAlmostEqual(float(every[1]), 1.0)
 
 
 if __name__ == "__main__":
