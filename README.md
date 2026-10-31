@@ -191,7 +191,8 @@ python3 scripts/remote_run.py robust --reuse outputs/remote_latent_final --targe
 
 ## Limitations
 
-- **One action so far.** The final results are one squat-jump video (plus the squat). Six more clips are processed but haven't been trained on.
+- **Not every move is learned yet.** Policies have been trained on all ten clips, but the lunge fails for every policy at a 0.32 m forward weight shift ([`docs/FRONTIER_TRAVEL.md`](docs/FRONTIER_TRAVEL.md)), punches and jumping jacks weren't learned in 30 minutes of adaptation ([`docs/FRONTIER_ADAPTATION.md`](docs/FRONTIER_ADAPTATION.md)), and with no per-clip training a generalist reaches at most 7% on unseen variants ([`docs/FRONTIER_GENERALIST.md`](docs/FRONTIER_GENERALIST.md)).
+- **The squat-jump tables below are the first final run.** Its task policies were later found to be tuck-hopping and were retrained on a stricter spec ([`docs/KEYPOSE_SPEC.md`](docs/KEYPOSE_SPEC.md)), so their robustness numbers flatter them.
 - **Success vs style.** The task policies look less like the video (V-JEPA 0.43 / 0.31 vs 0.70 for tracking). Style is deliberately weak; stronger, goal-weighted style is the next lever.
 - **The final run trained before the landing fix** (fall refund, 883c6b7) and the grounded start states; its jump quality has room to improve.
 - **The Muse reward agent is one run per arm** on one clip; its likeness gain is from upweighting the likeness terms, and seed variance is unmeasured ([`docs/MUSE_AGENT.md`](docs/MUSE_AGENT.md)).

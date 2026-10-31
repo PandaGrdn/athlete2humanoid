@@ -292,25 +292,25 @@ function MomentTag({ spec, t }: { spec: NonNullable<BuildInput["spec"]>; t: numb
 }
 
 // Which model did each stage: Meta's are filled. Before a stage's data is in, its chip names the model the pipeline
-// uses there; once it is in, the model this build actually used. One a build skipped (a CPU build has no SAM 3.1,
-// a spec named without a Muse key) stays, struck through, so the chip says what is missing.
+// uses there; once it is in, the model this build actually used. SAM 3.1 skipped by a CPU build stays, struck
+// through, so the chip says what is missing; moments Muse didn't name credit the keypose compiler.
 type StageModel = { name: string; meta: boolean; off?: boolean; why: string };
 function stageModels(k: StageKey, input: BuildInput, st: StageStatus): StageModel[] {
   const done = st === "ready" || st === "offer";
   switch (k) {
     case "video":
       return [input.segmenter || !done
-        ? { name: "SAM 3.1", meta: true, why: "Meta's SAM 3.1 segments and tracks the athlete from a text prompt" }
+        ? { name: "SAM 3.1", meta: true, why: "Meta's SAM 3.1 segments and tracks the person from a text prompt" }
         : { name: "SAM 3.1", meta: true, off: true, why: "Not run on this CPU build: the pose model reads the whole frame" }];
     case "skeleton":
       if (input.poseModel === "MediaPipe") return [{ name: "MediaPipe", meta: false, why: "Google's MediaPipe Pose, the CPU fallback for SAM 3D Body" }];
-      return input.poseModel || !done ? [{ name: "SAM 3D Body", meta: true, why: "Meta's SAM 3D Body lifts the masked athlete to a 3D skeleton" }] : [];
+      return input.poseModel || !done ? [{ name: "SAM 3D Body", meta: true, why: "Meta's SAM 3D Body lifts the masked person to a 3D skeleton" }] : [];
     case "retarget":
       return [{ name: "mink IK", meta: false, why: "Inverse kinematics (mink, MuJoCo) on the G1's own bone lengths" }];
     case "moments":
-      return [input.spec?.named_by || !done || !input.spec
+      return [input.spec?.named_by || !done
         ? { name: "Muse Spark", meta: true, why: "The keypose compiler finds the moments in the motion; Meta's Muse Spark names them from the video" }
-        : { name: "Muse Spark", meta: true, off: true, why: "Not named by Muse in this build: the compiler's measured names" }];
+        : { name: "keypose compiler", meta: false, why: "Not named by Muse in this build: the compiler's measured names" }];
     case "variants":
       return [{ name: "rule-based", meta: false, why: "Mirror, tempo and amplitude rules plus a physics filter (skill/variations.py); no model" }];
     case "policy":
