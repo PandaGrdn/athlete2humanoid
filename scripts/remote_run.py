@@ -186,6 +186,8 @@ def pack_reuse(src, policies=False, checkpoints=None, script=None):
                 tar.add(src / name, name)
         if script:
             tar.add(script, script.name)
+        if (src / "from").is_dir():  # athletes --args "--from <inputs>/from": an interrupted run's variants + checkpoints
+            tar.add(src / "from", "from")
         if (src / "transfer").is_dir():  # robust job: clips the policies never trained on (--transfer)
             tar.add(src / "transfer", "transfer")
         if policies:  # the robust job: the trained policies themselves, and their eval
