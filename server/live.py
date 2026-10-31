@@ -107,7 +107,8 @@ class LiveRunner:
     def _work(self, job, src, out):
         store, s = self.store, self.settings
         cancel = store.cancel[job.id]
-        cmd = [s.live_python, "-m", "server.live_worker", str(src), str(out), "--max-seconds", str(s.live_max_seconds)]
+        cmd = [s.live_python, "-m", "server.live_worker", str(src), str(out), "--max-seconds", str(s.live_max_seconds),
+               "--timeout-s", str(s.live_timeout_s)]
         store.set_stage(job, "video", 0.0)
         t0 = time.monotonic()
         proc = subprocess.Popen(cmd, cwd=REPO, env=_env(out), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,

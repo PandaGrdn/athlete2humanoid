@@ -153,7 +153,10 @@ export default function BuildView({ input, status, kicker, follow = false, notes
     if (video) video.currentTime = Math.max(0, Math.min(s, (video.duration || s + 1) - 0.02));
   }, [video]);
 
-  const vsrc = input.video?.src ?? null;
+  const [failed, setFailed] = useState<string | null>(null); // a src that wouldn't play
+  const useFallback = !!input.video?.fallback && failed === input.video.src;
+  const vsrc = (useFallback ? input.video?.fallback : input.video?.src) ?? null;
+  const landmarks = useFallback ? null : input.landmarks;
   const c1 = input.video?.sideBySide ? crop : 1;
   const videoReady = status.video === "ready" || status.video === "working";
 
@@ -188,6 +191,7 @@ export default function BuildView({ input, status, kicker, follow = false, notes
               <div className="bv-crop" style={{ aspectRatio: aspect ? String(aspect * (c1 ?? 1)) : "9 / 16" }}>
                 <video key={vsrc} ref={setVideo} src={vsrc} muted loop playsInline autoPlay preload="auto"
                   onPlay={() => setPaused(false)} onPause={() => setPaused(true)}
+                  onError={() => input.video && setFailed(input.video.src)}
                   style={c1 && c1 < 1 ? { width: `${100 / c1}%`, maxWidth: "none" } : undefined}
                   onLoadedMetadata={(e) => {
                     const v = e.currentTarget;
@@ -195,9 +199,9 @@ export default function BuildView({ input, status, kicker, follow = false, notes
                     setAspect(v.videoWidth / v.videoHeight);
                     if (input.video?.sideBySide) setCrop(Math.max(0.2, Math.min(1, (v.videoWidth - v.videoHeight) / v.videoWidth)));
                   }} aria-label={input.video?.label ?? "The clip"} />
-                {input.landmarks && !input.video?.sideBySide && video && <PoseOverlay video={video} data={{ fps: input.fps, frames: 0, duration_s: 0, video: null, landmarks: input.landmarks, pose_found: null, robot: null, retarget_error_cm: null, timings_s: {} }} />}
+                {landmarks && !input.video?.sideBySide && video && <PoseOverlay video={video} data={{ fps: input.fps, frames: 0, duration_s: 0, video: null, landmarks, pose_found: null, robot: null, retarget_error_cm: null, timings_s: {} }} />}
               </div>
-              <figcaption className="mono">{input.video?.label ?? "Clip"}{input.landmarks && !input.video?.sideBySide ? " · 2D landmarks" : ""}</figcaption>
+              <figcaption className="mono">{useFallback ? "Your upload" : input.video?.label ?? "Clip"}{landmarks && !input.video?.sideBySide ? " · 2D landmarks" : ""}</figcaption>
             </figure>
             {input.mask && status.video === "ready" && <MaskVideo src={input.mask.src} master={video} />}
           </div>

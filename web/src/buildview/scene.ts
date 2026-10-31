@@ -55,6 +55,22 @@ function label(text: string, opts: { size?: number; color?: string } = {}) {
   return m;
 }
 
+/** Take `o` out of the scene and free its GPU resources: materials, their textures, and geometries other than
+ *  the G1's shared meshes (`keep`). */
+function release(o: THREE.Object3D | null | undefined, keep: ReadonlySet<THREE.BufferGeometry>) {
+  if (!o) return;
+  o.removeFromParent();
+  o.traverse((x) => {
+    const m = x as THREE.Mesh;
+    if (m.geometry && !keep.has(m.geometry)) m.geometry.dispose();
+    const mat = m.material as THREE.Material | THREE.Material[] | undefined;
+    (Array.isArray(mat) ? mat : mat ? [mat] : []).forEach((y) => {
+      (y as THREE.MeshBasicMaterial).map?.dispose();
+      y.dispose();
+    });
+  });
+}
+
 class StickFigure {
   readonly group = new THREE.Group();
   private joints: THREE.Mesh[] = [];
@@ -129,6 +145,7 @@ type Ghost = { g1: G1; frames: Frames; fps: number; slot: THREE.Vector3; root0: 
 
 export class BuildScene extends Stage {
   private geoms: THREE.BufferGeometry[];
+  private shared: ReadonlySet<THREE.BufferGeometry>;
   private fig: StickFigure | null = null;
   private figAt = 0; // performance.now() it arrived
   private figOffset = new THREE.Vector3();
@@ -156,6 +173,7 @@ export class BuildScene extends Stage {
   constructor(canvas: HTMLCanvasElement, private robot: Robot, private clock: () => number) {
     super(canvas, { maxDistance: 10, shadowBox: 3.4 });
     this.geoms = geometries(robot);
+    this.shared = new Set(this.geoms);
     this.halo.position.y = SLOT.retarget;
     this.links = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: C.link, transparent: true, opacity: 0, depthWrite: false }));
     this.links.geometry.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(LINKS.length * 6), 3));
@@ -180,7 +198,7 @@ export class BuildScene extends Stage {
   onClickPolicy(fn: ((hit: boolean) => void) | null) { this.onPolicyClick = fn; }
 
   private floorLabel(key: keyof BuildScene["labels"], text: string, x: number, y: number) {
-    this.labels[key]?.removeFromParent();
+    release(this.labels[key], this.shared);
     const m = label(text);
     m.position.set(x, y, 0.003);
     this.world.add(m);
@@ -190,7 +208,7 @@ export class BuildScene extends Stage {
   setFps(fps: number) { this.fps = fps || 30; }
 
   setSkeleton(sk: Skeleton | null, model: string | null) {
-    this.fig?.group.removeFromParent();
+    release(this.fig?.group, this.shared);
     this.fig = null;
     if (!sk || !sk.n) return;
     this.fig = new StickFigure(sk);
@@ -218,7 +236,7 @@ export class BuildScene extends Stage {
   }
 
   setRetarget(frames: Frames | null) {
-    this.ret?.group.removeFromParent();
+    release(this.ret?.group, this.shared);
     this.ret = null;
     this.retFrames = frames;
     if (!frames || !frames.n) return;
@@ -232,9 +250,9 @@ export class BuildScene extends Stage {
   }
 
   setVariants(v: Variants | null) {
-    for (const g of this.ghosts) { g.g1.group.removeFromParent(); g.label.removeFromParent(); }
+    for (const g of this.ghosts) { release(g.g1.group, this.shared); release(g.label, this.shared); }
     this.ghosts = [];
-    this.labels.variants?.removeFromParent();
+    release(this.labels.variants, this.shared);
     if (!v) return;
     this.ghostsAt = performance.now();
     v.ghosts.slice(0, GHOST_Y.length).forEach((gh, i) => {
@@ -258,9 +276,9 @@ export class BuildScene extends Stage {
   setMoments(times: number[]) { this.moments = [...times].sort((a, b) => a - b); }
 
   setPolicy(data: Loaded | null, mps: number, text: string) {
-    if (this.actor) { this.actor.group.removeFromParent(); this.actor.ripple.removeFromParent(); }
+    if (this.actor) { release(this.actor.group, this.shared); release(this.actor.ripple, this.shared); }
     this.actor = null;
-    this.labels.policy?.removeFromParent();
+    release(this.labels.policy, this.shared);
     if (!data) return null;
     const a = (this.actor = new PolicyActor(data, mps, this.geoms));
     const r = a.robot.root();

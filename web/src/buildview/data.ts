@@ -22,7 +22,8 @@ export type Variants = Omit<VariantsView, "ghosts"> & { ghosts: Ghost[] };
 
 export type BuildInput = {
   fps: number; // of the skeleton, the retarget and the video's frames
-  video: { src: string; sideBySide: boolean; label: string } | null; // sideBySide: the left part of render.side_by_side
+  // sideBySide: the left part of render.side_by_side; fallback: played instead if src fails (the landmarks then hide)
+  video: { src: string; sideBySide: boolean; label: string; fallback?: string | null } | null;
   mask: { src: string } | null; // SAM 3.1's silhouette video (a crop that follows the athlete)
   landmarks: LiveData["landmarks"]; // 2D, over the video
   segmenter: string | null; // "SAM 3.1", or null: the whole frame (a CPU build)

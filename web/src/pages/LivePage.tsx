@@ -294,7 +294,11 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
     const own = (k: keyof BuildInput) => (base[k] == null ? extra[k] : base[k]);
     return {
       ...base,
-      video: src ? { src, sideBySide: false, label: source?.title ? "Recorded clip" : aligned ? "Processed clip" : file ? `Your upload · ${file.name}` : "Your upload" } : null,
+      video: src ? {
+        src, sideBySide: false, label: source?.title ? "Recorded clip" : aligned ? "Processed clip" : file ? `Your upload · ${file.name}` : "Your upload",
+        // the processed clip won't play: the visitor's own file, or the job's copy of the upload
+        fallback: aligned && !source ? blob ?? (job?.input ? url(job.input.url) : null) : null,
+      } : null,
       landmarks: aligned ? base.landmarks : null,
       skeleton: own("skeleton") as BuildInput["skeleton"],
       qpos: own("qpos") as BuildInput["qpos"],
@@ -302,7 +306,7 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
       spec,
       clip: source?.clip ?? null,
     };
-  }, [live, extra, src, aligned, source?.title, source?.clip, file, spec]);
+  }, [live, extra, src, aligned, source?.title, source?.clip, file, spec, blob, job?.input]);
   const status = liveJobStatus(job, input, (k: StageKey) => fresh && (!source?.extra || extraRun !== undefined || k === "video"));
   const fromRun = extraRun ? <>3D from the stored run <Link to={`/build/${extraRun}`}>{extraRun}</Link> of the same clip (same SAM 3D Body front end); this recording kept the 2D landmarks only.</> : null;
 

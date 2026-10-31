@@ -283,11 +283,13 @@ def name(mirrored, speed, alpha, warp):
     return f"{'m' if mirrored else 'o'}_t{speed:g}_a{alpha:g}" + (f"_w{warp:g}" if warp else "")
 
 
-def generate(qpos, fps=FPS, grid=None, seed=0, g1=None, log=print):
+def generate(qpos, fps=FPS, grid=None, seed=0, g1=None, log=print, deadline=None):
     """Variants of a clip: [{name, params, qpos, spec, ok, why, rules}] for each (mirror, tempo, amplitude,
     warp) in grid (default TRAIN). spec is the variant's own keypose spec; ok = it may be trained on;
     rules = the filter rules it broke ("self-check", "spec", "limits", "speed", "ballistic", "lost flight",
-    "penetration"), why = the same in words."""
+    "penetration"), why = the same in words. deadline (time.monotonic()): stop before the next variant once it
+    has passed, returning those made so far."""
+    import time
     from skill.keypose import compile_keypose_spec
     g1 = g1 or G1()
     qpos = np.asarray(qpos, np.float64)
@@ -298,6 +300,9 @@ def generate(qpos, fps=FPS, grid=None, seed=0, g1=None, log=print):
     ref_flights = flights(pos, foot0, fps)
     out = []
     for i, (mirrored, speed, alpha, warp) in enumerate(grid or TRAIN):
+        if deadline is not None and time.monotonic() > deadline:
+            log(f"  out of time: {len(out)} of {len(grid or TRAIN)} variants made")
+            break
         q, clipped, src = make(qpos, g1, mirrored, speed, alpha, warp, keys, foot0, seed + i, fps)
         v = {"name": name(mirrored, speed, alpha, warp),
              "params": {"mirror": mirrored, "tempo": speed, "amplitude": alpha, "warp": warp, "seed": seed + i},

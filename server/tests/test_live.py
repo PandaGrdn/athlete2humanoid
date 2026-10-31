@@ -176,6 +176,23 @@ def test_real_worker(tmp_path):
     assert tuple(live_worker.BODIES) == BODIES
 
 
+@pytest.mark.skipif(not _have("mink", "mujoco", "scipy", "torch") or not (REPO / "assets" / "mujoco_menagerie").is_dir(),
+                    reason="needs the retarget and the G1 model")
+def test_variants_stop_at_their_deadline(monkeypatch):
+    """The variants run on the job's clock after its environment is done: past their deadline they stop, keeping
+    those made (the ghost variants come first), and with none made the worker skips them."""
+    import retarget
+    from server import live_worker
+    rt = retarget.G1Retargeter()
+    q = rt.retarget_sequence(retarget.synthetic_squat(rt))
+    with pytest.raises(TimeoutError):
+        live_worker.variant_preview(q, rt.model, deadline=time.monotonic() - 1)
+    clock = iter(range(1000))  # each check of the clock is one second later
+    monkeypatch.setattr(time, "monotonic", lambda: float(next(clock)))
+    v = live_worker.variant_preview(q, rt.model, deadline=2.5)
+    assert v["total"] == 3 and [r["params"]["mirror"] for r in v["rows"]][0] is True  # the mirrored ghost first
+
+
 def test_live_data_is_bounded(tmp_path):
     from server import live
     (tmp_path / "live.json").write_text("x" * (live.MAX_LIVE_BYTES + 1))

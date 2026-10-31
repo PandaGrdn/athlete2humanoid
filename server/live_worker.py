@@ -39,6 +39,9 @@ MAX_SIDE = 640
 MIN_SECONDS = 1.0
 MIN_POSE_FOUND = 0.5
 VARIANT_MAX_S = 12  # longer clips get the four ghost variants only (CPU time)
+# The variants run after the environment is complete, under the job's own wall clock: skipped once the build has
+# used this share of its timeout, and stopped (keeping what is done) at the other share or VARIANT_BUDGET_S.
+VARIANT_START_BY, VARIANT_STOP_BY, VARIANT_BUDGET_S = 0.4, 0.7, 45.0
 # MediaPipe landmarks drawn over the video: the body, not the face or hands
 LANDMARKS = {0: "nose", 11: "left shoulder", 12: "right shoulder", 13: "left elbow", 14: "right elbow",
              15: "left wrist", 16: "right wrist", 23: "left hip", 24: "right hip", 25: "left knee",
@@ -96,7 +99,8 @@ def _round(a, nd):
     return [[None if np.isnan(p).any() else p.tolist() for p in f] for f in a]
 
 
-def run(video, out, max_seconds, name="clip", sam3d=None):
+def run(video, out, max_seconds, name="clip", sam3d=None, timeout_s=240.0):
+    started = time.monotonic()
     out.mkdir(parents=True, exist_ok=True)
     live = {"fps": FPS, "frames": 0, "duration_s": 0.0, "video": None, "landmarks": None, "pose_found": None,
             "skeleton": None, "robot": None, "qpos": None, "retarget_error_cm": None, "variants": None, "timings_s": {}}
@@ -190,9 +194,14 @@ def run(video, out, max_seconds, name="clip", sam3d=None):
     done("environment", t0, f"task spec: {spec['summary']} (the retarget scores "
                             f"{sc['stages_completed']}/{sc['stages_total']})")
 
-    # variants (best effort: the environment is done, and a failure here never fails the build)
+    # variants (best effort: the environment is done, and a failure or running out of time never fails the build)
+    used = time.monotonic() - started
+    if used > VARIANT_START_BY * timeout_s:
+        emit(stage="environment", note=f"variants skipped (the build already took {used:.0f} s)")
+        return
     try:
-        live["variants"] = variant_preview(qpos)
+        deadline = min(started + VARIANT_STOP_BY * timeout_s, time.monotonic() + VARIANT_BUDGET_S)
+        live["variants"] = variant_preview(qpos, rt.model, deadline)
         save()
         v = live["variants"]
         emit(stage="environment", note=f"variants: {v['kept']} of {v['total']} kept (mirrored, re-timed, rescaled; "
@@ -201,11 +210,17 @@ def run(video, out, max_seconds, name="clip", sam3d=None):
         emit(stage="environment", note=f"variants skipped ({type(e).__name__})")
 
 
-def variant_preview(qpos):
-    """skill/variations.py on this retarget: PREVIEW's 18 (6 above VARIANT_MAX_S), with a few kept as ghosts."""
+def variant_preview(qpos, model, deadline=None):
+    """skill/variations.py on this retarget: the four ghost variants first, then the rest of PREVIEW's 18 (none
+    above VARIANT_MAX_S), until the deadline."""
     from skill import variations
-    grid = variations.PREVIEW if len(qpos) <= VARIANT_MAX_S * FPS else [g[:4] for g in variations.GHOSTS]
-    vs = variations.generate(qpos, fps=FPS, grid=grid, log=lambda *a: None)
+    g1 = variations.G1()
+    g1.bodies = lambda q: body_positions(model, q)  # this module's copy: latent/ isn't in the Space image
+    ghosts = [g[:4] for g in variations.GHOSTS]
+    grid = ghosts + ([g for g in variations.PREVIEW if g not in ghosts] if len(qpos) <= VARIANT_MAX_S * FPS else [])
+    vs = variations.generate(qpos, fps=FPS, grid=grid, g1=g1, log=lambda *a: None, deadline=deadline)
+    if not vs:
+        raise TimeoutError("no time left for variants")
     by_name = {v["name"]: v["qpos"] for v in vs}
     return variations.preview(vs, by_name.__getitem__, fps=FPS)
 
@@ -217,9 +232,10 @@ def main(argv=None):
     ap.add_argument("--max-seconds", type=float, default=20.0)
     ap.add_argument("--name", default="clip")
     ap.add_argument("--sam3d", help="SAM 3D Body's npz for this video's processed frames: the pose instead of MediaPipe")
+    ap.add_argument("--timeout-s", type=float, default=240.0, help="the job's wall-clock limit (the variants' budget)")
     a = ap.parse_args(argv)
     try:
-        run(Path(a.video), Path(a.out), a.max_seconds, a.name, a.sam3d)
+        run(Path(a.video), Path(a.out), a.max_seconds, a.name, a.sam3d, a.timeout_s)
     except ClipError as e:
         emit(error=str(e))
         return 2

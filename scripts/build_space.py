@@ -40,7 +40,7 @@ DEFAULT_DEMO_RUN = "latent_s3_kick"  # featured on the home page: a front kick l
 
 # What server/live_worker.py imports from the repo (no latent/, no SAM: MediaPipe on CPU), and its assets.
 LIVE_MODULES = ["config.py", "pose.py", "track.py", "retarget.py", "render.py",
-                "skill/__init__.py", "skill/task.py", "skill/keypose.py"]
+                "skill/__init__.py", "skill/task.py", "skill/keypose.py", "skill/variations.py"]
 POSE_MODEL = "assets/pose_landmarker_heavy.task"
 G1_SCENE = "assets/mujoco_menagerie/unitree_g1/scene.xml"
 TORCH_CPU_INDEX = "https://download.pytorch.org/whl/cpu"
