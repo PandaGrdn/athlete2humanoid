@@ -121,7 +121,14 @@
     "mean_speed_m_s": 0.76,
     "stride_s": 1.0,
     "root_travel_left_m": 0.0,
-    "travel_restored_m": 0.978,
+    "travel_restore": {
+     "before_m": 3.205,
+     "after_m": 2.235,
+     "added_xy_m": [
+      -0.941,
+      0.266
+     ]
+    },
     "floor_drift_removed_m": null
    },
    "stance_frac": [
@@ -235,7 +242,14 @@
     "mean_speed_m_s": 0.76,
     "stride_s": 1.0,
     "root_travel_left_m": 0.0,
-    "travel_restored_m": 0.978,
+    "travel_restore": {
+     "before_m": 3.205,
+     "after_m": 2.235,
+     "added_xy_m": [
+      -0.941,
+      0.266
+     ]
+    },
     "floor_drift_removed_m": null
    },
    "stance_frac": [
@@ -347,7 +361,14 @@
     "mean_speed_m_s": 0.76,
     "stride_s": 1.0,
     "root_travel_left_m": 0.0,
-    "travel_restored_m": 0.978,
+    "travel_restore": {
+     "before_m": 3.205,
+     "after_m": 2.235,
+     "added_xy_m": [
+      -0.941,
+      0.266
+     ]
+    },
     "floor_drift_removed_m": null
    },
    "stance_frac": [

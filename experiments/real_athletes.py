@@ -15,9 +15,11 @@ credit line the site shows, and whether it runs in place.
 
 import argparse
 import json
+import re
 import shutil
 import sys
 import tarfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -141,8 +143,9 @@ def audit(a):
 
 
 def showcase(a):
-    """Each assembled run whose policy completes its clip -> a 3D showcase bundle (scripts/build_showcase.py, its source
-    video credited) and its tab in web/public/showcase/index.json, so /showcase and the build view's stage 6 play it."""
+    """Each named clip's assembled run -> a 3D showcase bundle (scripts/build_showcase.py, its source video credited)
+    and its tab in web/public/showcase/index.json, so /showcase and the build view's stage 6 play it. A run whose policy
+    doesn't complete its clip (eval.json tracking_var.task_success) is refused unless --force (to inspect)."""
     import subprocess
     known, outputs = clips(), ROOT / "outputs"
     index_f = ROOT / "web" / "public" / "showcase" / "index.json"
@@ -151,6 +154,10 @@ def showcase(a):
         c = known[name]
         run = outputs / f"remote_latent_{TAG}_{c['short']}"
         ev = json.loads((run / "eval.json").read_text())["tracking_var"]
+        if ev.get("task_success") is not True and not a.force:
+            raise SystemExit(f"{name}: its policy doesn't complete the clip (clean success {ev.get('task_success_rate')}); "
+                             "not a showcase (--force to build it anyway)")
+        iters = re.search(r"--iters (\d+)", " ".join(json.loads((run / "status.json").read_text()).get("cmd") or []))
         sid = name.replace("_", "-")
         subprocess.run([sys.executable, str(ROOT / "scripts" / "build_showcase.py"), "--id", sid, "--run", run.name,
                         "--policy", "tracking_var", "--pushes", f"remote_pushes_{TAG}_{c['short']}",
@@ -161,15 +168,118 @@ def showcase(a):
             facts.append({"v": f"{ev['held_out_success']:.0%}", "l": "of held-out variants completed"})
         entry = {"id": sid, "tab": c["tab"], "title": c["showcase_title"], "kicker": "Free-licence video → one policy",
                  "lede": c["description"] + (" The clip travels; the G1 runs it in place." if c.get("in_place") else ""),
-                 "video": f"{c['author']}'s clip ({c['licence']}). SAM 3.1 segments the athlete, SAM 3D Body lifts the pose "
+                 "video": f"{c['author']}'s clip ({c['licence']}). SAM 3.1 segments the person, SAM 3D Body lifts the pose "
                           "to 3D" + (", and the run's forward travel is taken out." if c.get("in_place") else "."),
                  "policy": "PPO in mjlab on 36 automatic variants of the clip, warm-started from the squat-jump tracker, "
-                           f"{ev.get('iterations', 1000)} iterations. The network's own run in MuJoCo, recorded.",
+                           (f"{iters.group(1)} iterations. " if iters else "") + "The network's own run in MuJoCo, recorded.",
                  "facts": facts, "credit": {"text": c["credit"], "url": c["page"], "licence": c["licence"]},
                  "fallback": None}
         index["clips"] = [e for e in index["clips"] if e["id"] != sid] + [{k: v for k, v in entry.items() if v is not None}]
         print(f"{sid}: bundle + tab")
     index_f.write_text(json.dumps(index, indent=1, ensure_ascii=False) + "\n")
+
+
+def facts(a):
+    """The numbers docs/REAL_ATHLETES.md quotes that no other results file holds, each from its source in outputs/
+    (gitignored), -> docs/results/real_athletes/facts.json: SAM 3.1 / SAM 3D Body coverage and the intake's warnings
+    (the processing job's log), the kick's reference tilt and training terminations, how far each clip trained on
+    Modal before the spend limit, the jogs' ankle heights (reference vs the final policy's clean rollouts) and the
+    spec stage they stop at, the boxer's tracking error, the warm start's own scores, the synthetic jog's slip, and
+    the jobs' wall-clock times."""
+    import numpy as np
+    from skill import task as T
+    out_d = ROOT / "outputs"
+    res = {"sources": {}}
+
+    log = (out_d / "remote_pro_ra" / "job.log").read_text(errors="ignore")
+    res["sources"]["processing"] = "outputs/remote_pro_ra/job.log"
+    proc, start = {}, 0
+    for m in re.finditer(r"\] (\w+): processed", log):
+        chunk = log[start:m.start()]
+        num = lambda pat: (lambda x: float(x[-1]) if x else None)(re.findall(pat, chunk))
+        proc[m.group(1)] = {"sam31_visible_pct": num(r"SAM 3.1: athlete visible in (\d+)% of frames"),
+                            "sam3d_pose_found_pct": num(r"pose \(sam3d\) found in (\d+)% of frames"),
+                            "intake_warnings": re.findall(r"intake warning: (.*)", chunk)}
+        start = m.end()
+    res["processing"] = proc
+
+    kick = out_d / "remote_athletes_ra3_partial" / "taekwondo_kick"
+    klog = (kick / "robust_cpu.log").read_text(errors="ignore")
+    tl = (kick / "policy_tracking_var" / "train.log").read_text(errors="ignore")
+    last = tl[tl.rfind("Learning iteration"):]
+    res["kick"] = {"ref_tilt_max_rad": float(re.findall(r"'ref_tilt_max_rad': ([\d.]+)", klog)[-1]),
+                   "fall_rule_tilt_rad": float(re.findall(r"'tilt_rad': ([\d.]+)", klog)[-1]),
+                   "clip_steps_50hz": int(re.findall(r"'clip_steps': (\d+)", klog)[-1]),
+                   "eval_refused": "AssertionError: fall rule fires on the reference" in klog,
+                   "last_terminations_per_window": {k: float(v) for k, v in re.findall(r"Episode_Termination/(\w+): ([\d.]+)", last)}}
+    res["sources"]["kick"] = f"{kick.relative_to(ROOT)}/robust_cpu.log, policy_tracking_var/train.log"
+
+    modal = {}
+    for c in ("jog_lakeside", "jog_bridge", "shadow_boxing", "taekwondo_kick"):
+        t = (out_d / "remote_athletes_ra3_partial" / c / "policy_tracking_var" / "train.log").read_text(errors="ignore")
+        jl = (out_d / "remote_athletes_ra3_partial" / f"{c}.log").read_text(errors="ignore")
+        modal[c] = {"training_started_utc": (re.findall(r"\[(\d\d:\d\d:\d\d)\] training tracking_var", jl) or [None])[0],
+                    "training_variants": (re.findall(r"(\d+/\d+) training variants", jl) or [None])[0],
+                    "last_iteration_logged": int(re.findall(r"Learning iteration (\d+)/", t)[-1]),
+                    "time_elapsed_at_it": re.findall(r"Time elapsed: ([\d:]+)", t)[-1],
+                    "iteration_time_s": float(re.findall(r"Iteration time: ([\d.]+)s", t)[-1]),
+                    "mean_episode_length": float(re.findall(r"Mean episode length: ([\d.]+)", t)[-1])}
+    res["modal_training_before_the_limit"] = modal
+
+    feet = {}
+    for c in ("jog_lakeside", "jog_bridge"):
+        ref = T.body_positions_from_qpos(np.load(out_d / "remote_pro_ra" / "process" / "clips" / c / "qpos.npy"))
+        z = np.load(out_d / "remote_athletes_ra5" / c / "robust" / "rollouts.npz")
+        pol = np.concatenate([z[k][..., [3, 6], 2] for k in z.files if k.startswith("0/tracking_var/") and k.endswith("/body")])
+        spec = json.loads((out_d / "remote_athletes_ra5" / c / "run" / "task_spec.json").read_text())
+        names = spec["features"]
+        st = [x for x in spec["stages"] if x["kind"] == "pose"][1]
+        feet[c] = {"reference_ankle_z_m": {"max": np.round(ref[:, [3, 6], 2].max(0), 3).tolist(),
+                                            "p90": np.round(np.percentile(ref[:, [3, 6], 2], 90, axis=0), 3).tolist()},
+                   "policy_clean_ankle_z_m": {"rollouts": int(len(pol) // max(1, len(z[next(k for k in z.files if k.endswith('/body'))]))),
+                                               "max": np.round(pol.max(0), 3).tolist(),
+                                               "p90": np.round(np.percentile(pol, 90, axis=0), 3).tolist(),
+                                               "median": np.round(np.median(pol, 0), 3).tolist()},
+                   "left_right": "left, right ankle roll link",
+                   "second_key_moment": {"name": st["name"], "feet_down": st["feet_down"], "hold_s": st.get("hold_s"),
+                                         "foot_height_tol_m": [round(st["tol"][names.index(f"{s} foot height")], 4) for s in ("left", "right")]}}
+    res["jog_feet"] = feet
+    res["sources"]["jog_feet"] = "reference: outputs/remote_pro_ra/process/clips/<clip>/qpos.npy; policy: outputs/remote_athletes_ra5/<clip>/robust/rollouts.npz (clean, the rollouts it saves)"
+
+    r = json.loads((out_d / "remote_athletes_ra5" / "shadow_boxing" / "robust" / "robust.json").read_text())
+    res["boxing_clean_tracking_rms_m"] = r["conditions"][0]["policies"]["tracking_var"]["tracking_rms_m"]
+
+    wr = json.loads((out_d / "remote_robust_s3_sj" / "robust.json").read_text())
+    w, wc = wr["summary"]["tracking_var"], wr["conditions"][0]["policies"]["tracking_var"]
+    res["warm_start_squat_jump"] = {"clean_task_success": w["clean"]["task_success"], "held_out_task_success": w["transfer"]["task_success"],
+                                    "clean_joint_err_rad": round(wc["joint_err_rad"], 3), "clean_torso_err_m": round(wc["torso_err_m"], 3)}
+    res["sources"]["warm_start_squat_jump"] = "outputs/remote_robust_s3_sj/robust.json summary.tracking_var"
+
+    import retarget
+    from experiments.in_place.measure import slip
+    sys.path.insert(0, str(ROOT / "tests"))
+    from test_in_place import FPS, synthetic_jog
+    P = synthetic_jog(T=72)
+    stance = retarget.proportional_motion(P, retarget.G1Retargeter(), FPS)["stance"]
+    syn = {}
+    for m in retarget.IN_PLACE_METHODS:
+        rt = retarget.G1Retargeter()
+        q = rt.retarget_sequence(*retarget.human_to_targets(P, rt, fps=FPS, in_place=m), fps=FPS)
+        syn[m] = slip(rt.model, q, FPS, stance)
+    res["synthetic_jog_slip"] = syn
+
+    times = {}
+    for run in ("remote_pro_ra", "remote_athletes_ra3", "remote_athletes_ra5"):
+        f = out_d / run / "runner.log"
+        times[run] = [ln for ln in f.read_text().splitlines() if re.search(r"running on Modal|job launched|job state|L4 ready|A100 ready|VM stopped", ln)] if f.exists() else None
+    times["note"] = ("remote_athletes_ra3: the Modal container was stopped by the spend limit; its runner was stopped by hand "
+                     "after the call had failed, so its log has no end time (see modal_training_before_the_limit)")
+    res["job_times"] = times
+    rnd = lambda x: (round(x, 4) if isinstance(x, float) else [rnd(v) for v in x] if isinstance(x, list)
+                     else {k: rnd(v) for k, v in x.items()} if isinstance(x, dict) else x)
+    out = ROOT / "docs" / "results" / "real_athletes" / "facts.json"
+    out.write_text(json.dumps(rnd(res), indent=1))
+    print("->", out)
 
 
 def run_eval(spec, metrics, robust):
@@ -222,13 +332,13 @@ def assemble(a):
                 shutil.copy2(f, dst / "policy_tracking_var" / f.name)
         shutil.copy2(res / name / "robust" / "robust.json", dst / "robust.json")
         (dst / "eval.json").write_text(json.dumps(ev, indent=1))
-        iters = robust["meta"].get("iters") or c.get("iters")
-        (dst / "status.json").write_text(json.dumps({"state": "done", "finished": c.get("trained"),
+        done = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime((res / name / "results.tar.gz").stat().st_mtime))
+        (dst / "status.json").write_text(json.dumps({"state": "done", "finished": done,
                                                      "cmd": ["experiments/variant_policy.py", f"--target {name}",
-                                                             f"--iters {iters or a.iters}"]}))
+                                                             f"--iters {a.iters}"]}))
         (dst / "web.json").write_text(json.dumps({
             "target": name, "title": c["title"],
-            "description": c["description"] + (" Run in place: the clip's forward travel is removed, so the G1 performs "
+            "description": c["description"] + (" Run in place: the clip's forward travel is removed, so the G1 does "
                                                 "the gait on the spot." if c.get("in_place") else ""),
             "credit": {"text": c["credit"], "url": c["page"], "licence": c["licence"]}}, indent=1))
         rows[name] = {"run": dst.name, **{k: ev["tracking_var"][k] for k in ("task_success_rate", "held_out_success", "fall_rate")}}
@@ -251,9 +361,11 @@ if __name__ == "__main__":
     p.add_argument("processed", help="remote_run.py pro --iters 0's folder")
     p = sub.add_parser("showcase")
     p.add_argument("clips", nargs="+")
+    p.add_argument("--force", action="store_true", help="also a clip whose policy doesn't pass (to inspect; don't commit it)")
+    sub.add_parser("facts")
     p = sub.add_parser("assemble")
     p.add_argument("results", help="remote_run.py athletes' folder")
-    p.add_argument("--iters", type=int)
+    p.add_argument("--iters", type=int, required=True, help="the policies' training iterations (for the run page)")
     p.add_argument("--all", action="store_true", help="also the clips whose policy doesn't complete its clip (to inspect)")
     a = ap.parse_args()
-    {"inputs": inputs, "reretarget": reretarget, "audit": audit, "assemble": assemble, "showcase": showcase}[a.cmd](a)
+    {"inputs": inputs, "reretarget": reretarget, "audit": audit, "assemble": assemble, "showcase": showcase, "facts": facts}[a.cmd](a)

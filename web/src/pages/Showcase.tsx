@@ -127,7 +127,9 @@ export default function Showcase() {
             <p>{entry?.video}</p>
             {entry?.credit && (
               <p className="muted" style={{ fontSize: 13 }}>
-                Source: <a href={entry.credit.url} target="_blank" rel="noopener noreferrer">{entry.credit.text}</a> ({entry.credit.licence})
+                Source: {/^https:\/\/[^\s"'<>]+$/.test(entry.credit.url)
+                  ? <a href={entry.credit.url} target="_blank" rel="noopener noreferrer">{entry.credit.text}</a>
+                  : entry.credit.text} ({entry.credit.licence})
               </p>
             )}
           </div>

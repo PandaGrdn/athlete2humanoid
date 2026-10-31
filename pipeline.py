@@ -8,7 +8,7 @@
     python pipeline.py clips/meet.mp4 --athlete 640,360   # several people: the one under this pixel
                                                           # on the first frame (or x0,y0,x1,y1, or an index)
     python pipeline.py clips/squat.mp4 --frontend mediapipe   # 3D pose from MediaPipe even where SAM 3D Body runs
-    python pipeline.py clips/sprint.mp4 --in-place     # a move that travels (a sprint) as a gait on the spot
+    python pipeline.py clips/sprint.mp4 --in-place world   # a move that travels (a sprint) as a gait on the spot
 
 3D pose comes from SAM 3D Body where it is set up (scripts/setup_sam3d.sh, a GPU; frontends/), else MediaPipe
 (any machine): docs/PIPELINE_ACCURACY.md, fix 3.
@@ -135,9 +135,10 @@ if __name__ == "__main__":
     ap.add_argument("--frontend", choices=["auto", "sam3d", "mediapipe"], default="auto",
                     help="3D pose: SAM 3D Body (needs scripts/setup_sam3d.sh and a GPU) or MediaPipe; auto = SAM 3D Body "
                          "where it is set up")
-    ap.add_argument("--in-place", nargs="?", const=retarget.IN_PLACE_DEFAULT, choices=retarget.IN_PLACE_METHODS,
+    ap.add_argument("--in-place", metavar="METHOD", choices=retarget.IN_PLACE_METHODS,
                     help="run in place: strip the root's horizontal travel (a sprint becomes a gait on the spot), "
-                         f"keeping the vertical motion and the foot contacts; default method {retarget.IN_PLACE_DEFAULT}")
+                         "keeping the vertical motion and the foot contacts. METHOD: " + ", ".join(retarget.IN_PLACE_METHODS)
+                         + f" ({retarget.IN_PLACE_DEFAULT} is the one measured best; docs/REAL_ATHLETES.md)")
     ap.add_argument("--skill", choices=["live", "dry-run"],
                     help="Muse Spark reads the clip -> skill_spec.json (muse/skill_reader.py)")
     ap.add_argument("--task-spec", action="store_true",

@@ -9,7 +9,14 @@
    "mean_speed_m_s": 0.77,
    "stride_s": 1.333,
    "root_travel_left_m": 0.0,
-   "travel_restored_m": 3.733,
+   "travel_restore": {
+    "before_m": 6.596,
+    "after_m": 5.776,
+    "added_xy_m": [
+     0.663,
+     -3.674
+    ]
+   },
    "floor_drift_removed_m": 0.303
   },
   "retarget_warnings": [],
@@ -200,7 +207,14 @@
    "mean_speed_m_s": 0.99,
    "stride_s": 0.8,
    "root_travel_left_m": 0.0,
-   "travel_restored_m": 5.678,
+   "travel_restore": {
+    "before_m": 0.228,
+    "after_m": 5.904,
+    "added_xy_m": [
+     5.618,
+     0.825
+    ]
+   },
    "floor_drift_removed_m": -0.066
   },
   "retarget_warnings": [],

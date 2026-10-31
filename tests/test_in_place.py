@@ -111,7 +111,9 @@ class InPlaceMotion(unittest.TestCase):
     def test_soft_stays_within_its_bound(self):
         m = self.motion("soft")
         hip = m["joints"]["hip_mid"]
-        self.assertLessEqual(np.linalg.norm(hip[:, :2] - hip[0, :2], axis=-1).max(), 2 * retarget.IN_PLACE_SOFT_M + 1e-6)
+        # each horizontal axis within +-IN_PLACE_SOFT_M of a fixed centre: a band 2 * IN_PLACE_SOFT_M wide (this synthetic
+        # jog's hips move at a constant speed, so its within-stride surge, and the soft root's motion, is ~0)
+        self.assertTrue((np.ptp(hip[:, :2], axis=0) <= 2 * retarget.IN_PLACE_SOFT_M + 1e-6).all())
         for f, s in enumerate(("left", "right")):
             feet = m["joints"][f"{s}_ankle"]
             for a, b in retarget._runs(m["stance"][:, f]):
@@ -123,7 +125,9 @@ class InPlaceMotion(unittest.TestCase):
         P[..., 0] -= (P[:, [23, 24], 0].mean(1))[:, None]
         travel = retarget.proportional_motion(self.P, self.rt, FPS)
         m = retarget.proportional_motion(P, self.rt, FPS, in_place="world")
-        self.assertGreater(m["in_place"]["travel_restored_m"], 0.8 * m["in_place"]["travel_removed_m"])
+        r = m["in_place"]["travel_restore"]
+        self.assertLess(r["before_m"], 0.1 * r["after_m"])  # the treadmill read travels nowhere; restored, it runs
+        self.assertGreater(r["after_m"], 0.8 * m["in_place"]["travel_removed_m"])
         np.testing.assert_allclose(m["stance"].mean(0), travel["stance"].mean(0), atol=0.06)  # its contacts are found
         _, added = retarget.restore_travel(*self._root_ankles(self.P), FPS)
         self.assertIsNone(added)  # a clip that already travels gets nothing added

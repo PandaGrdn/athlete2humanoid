@@ -9,7 +9,7 @@
         # perturbation (experiments/robustness_eval.py) -> outputs/remote_robust/robust.json
     python3 scripts/remote_run.py pro --iters 0 --backend modal --clips-dir clips_athletes --min-clips 1 --in-place sprint
         # new videos processed on Modal (SAM 3.1 + SAM 3D Body installed at job start), nothing trained
-    python3 scripts/remote_run.py athletes --backend modal --reuse outputs/athletes_inputs --with-weights --iters 600
+    python3 scripts/remote_run.py athletes --backend modal --reuse outputs/athletes_inputs --with-weights --iters 1000
         # each processed clip -> a variants tracker + its held-out variants (scripts/real_athletes.sh)
     python3 scripts/remote_run.py relevance --reuse outputs/remote_latent_v2 --target squat_jump --iters 1000
         # goal relevance (experiments/goal_relevance.py): V-JEPA importance + with/without --importance

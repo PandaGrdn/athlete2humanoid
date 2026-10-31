@@ -5,7 +5,7 @@
    "name": "jog_lakeside",
    "short": "jog",
    "title": "Lakeside run, in place",
-   "description": "A runner filmed side-on in a tracking shot along a lakeside road. The robot learns the gait from the video.",
+   "description": "A runner filmed side-on in a tracking shot along a lakeside road. The G1 trains on the gait from this video.",
    "page": "https://www.pexels.com/video/a-man-wearing-sunglasses-running-in-the-street-4065467/",
    "file": "https://videos.pexels.com/video-files/4065467/4065467-uhd_2560_1440_30fps.mp4",
    "licence": "Pexels License",
@@ -26,7 +26,7 @@
    "name": "jog_bridge",
    "short": "bridge",
    "title": "Bridge run, in place",
-   "description": "A runner crossing a bridge, filmed side-on. The robot learns the gait from the video.",
+   "description": "A runner crossing a bridge, filmed side-on. The G1 trains on the gait from this video.",
    "page": "https://www.pexels.com/video/a-beautiful-woman-jogging-on-a-sunny-day-8402092/",
    "file": "https://videos.pexels.com/video-files/8402092/8402092-hd_1920_1080_30fps.mp4",
    "licence": "Pexels License",
@@ -46,8 +46,8 @@
   {
    "name": "taekwondo_kick",
    "short": "tkd",
-   "title": "Taekwondo side kick",
-   "description": "A taekwondo black belt's side kick, filmed side-on against black. The robot learns the kick from the video.",
+   "title": "Side kick",
+   "description": "A side kick, filmed side-on against black. The G1 trains on the kick from this video.",
    "page": "https://mixkit.co/free-stock-video/a-young-man-performs-a-karate-kick-to-the-air-49634/",
    "file": "https://assets.mixkit.co/videos/49634/49634-1080.mp4",
    "licence": "Mixkit Stock Video Free License",
@@ -61,14 +61,14 @@
    "tab": "Side kick",
    "showcase_title": [
     "The side kick,",
-    "learned."
+    "from one video."
    ]
   },
   {
    "name": "shadow_boxing",
    "short": "box",
    "title": "Shadow boxing",
-   "description": "A boxer shadow boxing in a gym, backlit. The robot learns the combination from the video.",
+   "description": "A boxer shadow boxing in a gym, backlit. The G1 trains on the combination from this video.",
    "page": "https://www.pexels.com/video/woman-doing-shadow-boxing-8745108/",
    "file": "https://videos.pexels.com/video-files/8745108/8745108-uhd_2732_1440_25fps.mp4",
    "licence": "Pexels License",
@@ -82,7 +82,7 @@
    "tab": "Shadow boxing",
    "showcase_title": [
     "Shadow boxing,",
-    "learned."
+    "from one video."
    ]
   }
  ],
