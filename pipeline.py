@@ -8,6 +8,7 @@
     python pipeline.py clips/meet.mp4 --athlete 640,360   # several people: the one under this pixel
                                                           # on the first frame (or x0,y0,x1,y1, or an index)
     python pipeline.py clips/squat.mp4 --frontend mediapipe   # 3D pose from MediaPipe even where SAM 3D Body runs
+    python pipeline.py clips/sprint.mp4 --in-place     # a move that travels (a sprint) as a gait on the spot
 
 3D pose comes from SAM 3D Body where it is set up (scripts/setup_sam3d.sh, a GPU; frontends/), else MediaPipe
 (any machine): docs/PIPELINE_ACCURACY.md, fix 3.
@@ -52,7 +53,9 @@ def video_fps(video_path):
 
 
 def video_to_motion(video_path, out_dir=None, use_sam=True, prompt=config.SAM_PROMPT, athlete_select=None,
-                    compensate_camera=True, frontend="auto"):
+                    compensate_camera=True, frontend="auto", in_place=None):
+    """in_place: one of retarget.IN_PLACE_METHODS (the root's horizontal travel removed, the contacts and the
+    vertical motion kept; meta.json "in_place" says how much) or None (the motion as filmed)."""
     video_path = Path(video_path)
     out_dir = Path(out_dir or config.OUTPUT_DIR / video_path.stem)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -97,7 +100,10 @@ def video_to_motion(video_path, out_dir=None, use_sam=True, prompt=config.SAM_PR
 
     rt = retarget.G1Retargeter()
     contacts = {}
-    targets, rotations = retarget.human_to_targets(human, rt, fps=fps, report=contacts)
+    targets, rotations = retarget.human_to_targets(human, rt, fps=fps, report=contacts, in_place=in_place)
+    if in_place:
+        print(f"in place ({in_place}): removed {contacts['in_place']['travel_removed_m']} m of travel "
+              f"({contacts['in_place']['mean_speed_m_s']} m/s, stride {contacts['in_place']['stride_s']} s)")
     for w in contacts["warnings"]:
         print("retarget warning:", w)
     qpos = rt.retarget_sequence(targets, rotations, fps=fps)
@@ -111,7 +117,8 @@ def video_to_motion(video_path, out_dir=None, use_sam=True, prompt=config.SAM_PR
     render.save_video(render.side_by_side(frames, robot), out_dir / "side_by_side.mp4", fps=fps)
     meta = {"fps": fps, "frames": len(qpos), "view_azimuth": view_azimuth, "sam": use_sam, "frontend": frontend,
             "video_timing": timing, "retarget": "proportional", "retarget_version": retarget.code_version(),
-            "retarget_warnings": contacts["warnings"], "stance_frac": contacts["stance_frac"]}
+            "retarget_warnings": contacts["warnings"], "stance_frac": contacts["stance_frac"],
+            "in_place": contacts.get("in_place")}
     (out_dir / "meta.json").write_text(json.dumps(meta, indent=1))
     return {"csv": csv, "out_dir": out_dir, **meta}
 
@@ -128,6 +135,9 @@ if __name__ == "__main__":
     ap.add_argument("--frontend", choices=["auto", "sam3d", "mediapipe"], default="auto",
                     help="3D pose: SAM 3D Body (needs scripts/setup_sam3d.sh and a GPU) or MediaPipe; auto = SAM 3D Body "
                          "where it is set up")
+    ap.add_argument("--in-place", nargs="?", const=retarget.IN_PLACE_DEFAULT, choices=retarget.IN_PLACE_METHODS,
+                    help="run in place: strip the root's horizontal travel (a sprint becomes a gait on the spot), "
+                         f"keeping the vertical motion and the foot contacts; default method {retarget.IN_PLACE_DEFAULT}")
     ap.add_argument("--skill", choices=["live", "dry-run"],
                     help="Muse Spark reads the clip -> skill_spec.json (muse/skill_reader.py)")
     ap.add_argument("--task-spec", action="store_true",
@@ -135,7 +145,7 @@ if __name__ == "__main__":
                          "Muse Spark names its moments (muse/moment_namer.py), else they keep the measured names")
     a = ap.parse_args()
     res = video_to_motion(a.video, a.out, use_sam=not a.no_sam, prompt=a.prompt, athlete_select=a.athlete,
-                          compensate_camera=not a.no_camera, frontend=a.frontend)
+                          compensate_camera=not a.no_camera, frontend=a.frontend, in_place=a.in_place)
     if a.skill:
         from muse import client, skill_reader
         skill_reader.read_skill(a.video, res["out_dir"],

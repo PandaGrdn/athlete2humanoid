@@ -40,11 +40,11 @@ def sole_heights(model, qpos):
     return np.array(out)
 
 
-def contact_report(P, rt, fps):
+def contact_report(P, rt, fps, in_place=None):
     """proportional_motion's contact steps: the root shift plant_feet applies (also without its constant part, a
     floor / start reference that does not change the output), what ground_phantom_flights lowered and why, the
     pelvis rise it kept, and the root's horizontal travel."""
-    m = retarget.proportional_motion(P, rt, fps)
+    m = retarget.proportional_motion(P, rt, fps, in_place=in_place) if in_place else retarget.proportional_motion(P, rt, fps)
     if "root_pose" in m:
         stance, root0, root1, root2 = m["stance"], m["root_pose"], m["root_planted"], m["joints"]["hip_mid"]
     else:  # a retarget.py from before fix 1 (for before / after tables): redo its steps
@@ -73,7 +73,7 @@ def contact_report(P, rt, fps):
                 stretches=m["airborne"], warnings=m["warnings"])
 
 
-def audit(P, fps, stored=None, save_qpos=None):
+def audit(P, fps, stored=None, save_qpos=None, in_place=None):
     rt = retarget.G1Retargeter()
     model = rt.model
     hinges = [j for j in range(model.njnt) if model.jnt_type[j] == mujoco.mjtJoint.mjJNT_HINGE]
@@ -81,7 +81,7 @@ def audit(P, fps, stored=None, save_qpos=None):
     adr = [model.jnt_qposadr[j] for j in hinges]
     lo, hi = model.jnt_range[hinges].T
     t0 = time.time()
-    targets, rots = retarget.human_to_targets(P, rt, fps=fps)
+    targets, rots = retarget.human_to_targets(P, rt, fps=fps, in_place=in_place) if in_place else retarget.human_to_targets(P, rt, fps=fps)
     qpos = rt.retarget_sequence(targets, rots, fps=fps)
     if save_qpos:
         np.save(save_qpos, qpos)
@@ -122,7 +122,7 @@ def audit(P, fps, stored=None, save_qpos=None):
                   lowest_sole_gt2cm_frac=round(float((sole.min(1) > 0.02).mean()), 3),
                   slide_cm_per_s=round(float(step[both].sum() / max(both.sum(), 1) * fps * 100), 2)),
         angle_err_deg=dict(mean=ang(lambda d: np.mean([x.mean() for x in d])), max=ang(lambda d: max(x.max() for x in d))),
-        contacts=contact_report(P, rt, fps),
+        contacts=contact_report(P, rt, fps, in_place),
     )
 
 
@@ -136,9 +136,10 @@ def main(argv=None):
         Path(a.save_qpos).mkdir(parents=True, exist_ok=True)
     rows = {}
     for name, d in clip_dirs(a.clips).items():
-        fps = json.loads((d / "meta.json").read_text())["fps"]
-        rows[name] = audit(np.load(d / "human.npy"), fps, np.load(d / "qpos.npy") if (d / "qpos.npy").exists() else None,
-                           Path(a.save_qpos) / f"{name}_qpos.npy" if a.save_qpos else None)
+        meta = json.loads((d / "meta.json").read_text())
+        rows[name] = audit(np.load(d / "human.npy"), meta["fps"], np.load(d / "qpos.npy") if (d / "qpos.npy").exists() else None,
+                           Path(a.save_qpos) / f"{name}_qpos.npy" if a.save_qpos else None,
+                           in_place=(meta.get("in_place") or {}).get("method"))  # a clip run in place: audited as stored
         r = rows[name]
         c, tr = r["contacts"], r["tracking_cm"]
         print(f"{name:14s} knees {tr['left_knee']['mean']}/{tr['right_knee']['mean']} cm | hands {tr['left_hand']['max']}/{tr['right_hand']['max']} cm max | "

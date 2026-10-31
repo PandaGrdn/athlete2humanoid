@@ -83,6 +83,13 @@ GRAVITY = 9.81
 LONG_AIRBORNE_S = 0.5
 # stance_mask's speed threshold grows by this share of the root's horizontal speed.
 CONTACT_ROOT_SPEED_FRAC = 0.5
+# Run in place (pipeline.py --in-place): a travelling move (a sprint, a hurdle approach) as a gait on the
+# spot, the vertical root motion and the contacts kept. "world": the root held where it starts, each
+# contact pinned under it (plant_feet(hold_root=True)), so the stance leg stops sweeping back; "stride":
+# the planted motion with its per-stride travel subtracted, which keeps the surge within a stride but
+# slides each planted foot back at the running speed. docs/REAL_ATHLETES.md measures both on runs.
+IN_PLACE_METHODS = ("world", "stride")
+IN_PLACE_DEFAULT = "world"
 
 
 def bent_knee_pose(model, knee=0.5):
@@ -398,7 +405,7 @@ def _frame_from(left, up):
     return np.column_stack([np.cross(left, up), left, up])
 
 
-def human_to_targets(P, rt: G1Retargeter, proportional=True, fps=30.0, report=None):
+def human_to_targets(P, rt: G1Retargeter, proportional=True, fps=30.0, report=None, in_place=None):
     """P: (T, 33, 3) human trajectory from pose.human_trajectory (metres, z-up, facing +x).
     Returns (targets_seq, rotations_seq) for G1Retargeter.retarget_sequence, with the start
     under the robot and the feet on the floor.
@@ -406,13 +413,18 @@ def human_to_targets(P, rt: G1Retargeter, proportional=True, fps=30.0, report=No
     proportional (default): the human's pose on the G1's skeleton, feet planted during
     contacts (proportional_motion). proportional=False: the original retarget, the whole human
     scaled uniformly by leg length, kept for comparison. report: an optional dict, filled with
-    the contact decisions ("airborne", "warnings", "stance_frac") for meta.json."""
+    the contact decisions ("airborne", "warnings", "stance_frac") for meta.json, and "in_place"
+    when in_place is set (one of IN_PLACE_METHODS: the motion on the spot, proportional only)."""
     if not proportional:
+        if in_place:
+            raise ValueError("in_place needs the proportional retarget")
         return _uniform_targets(P, rt)
-    m = proportional_motion(P, rt, fps)
+    m = proportional_motion(P, rt, fps, in_place=in_place)
     if report is not None:
         report.update(airborne=m["airborne"], warnings=m["warnings"],
                       stance_frac=[round(float(x), 3) for x in m["stance"].mean(0)])
+        if in_place:
+            report["in_place"] = m["in_place"]
     J = m["joints"]
     targets_seq, rotations_seq = [], []
     mirror = np.array([1.0, -1.0, 1.0])
@@ -591,7 +603,7 @@ def _bridge(x):
     return flat.reshape(x.shape)
 
 
-def plant_feet(root, ankles, stance, floor):
+def plant_feet(root, ankles, stance, floor, hold_root=False):
     """root: (T, 3) hip-midpoint path; ankles: (T, 2, 3) left/right relative to it; stance:
     (T, 2) bool; floor: ankle height on the floor, scalar or (T, 2) (a lifted heel raises it).
     -> (root, feet (T, 2, 3), foot_fix (T, 2, 3)).
@@ -601,17 +613,20 @@ def plant_feet(root, ankles, stance, floor):
     stance legs, so nothing slides); in flight the root follows the human, with the correction
     blended linearly between takeoff and landing. foot_fix is what had to be added to the
     skeleton's foot to keep it pinned (nonzero only in double support or when lifted off the
-    floor, bridged across swing)."""
+    floor, bridged across swing). hold_root: the root stays as given and the feet alone are
+    pinned (run in place: a root held still over a stance leg that would sweep back), so foot_fix
+    takes up the whole sweep."""
     floor = np.broadcast_to(floor, stance.shape)
     pinned = np.full(ankles.shape, np.nan)
     for f in range(2):
         for a, b in _runs(stance[:, f]):
             pinned[a:b, f] = (root[a:b] + ankles[a:b, f]).mean(0)
             pinned[a:b, f, 2] = floor[a:b, f]
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN frames: no foot planted
-        shift = np.nanmean(pinned - ankles, axis=1) - root
-    root = root + _bridge(shift)
+    if not hold_root:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN frames: no foot planted
+            shift = np.nanmean(pinned - ankles, axis=1) - root
+        root = root + _bridge(shift)
     foot_fix = _bridge(pinned - (root[:, None] + ankles))
     feet = root[:, None] + ankles + foot_fix
     feet[..., 2] = np.maximum(feet[..., 2], floor)
@@ -774,7 +789,7 @@ def _foot_rotations(foot_yaw, shin, lo, hi):
     return np.stack([[_yaw_rot(y) @ _pitch_rot(p) for y, p in zip(ys, ps)] for ys, ps in zip(foot_yaw, pitch)])
 
 
-def proportional_motion(P, rt: G1Retargeter, fps=30.0):
+def proportional_motion(P, rt: G1Retargeter, fps=30.0, in_place=None):
     """The human's motion on a G1-proportioned skeleton, in world coordinates on the G1's floor.
     -> {"joints": {joint: (T, 3)}, "stance": (T, 2), "pelvis_rot", "torso_rot": (T, 3, 3),
     "foot_rot": (T, 2, 3, 3), "scale": root scale, "root_pose" / "root_planted": (T, 3) the hip
@@ -785,7 +800,11 @@ def proportional_motion(P, rt: G1Retargeter, fps=30.0):
     angles carry over and the hands and feet land where the G1 can reach. Root translation is
     scaled by the leg-length ratio, so squat depth and jump height scale with the legs. Feet in
     contact (stance_mask) are pinned on the floor (plant_feet), their yaw held. Knees go where the
-    G1's leg can put them with that foot (knee_in_leg_plane)."""
+    G1's leg can put them with that foot (knee_in_leg_plane).
+
+    in_place (one of IN_PLACE_METHODS, or None): the same motion on the spot, its horizontal root
+    travel removed after the contacts are found; the result then has "in_place" (method, travel
+    removed, stride, the root travel left)."""
     seg = lambda a, b: np.linalg.norm(P[:, a] - P[:, b], axis=-1)
     human_leg = np.median(np.concatenate([seg(23, 25) + seg(25, 27), seg(24, 26) + seg(26, 28)]))
     scale = (rt.bones["thigh"] + rt.bones["shin"]) / human_leg
@@ -820,7 +839,15 @@ def proportional_motion(P, rt: G1Retargeter, fps=30.0):
 
     floor = rt.ankle_clearance(foot_rot)
     root_pose = root
-    root, feet, foot_fix = plant_feet(root, ankles, stance, floor)
+    if in_place not in (None, *IN_PLACE_METHODS):
+        raise ValueError(f"in_place: one of {IN_PLACE_METHODS}, not {in_place!r}")
+    if in_place == "world":  # contacts come from the travelling motion above, where planted feet stand still
+        root = np.c_[np.broadcast_to(root[0, :2], (len(root), 2)), root[:, 2]]
+    root, feet, foot_fix = plant_feet(root, ankles, stance, floor, hold_root=in_place == "world")
+    stride_s = stride_period(stance, fps)
+    if in_place == "stride":
+        drift = stride_drift(root, stride_s, fps)
+        root, feet = root - drift, feet - drift[:, None]
     root_planted, airborne = root, []
     root, feet = ground_phantom_flights(root, feet, stance, floor, fps, report=airborne)
     start = np.r_[root[0, :2], 0.0]  # hips start over the origin
@@ -848,10 +875,35 @@ def proportional_motion(P, rt: G1Retargeter, fps=30.0):
             foot_rot = _foot_rotations(foot_yaw, feet - knees, lo, hi)
     joints["left_ankle"], joints["right_ankle"] = feet[:, 0], feet[:, 1]
     joints["left_knee"], joints["right_knee"] = knees[:, 0], knees[:, 1]
-    return {"joints": joints, "stance": stance, "pelvis_rot": pelvis_rot, "torso_rot": torso_rot,
-            "foot_rot": foot_rot, "scale": scale, "root_pose": root_pose - start,
-            "root_planted": root_planted - start, "airborne": airborne,
-            "warnings": [r["warning"] for r in airborne if "warning" in r]}
+    out = {"joints": joints, "stance": stance, "pelvis_rot": pelvis_rot, "torso_rot": torso_rot,
+           "foot_rot": foot_rot, "scale": scale, "root_pose": root_pose - start,
+           "root_planted": root_planted - start, "airborne": airborne,
+           "warnings": [r["warning"] for r in airborne if "warning" in r]}
+    if in_place:
+        travel = root_pose[-1, :2] - root_pose[0, :2]
+        out["in_place"] = {"method": in_place, "travel_removed_m": round(float(np.linalg.norm(travel)), 3),
+                           "mean_speed_m_s": round(float(np.linalg.norm(travel) * fps / max(len(P) - 1, 1)), 2),
+                           "stride_s": round(stride_s, 3),
+                           "root_travel_left_m": round(float(np.linalg.norm(root[-1, :2] - root[0, :2])), 3)}
+    return out
+
+
+def stride_period(stance, fps=30.0):
+    """A gait's stride in seconds: the median time between one foot's successive touch-downs (the
+    starts of its contacts, over both feet); 1 s when the clip has fewer than two per foot."""
+    gaps = [np.diff([a for a, _ in _runs(stance[:, f])]) for f in range(stance.shape[1])]
+    gaps = np.concatenate([g for g in gaps if len(g)] or [[]])
+    return float(np.median(gaps) / fps) if len(gaps) else 1.0
+
+
+def stride_drift(root, stride_s, fps=30.0):
+    """(T, 3) the root's horizontal travel with its within-stride surge and sway averaged out: a
+    moving average over one stride (odd-reflected at the ends, so steady travel stays linear there),
+    from zero at the first frame. root - stride_drift is the gait on the spot."""
+    w = max(3, int(round(stride_s * fps)) | 1)
+    xy = np.pad(root[:, :2], ((w, w), (0, 0)), mode="reflect", reflect_type="odd")
+    smooth = uniform_filter1d(xy, w, axis=0)[w:-w]
+    return np.c_[smooth - smooth[0], np.zeros(len(root))]
 
 
 # Bump with any change to what the retarget produces; code_version() records it with the commit.

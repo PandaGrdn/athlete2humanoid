@@ -50,10 +50,12 @@ def latent_out(a):
 def job_spec(a):
     """(setup flag, command run in the repo after setup, {local name: remote path} to fetch)."""
     if a.job == "pro":  # scripts/pro_clips.sh: new videos -> SAM (installed at job start) -> trained, tested policies
-        if not a.reuse:
+        if not a.reuse and a.iters:  # --iters 0: process only (the way to process new videos on Modal)
             raise SystemExit("pro needs --reuse <a folder with policy_*/model_*.pt and vjl_pca.npz>")
         pols = " ".join(x for x in a.args.split() if x.isidentifier()) or "tracking_var multi multi_vjc"
-        return ("--with-main", f"POLICIES='{pols}' bash scripts/pro_clips.sh {a.iters} {{clips}}",
+        if not re.fullmatch(r"[A-Za-z0-9_,.-]*", a.in_place):
+            raise SystemExit(f"odd --in-place: {a.in_place}")
+        return ("--with-main", f"POLICIES='{pols}' IN_PLACE='{a.in_place}' bash scripts/pro_clips.sh {a.iters} {{clips}}",
                 {"results.tar.gz": f"{REMOTE}/outputs/pro/results.tar.gz"})
     if a.job == "process":  # experiments/process_clips.py: new videos -> clip folders (SAM, retarget, V-JEPA), no training
         out = f"{REMOTE}/outputs/process" + (f"_{a.tag}" if a.tag else "")
@@ -475,6 +477,8 @@ def parser():
                     help="with --reuse: upload its trained policies too (for --args '--init/--resume-from /content/a2h/inputs')")
     ap.add_argument("--init-weights", help="an earlier run's results folder whose policies this run's start from "
                                            "(a new video: its weights only; with --reuse use --with-weights)")
+    ap.add_argument("--in-place", default="", help="pro job: comma-separated video stems to run in place "
+                    "(pipeline.py --in-place: a sprint as a gait on the spot)")
     ap.add_argument("--args", default="", help="extra flags for the job's script (latent_policy.py, robustness_eval.py)")
     fs = ap.add_argument_group("FarmShare (--backend farmshare; docs/FARMSHARE.md)")
     ap.add_argument("--backend", choices=["colab", "farmshare", "modal"], default="colab")

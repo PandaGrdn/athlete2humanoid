@@ -4,6 +4,8 @@
 #   2. per clip, experiments/multiclip_policy.py: tracking_var / multi / multi_vjc, each from its own
 #      checkpoint in inputs/ (--init-dir), trained on the clip's variants, then every robustness suite
 #   [POLICIES="multi"] bash scripts/pro_clips.sh <iters> <video>...   (default: all three, compared)
+#   [IN_PLACE=sprint,hurdles] ...: those videos (by file stem) run in place (pipeline.py --in-place)
+#   <iters> 0: process only, nothing trained (the Modal image has no SAM, so new videos go through here)
 set -u
 ITERS=$1; shift
 POLICIES="${POLICIES:-tracking_var multi multi_vjc}"
@@ -22,7 +24,11 @@ export A2H_SAM_PYTHON=/content/sam_env/bin/python
 bash scripts/setup_sam3d.sh /content || exit 1  # the 3D pose front end
 export A2H_SAM3D_PYTHON=/content/sam3d_env/bin/python A2H_SAM3D_DIR=/content/sam-3d-body
 
-python3 experiments/process_clips.py "$@" --out "$OUT/process" || exit 1
+python3 experiments/process_clips.py "$@" --out "$OUT/process" --in-place "${IN_PLACE:-}" || exit 1
+if [ "$ITERS" = 0 ]; then
+  cd "$OUT" && tar czf "$OUT/results.tar.gz" process/results.tar.gz && echo "packed $OUT/results.tar.gz (process only)"
+  exit 0
+fi
 tar xzf "$OUT/process/results.tar.gz" -C "$D/inputs"
 
 for c in $(ls "$OUT/process" >/dev/null && tar tzf "$OUT/process/results.tar.gz" | cut -d/ -f2 | sort -u); do
