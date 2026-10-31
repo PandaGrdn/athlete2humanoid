@@ -36,19 +36,23 @@ def slip(model, qpos, fps, stance):
         xy.append([data.xpos[model.body(f"{s}_ankle_roll_link").id][:2].copy() for s in ("left", "right")])
     xy = np.array(xy)
     sole = sole_heights(model, qpos)
-    down = (sole[1:] < DOWN) & (sole[:-1] < DOWN) & stance[1:] & stance[:-1]
+    sole_down = (sole[1:] < DOWN) & (sole[:-1] < DOWN)
+    down = sole_down & stance[1:] & stance[:-1]
     v = np.linalg.norm(np.diff(xy, axis=0), axis=-1) * fps * 100
-    s = v[down]
-    return {"mean_cm_s": round(float(s.mean()), 1) if s.size else None,
-            "p95_cm_s": round(float(np.percentile(s, 95)), 1) if s.size else None,
-            "foot_down_frac": round(float(down.any(1).mean()), 3)}
+    s, lowest = v[down], v[np.arange(len(v)), sole[1:].argmin(1)][sole_down.any(1)]
+    r = lambda x, f: round(float(f(x)), 1) if x.size else None
+    return {"mean_cm_s": r(s, np.mean), "p95_cm_s": r(s, lambda x: np.percentile(x, 95)),
+            "foot_down_frac": round(float(down.any(1).mean()), 3),
+            # whatever the contacts say: the lowest sole's speed whenever a sole is down
+            "lowest_sole_median_cm_s": r(lowest, np.median)}
 
 
 def measure(clip, methods=(None, *retarget.IN_PLACE_METHODS)):
     P = np.load(clip / "human.npy")
     fps = json.loads((clip / "meta.json").read_text())["fps"]
-    rows, stance = {}, retarget.proportional_motion(P, retarget.G1Retargeter(), fps)["stance"]
+    rows = {}
     for m in methods:
+        stance = retarget.proportional_motion(P, retarget.G1Retargeter(), fps, in_place=m)["stance"]
         rt = retarget.G1Retargeter()
         report = {}
         qpos = rt.retarget_sequence(*retarget.human_to_targets(P, rt, fps=fps, report=report, in_place=m), fps=fps)
@@ -58,7 +62,7 @@ def measure(clip, methods=(None, *retarget.IN_PLACE_METHODS)):
             "slip": slip(rt.model, qpos, fps, stance),
             "root_travel_m": {"net": round(float(np.linalg.norm(root[-1] - root[0])), 3),
                               "max_from_start": round(float(np.linalg.norm(root - root[0], axis=-1).max()), 3)},
-            "in_place": report.get("in_place"),
+            "in_place": report.get("in_place"), "stance_frac": report.get("stance_frac"),
             "audit": {k: a[k] for k in ("tracking_cm", "joint_speed", "feet", "angle_err_deg")},
         }
     return rows
@@ -72,10 +76,11 @@ if __name__ == "__main__":
     res = {Path(c).name: measure(Path(c)) for c in a.clips}
     for name, rows in res.items():
         for m, r in rows.items():
-            t = r["audit"]["tracking_cm"]
+            t, ang = r["audit"]["tracking_cm"], r["audit"]["angle_err_deg"]["mean"]
             print(f"{name:12s} {m:10s} slip {r['slip']['mean_cm_s']} cm/s (p95 {r['slip']['p95_cm_s']}), "
                   f"root net {r['root_travel_m']['net']} m (max {r['root_travel_m']['max_from_start']}), "
-                  f"feet IK {t['left_foot']['mean']}/{t['right_foot']['mean']} cm, pelvis {t['pelvis']['mean']} cm")
+                  f"feet IK {t['left_foot']['mean']}/{t['right_foot']['mean']} cm, pelvis {t['pelvis']['mean']} cm, "
+                  f"knee {ang['knee']} deg, lowest sole {r['slip']['lowest_sole_median_cm_s']} cm/s, stance {r['stance_frac']}")
     if a.out:
         Path(a.out).parent.mkdir(parents=True, exist_ok=True)
         Path(a.out).write_text(json.dumps(res, indent=1))

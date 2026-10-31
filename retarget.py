@@ -87,9 +87,12 @@ CONTACT_ROOT_SPEED_FRAC = 0.5
 # spot, the vertical root motion and the contacts kept. "world": the root held where it starts, each
 # contact pinned under it (plant_feet(hold_root=True)), so the stance leg stops sweeping back; "stride":
 # the planted motion with its per-stride travel subtracted, which keeps the surge within a stride but
-# slides each planted foot back at the running speed. docs/REAL_ATHLETES.md measures both on runs.
-IN_PLACE_METHODS = ("world", "stride")
+# slides each planted foot back at the running speed; "soft": as "world", but the root keeps its surge and sway within
+# a stride (the planted travelling root minus its per-stride travel), squashed into +-IN_PLACE_SOFT_M of the start, so
+# the stance leg may sweep a little. docs/REAL_ATHLETES.md measures them on runs.
+IN_PLACE_METHODS = ("world", "stride", "soft")
 IN_PLACE_DEFAULT = "world"
+IN_PLACE_SOFT_M = 0.10
 
 
 def bent_knee_pose(model, knee=0.5):
@@ -813,6 +816,9 @@ def proportional_motion(P, rt: G1Retargeter, fps=30.0, in_place=None):
     ankles = np.stack([J["left_ankle"], J["right_ankle"]], 1)
     # Floor first (also the fallback if nothing is ever planted): lowest ankles on the floor.
     root[:, 2] += rt.sole_height - np.percentile((root[:, None] + ankles)[..., 2].min(1), 5)
+    restored = None
+    if in_place:  # a camera that tracked the runner (a dolly) loses the travel, and with it the contacts
+        root, restored = restore_travel(root, ankles, fps)
     stance = stance_mask(root[:, None] + ankles, fps, root=root)
     J = level_feet(J, stance)
     ankles = np.stack([J["left_ankle"], J["right_ankle"]], 1)
@@ -841,10 +847,15 @@ def proportional_motion(P, rt: G1Retargeter, fps=30.0, in_place=None):
     root_pose = root
     if in_place not in (None, *IN_PLACE_METHODS):
         raise ValueError(f"in_place: one of {IN_PLACE_METHODS}, not {in_place!r}")
+    stride_s = stride_period(stance, fps)
     if in_place == "world":  # contacts come from the travelling motion above, where planted feet stand still
         root = np.c_[np.broadcast_to(root[0, :2], (len(root), 2)), root[:, 2]]
-    root, feet, foot_fix = plant_feet(root, ankles, stance, floor, hold_root=in_place == "world")
-    stride_s = stride_period(stance, fps)
+    elif in_place == "soft":  # the travelling root's within-stride motion, squashed into +-IN_PLACE_SOFT_M
+        moving = plant_feet(root, ankles, stance, floor)[0]
+        q = moving[:, :2] - stride_drift(moving, stride_s, fps)[:, :2]
+        q = q - q.mean(0)
+        root = np.c_[root[0, :2] + IN_PLACE_SOFT_M * np.tanh(q / IN_PLACE_SOFT_M), root[:, 2]]
+    root, feet, foot_fix = plant_feet(root, ankles, stance, floor, hold_root=in_place in ("world", "soft"))
     if in_place == "stride":
         drift = stride_drift(root, stride_s, fps)
         root, feet = root - drift, feet - drift[:, None]
@@ -884,8 +895,34 @@ def proportional_motion(P, rt: G1Retargeter, fps=30.0, in_place=None):
         out["in_place"] = {"method": in_place, "travel_removed_m": round(float(np.linalg.norm(travel)), 3),
                            "mean_speed_m_s": round(float(np.linalg.norm(travel) * fps / max(len(P) - 1, 1)), 2),
                            "stride_s": round(stride_s, 3),
-                           "root_travel_left_m": round(float(np.linalg.norm(root[-1, :2] - root[0, :2])), 3)}
+                           "root_travel_left_m": round(float(np.linalg.norm(root[-1, :2] - root[0, :2])), 3),
+                           "travel_restored_m": restored}
     return out
+
+
+def restore_travel(root, ankles, fps=30.0, near=0.05, window_s=1.0, min_speed=0.3):
+    """root: (T, 3), ankles: (T, 2, 3) relative to it. A foot on the floor doesn't move, so while the lowest foot is
+    within `near` of its floor level, the root moves at minus that foot's velocity relative to it. Where the root's
+    own path falls short of that (a camera that followed the runner, whose background barely moves, so the clip reads
+    as a treadmill run), add the shortfall: per frame, smoothed over window_s, bridged where no foot is down. Applied
+    only if the shortfall averages over min_speed m/s. -> (root, metres of travel added, or None)."""
+    z = ankles[..., 2] + root[:, None, 2]
+    low = np.argmin(z, 1)
+    t = np.arange(len(root))
+    floor = np.percentile(z.min(1), 5)
+    vel_rel = np.gradient(ankles[..., :2], axis=0)[t, low] * fps
+    vel_root = np.gradient(root[:, :2], axis=0) * fps
+    # the lowest foot switching sides is a jump in `rel`, not a velocity: use frames where it doesn't switch
+    ok = (z.min(1) - floor < near) & (np.r_[True, low[1:] == low[:-1]] & np.r_[low[1:] == low[:-1], True])
+    if ok.sum() < max(5, 0.2 * len(root)):
+        return root, None
+    short = np.where(ok[:, None], -vel_rel - vel_root, np.nan)
+    short = uniform_filter1d(_bridge(short), max(3, int(round(window_s * fps)) | 1), axis=0, mode="nearest")
+    if np.linalg.norm(short.mean(0)) < min_speed:
+        return root, None
+    add = np.cumsum(short, 0) / fps
+    add -= add[0]
+    return root + np.c_[add, np.zeros(len(root))], round(float(np.linalg.norm(add[-1])), 3)
 
 
 def stride_period(stance, fps=30.0):

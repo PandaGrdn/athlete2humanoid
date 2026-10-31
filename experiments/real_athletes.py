@@ -64,6 +64,40 @@ def inputs(a):
     print(f"-> {out}: {sum(r['kept'] for r in rows.values())}/{len(rows)} clips, warm start {warm}")
 
 
+def reretarget(a):
+    """Redo a processed clip's retarget from its human.npy with this checkout's retarget.py (in place as given):
+    qpos.npy, motion.csv, retarget_report.json, meta.json's retarget fields, and side_by_side.mp4 from the source video
+    (resampled to 30 fps / 720p as process_clips.py does). No GPU: the pose is the stored one."""
+    import subprocess
+    import imageio_ffmpeg
+    import mediapy
+    import numpy as np
+    import render
+    import retarget
+    d = Path(a.clip)
+    meta = json.loads((d / "meta.json").read_text())
+    P, fps = np.load(d / "human.npy"), meta["fps"]
+    rt, contacts = retarget.G1Retargeter(), {}
+    targets, rots = retarget.human_to_targets(P, rt, fps=fps, report=contacts, in_place=a.in_place)
+    qpos = rt.retarget_sequence(targets, rots, fps=fps)
+    report = retarget.tracking_report(rt, qpos, targets)
+    np.save(d / "qpos.npy", qpos)
+    retarget.export_mjlab_csv(qpos, d / "motion.csv")
+    (d / "retarget_report.json").write_text(json.dumps(report, indent=1))
+    meta.update(retarget_version=retarget.code_version(), retarget_warnings=contacts["warnings"],
+                stance_frac=contacts["stance_frac"], in_place=contacts.get("in_place"))
+    (d / "meta.json").write_text(json.dumps(meta, indent=1))
+    if a.video:
+        tmp = d / "_clip30.mp4"
+        subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-loglevel", "error", "-i", a.video, "-vf", "fps=30,scale=-2:720",
+                        "-an", str(tmp)], check=True)
+        frames = np.asarray(mediapy.read_video(str(tmp)))[:len(qpos)]
+        tmp.unlink()
+        robot = render.render_qpos_sequence(rt.model, qpos, size=(480, 480))
+        render.save_video(render.side_by_side(frames, robot), d / "side_by_side.mp4", fps=fps)
+    print(f"{d.name}: in place {contacts.get('in_place')}, stance {contacts['stance_frac']}, warnings {contacts['warnings']}")
+
+
 def audit(a):
     """The pipeline audit's numbers per processed clip (experiments/pipeline_audit): pose noise and bones (pose_stats),
     the retarget's IK error, joint speed and limits, the feet (retarget_audit, run in place as meta.json says), the
@@ -173,10 +207,14 @@ if __name__ == "__main__":
     p = sub.add_parser("inputs")
     p.add_argument("processed", help="remote_run.py pro --iters 0's folder (process/results.tar.gz)")
     p.add_argument("--out", required=True)
+    p = sub.add_parser("reretarget")
+    p.add_argument("clip")
+    p.add_argument("--in-place", choices=("world", "stride", "soft"))
+    p.add_argument("--video", help="the source video, to re-render side_by_side.mp4")
     p = sub.add_parser("audit")
     p.add_argument("processed", help="remote_run.py pro --iters 0's folder")
     p = sub.add_parser("assemble")
     p.add_argument("results", help="remote_run.py athletes' folder")
     p.add_argument("--iters", type=int)
     a = ap.parse_args()
-    {"inputs": inputs, "audit": audit, "assemble": assemble}[a.cmd](a)
+    {"inputs": inputs, "reretarget": reretarget, "audit": audit, "assemble": assemble}[a.cmd](a)

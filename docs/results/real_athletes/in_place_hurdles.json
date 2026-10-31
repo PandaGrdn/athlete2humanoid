@@ -308,6 +308,116 @@
      }
     }
    }
+  },
+  "soft": {
+   "slip": {
+    "mean_cm_s": 2.7,
+    "p95_cm_s": 9.3,
+    "foot_down_frac": 0.352
+   },
+   "root_travel_m": {
+    "net": 0.124,
+    "max_from_start": 0.234
+   },
+   "in_place": {
+    "method": "soft",
+    "travel_removed_m": 3.205,
+    "mean_speed_m_s": 1.09,
+    "stride_s": 1.0,
+    "root_travel_left_m": 0.0
+   },
+   "audit": {
+    "tracking_cm": {
+     "pelvis": {
+      "mean": 4.42,
+      "p95": 13.04,
+      "max": 16.13,
+      "frames_gt3cm": 0.404
+     },
+     "left_knee": {
+      "mean": 15.17,
+      "p95": 43.1,
+      "max": 43.17,
+      "frames_gt3cm": 0.944
+     },
+     "right_knee": {
+      "mean": 10.17,
+      "p95": 19.54,
+      "max": 23.64,
+      "frames_gt3cm": 1.0
+     },
+     "left_foot": {
+      "mean": 1.15,
+      "p95": 3.28,
+      "max": 9.93,
+      "frames_gt3cm": 0.157
+     },
+     "right_foot": {
+      "mean": 0.5,
+      "p95": 1.69,
+      "max": 2.36,
+      "frames_gt3cm": 0.0
+     },
+     "left_elbow": {
+      "mean": 0.46,
+      "p95": 0.73,
+      "max": 0.97,
+      "frames_gt3cm": 0.0
+     },
+     "right_elbow": {
+      "mean": 0.28,
+      "p95": 0.35,
+      "max": 0.39,
+      "frames_gt3cm": 0.0
+     },
+     "left_hand": {
+      "mean": 0.07,
+      "p95": 0.11,
+      "max": 0.16,
+      "frames_gt3cm": 0.0
+     },
+     "right_hand": {
+      "mean": 0.06,
+      "p95": 0.08,
+      "max": 0.09,
+      "frames_gt3cm": 0.0
+     }
+    },
+    "joint_speed": {
+     "max_rad_s": 20.0,
+     "p99_rad_s": 9.2,
+     "frames_any_joint_at_cap": 5,
+     "hand_err_at_cap_cm_max": 0.1,
+     "cap_joints": {
+      "left_hip_yaw_joint": 3,
+      "right_hip_yaw_joint": 2,
+      "left_hip_pitch_joint": 1,
+      "right_hip_roll_joint": 1
+     }
+    },
+    "feet": {
+     "penetration_max_cm": 0.09,
+     "penetration_frames_gt1cm": 0.0,
+     "stance_float_mean_cm": 0.55,
+     "stance_float_p95_cm": 1.59,
+     "lowest_sole_gt2cm_frac": 0.573,
+     "slide_cm_per_s": 2.75
+    },
+    "angle_err_deg": {
+     "mean": {
+      "knee": 28.9,
+      "hip": 15.4,
+      "elbow": 1.4,
+      "shoulder": 4.0
+     },
+     "max": {
+      "knee": 82.4,
+      "hip": 47.3,
+      "elbow": 3.2,
+      "shoulder": 14.7
+     }
+    }
+   }
   }
  }
 }
