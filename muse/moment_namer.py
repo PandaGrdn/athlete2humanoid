@@ -7,8 +7,14 @@ skill/keypose.py picks the key moments from the retarget's statistics and names 
 changed most ("right foot up, right foot forward"). Muse gets the video, the frame at each moment
 (captioned with its number and time) and that measured change, and returns a short name and one
 sentence per moment, plus the action as a whole. The names are for people: the reward never reads
-them, so naming a spec doesn't change what a policy trained on it learns. The measured name is kept
-as "measured"; renaming a spec again starts from it.
+them, so naming a spec doesn't change what a policy trained on it learns. Each named pose stage gets
+`muse_label` (skill/spec_schema.py: the stable key front ends read, falling back to the compiler's
+`name`), and `name` takes the same text with the measured name kept as "measured"; renaming a spec
+again starts from it.
+
+name_if_available() is the pipeline's optional step (pipeline.py --task-spec, skill/keypose.py,
+experiments/latent_policy.py): it names the spec when MUSE_API_KEY is set and otherwise, or on any
+failure, leaves it as the compiler wrote it.
 """
 
 import argparse
@@ -21,6 +27,7 @@ import config  # noqa: E402
 from muse import media  # noqa: E402
 from muse.client import image_part, make_client, now, read_json, text_part, video_part, write_json  # noqa: E402
 from muse.schema import INT, STR, arr, obj  # noqa: E402
+from skill.spec_schema import LABEL_KEY, MAX_DESCRIPTION_CHARS, MAX_LABEL_CHARS, NAMED_KINDS  # noqa: E402
 
 NAMES_SCHEMA = obj(
     action=obj(label=STR, description=STR),
@@ -34,16 +41,22 @@ SYSTEM = (
     "never judge their technique. Answer with JSON only."
 )
 
-MAX_NAME_WORDS, MAX_NAME_CHARS, MAX_DESC_CHARS = 5, 40, 240
+MAX_NAME_WORDS, MAX_NAME_CHARS, MAX_DESC_CHARS = 5, MAX_LABEL_CHARS, MAX_DESCRIPTION_CHARS
 VIDEO_NAMES = ("processed.mp4",)  # a live job's own transcoded upload
 
 
+# NAMED_KINDS: key poses and jumps; the settle stages (ready, land, finish) keep their names
+
+
 def moments(spec):
-    """The spec's pose stages, in order: the ones Muse names."""
-    return [st for st in spec["stages"] if st["kind"] == "pose"]
+    """The spec's key moments, in order: its pose and flight stages, the ones Muse names."""
+    return [st for st in spec["stages"] if st["kind"] in NAMED_KINDS]
 
 
 def moment_time(st, fps):
+    """A pose's key frame; the middle of a flight."""
+    if st["kind"] == "flight":
+        return (st["start_s"] + st["end_s"]) / 2
     return st["frame"] / fps if st.get("frame") is not None else st["end_s"]
 
 
@@ -76,16 +89,17 @@ def prompt(spec, fps, sample_fps, side_by_side=False):
     for i, st in enumerate(moments(spec), 1):
         need = "optional" if st.get("optional") else "required"
         measured = st.get("measured", st["name"]).removesuffix(" (finish)")
-        lines.append(f"{i}. {moment_time(st, fps):.2f} s, {need}. Measured: {measured}.")
-    flights = [st for st in spec["stages"] if st["kind"] == "flight"]
-    if flights:
-        lines.append("Both feet leave the ground (jumps): " + ", ".join(f"{st['start_s']:.2f}-{st['end_s']:.2f} s"
-                                                                       for st in flights) + ".")
+        if st["kind"] == "flight":
+            lines.append(f"{i}. {st['start_s']:.2f}-{st['end_s']:.2f} s, {need}. Both feet off the ground (measured: "
+                         f"{measured}); the image shows the middle of it.")
+        else:
+            lines.append(f"{i}. {moment_time(st, fps):.2f} s, {need}. Measured: {measured}.")
     lines += [
         "",
-        "For each moment, by its number:",
-        f"- name: the pose reached at that moment, 1-{MAX_NAME_WORDS - 1} words, lower case, e.g. 'knee chambered', "
-        "'kick extended', 'deep crouch', 'arms overhead'. Say which side when one side moves.",
+        "For each moment, by its number (for a jump, name the whole time in the air):",
+        f"- name: what the body does to reach that moment, in plain English, 1-{MAX_NAME_WORDS} words, lower case, "
+        "e.g. 'step left, turn left', 'raise right knee', 'kick right leg out', 'sink into squat', 'arms overhead'. "
+        "Say which side when one side moves.",
         "- description: one sentence on what the body does from the previous moment to this one.",
         "Then the action as a whole: label (short, snake_case) and description (one sentence).",
     ]
@@ -118,7 +132,7 @@ def apply_names(spec, value, info):
     for i, st in enumerate(moments(spec), 1):
         m = by_index[i]
         st.setdefault("measured", st["name"])
-        st["name"] = st["label"] = m["name"].strip()
+        st["name"] = st["label"] = st[LABEL_KEY] = m["name"].strip()
         st["description"] = m["description"].strip()
     if spec["stages"][-1]["kind"] == "pose":  # the end pose is the finish (keypose._compile)
         spec["stages"][-1]["name"] = spec["stages"][-1]["label"] = spec["stages"][-1]["name"] + " (finish)"
@@ -154,7 +168,8 @@ def name_moments(spec_path, client, video=None, sample_fps=4, max_side=480, out=
     fps = spec["fps"]
     clip = media.prepare_video(src, spec_path.parent / "muse_names_input.mp4", max_side, required=client.live)
     sheet = media.frames_at(src, [moment_time(st, fps) for st in poses],
-                            [f"{i}  {moment_time(st, fps):.2f} s" for i, st in enumerate(poses, 1)])
+                            [f"{i}  {moment_time(st, fps):.2f} s" for i, st in enumerate(poses, 1)],
+                            fps=fps)  # the spec's frame rate is the clip's, measured from its timestamps
     content = [text_part(prompt(spec, fps, sample_fps, side_by_side=src.name == "side_by_side.mp4")),
                video_part(clip, sample_fps)]
     if sheet:
@@ -168,6 +183,22 @@ def name_moments(spec_path, client, video=None, sample_fps=4, max_side=480, out=
         client.save_requests(out.with_name("moment_names.request.json"))
     print(f"{out}: {spec['action']}: {spec['summary']} ({info['mode']})")
     return spec
+
+
+def name_if_available(spec_path, video=None, client=None, log=print):
+    """The optional naming step: Muse names `spec_path` in place when the key is set -> the named spec,
+    else None. Without a key it does nothing and says nothing; on any failure it logs one line and the
+    spec keeps the compiler's names."""
+    if client is None:
+        if not any(config.get_secret(n, required=False) for n in (config.MUSE_API_KEY_ENV, config.META_API_KEY_ENV)):
+            return None
+        from muse.client import MuseClient
+        client = MuseClient()
+    try:
+        return name_moments(spec_path, client, video)
+    except Exception as e:  # noqa: BLE001  (no video, the API is down, an answer that won't fit)
+        log(f"Muse didn't name the moments ({type(e).__name__}: {str(e)[:200]}); keeping the measured names")
+        return None
 
 
 def spec_file(path):

@@ -70,6 +70,9 @@ def run_job(session: str, cmd: str, branch: str = "main") -> int:
     """cmd (from remote_run.job_spec) under scripts/job.py, with runs/<session>/ as its data folder;
     the code is `branch` of the repo (remote_run.py --branch), main by default."""
     remote = f"{MOUNT}/runs/{session}"
+    # A warm container reused minutes after another job can still see the Volume as it was then, without this
+    # run's inputs (two agentround jobs found no inputs/ at all): see what remote_run.py just uploaded.
+    vol.reload()
     # Modal reuses warm containers: start from a clean checkout. Retry: concurrent jobs' clones can fail
     # transiently (exit 128); git's own message is printed so a real failure says why.
     for attempt in range(4):

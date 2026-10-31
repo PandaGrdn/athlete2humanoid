@@ -3,6 +3,8 @@
     python pipeline.py clips/squat.mp4                # SAM 3.1 tracking (needs a GPU)
     python pipeline.py clips/squat.mp4 --no-sam       # whole frame, single person (any machine)
     python pipeline.py clips/squat.mp4 --skill live   # then Muse Spark writes skill_spec.json
+    python pipeline.py clips/squat.mp4 --task-spec    # then the task (skill/keypose.py): task_spec.json, its
+                                                      # key moments named by Muse Spark when MUSE_API_KEY is set
     python pipeline.py clips/meet.mp4 --athlete 640,360   # several people: the one under this pixel
                                                           # on the first frame (or x0,y0,x1,y1, or an index)
     python pipeline.py clips/squat.mp4 --frontend mediapipe   # 3D pose from MediaPipe even where SAM 3D Body runs
@@ -127,7 +129,10 @@ if __name__ == "__main__":
                     help="3D pose: SAM 3D Body (needs scripts/setup_sam3d.sh and a GPU) or MediaPipe; auto = SAM 3D Body "
                          "where it is set up")
     ap.add_argument("--skill", choices=["live", "dry-run"],
-                    help="last stage: Muse Spark reads the clip -> skill_spec.json (muse/skill_reader.py)")
+                    help="Muse Spark reads the clip -> skill_spec.json (muse/skill_reader.py)")
+    ap.add_argument("--task-spec", action="store_true",
+                    help="last stage: the key-moment task (skill/keypose.py) -> task_spec.json; with MUSE_API_KEY set, "
+                         "Muse Spark names its moments (muse/moment_namer.py), else they keep the measured names")
     a = ap.parse_args()
     res = video_to_motion(a.video, a.out, use_sam=not a.no_sam, prompt=a.prompt, athlete_select=a.athlete,
                           compensate_camera=not a.no_camera, frontend=a.frontend)
@@ -135,4 +140,11 @@ if __name__ == "__main__":
         from muse import client, skill_reader
         skill_reader.read_skill(a.video, res["out_dir"],
                                 client.make_client(a.skill == "dry-run", default_fixture="skill_spec_squat.json"))
+    if a.task_spec:
+        from muse.moment_namer import name_if_available
+        from skill import keypose
+        spec, spec_f = keypose.compile_clip(res["out_dir"])
+        print(f"task spec: {spec['summary']}")
+        name_if_available(spec_f, video=a.video)
+        res["task_spec"] = str(spec_f)
     print(res)

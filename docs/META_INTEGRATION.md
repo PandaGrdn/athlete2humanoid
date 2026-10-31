@@ -1,6 +1,6 @@
 # Meta model integration plan
 
-Research done 2026-10-26, before the Model API key is approved. **Nothing here has been called live.** Facts come from Meta's docs (links in [Sources](#sources)). Anything marked *(unverified)* is an inference or still needs a test call.
+Research done 2026-10-26, before the Model API key was approved; §1-§4 are that plan as written. **Since then the API has been called live** (§6, Oct 28; §7, Oct 30: what worked, and what this plan got wrong). Facts come from Meta's docs (links in [Sources](#sources)). Anything still marked *(unverified)* has not been tested.
 
 **Short version.**
 1. Muse Spark 1.3 accepts **video directly** and supports **strict JSON-schema output** and **tool calling**.
@@ -525,6 +525,31 @@ It said the task-family policies never really jump or kick, while the stage chec
 - **Measure:** agreement with Muse Spark and with the measurements on held-out clips, zero-shot vs tuned.
 
 The payoff is a critic cheap enough to run on every checkpoint during training.
+
+## 7. Verified live (Oct 30)
+
+Tiny calls from this machine with `muse/client.py` (`MuseClient`, key `MUSE_API_KEY` from `.env` via `config.get_secret`), model `muse-spark-1.3` (`config.MUSE_MODEL`'s default), base `https://api.meta.ai/v1`:
+
+| Call | Result | Latency | Tokens (in / out, of which reasoning) |
+|---|---|---|---|
+| Chat Completions, text only, strict `json_schema`, `reasoning_effort: minimal` | valid JSON on the first try | 2.7 s | 84 / 147 (125) |
+| Chat Completions, `video_url` part, 5.6 s phone clip at 480 px (125 KB inline), `fps: 2` | valid JSON | 11.4 s | 1,055 / 1,205 (1,179) |
+| The same at `fps: 4` | valid JSON | 6.9 s | 2,183 / 742 (717) |
+| Responses API, two function tools (`strict`), `reasoning: {effort: low}` | one `function_call` with valid arguments, plus a short `message` | 3.8 s | 646 / 581 (473) |
+| Responses, `previous_response_id` + `function_call_output` + a user message with `input_video` as an inline `data:` URL (`"video_url"` key) | accepted; the reply describes the video | 27.8 s | 1,725 / 363 |
+| The same with `input_video: {file_id}` after `POST /v1/files` (`purpose: user_data`) | accepted, same answer | 30.0 s | 1,725 / 464 |
+| Moment naming, 10 clips (`muse/moment_namer.py`: video at 4 fps + a captioned frame sheet) | 10/10 valid on the first attempt | ~10 s each | 33,197 / 10,399 in all: **$0.086** |
+
+**What the plan above got wrong or left open:**
+
+- **Video is far cheaper than estimated.** §1.3 guessed ~1.4k tokens per sampled frame (the image rate), ~22k for a 4 s clip at 4 fps. Measured: **~95 tokens per sampled frame** at 480 px (2,183 prompt tokens for 22 frames plus the prompt). A moment-naming call costs under a cent; the cost driver is reasoning output, not video.
+- **Reasoning is most of the output,** even at `minimal` (125 of 147 tokens) and far more on video (1,179 of 1,205 at `low`). Budget output tokens by effort, not by the size of the JSON asked for.
+- **Open question 2 is settled:** a `function_call_output` can be followed by a user message with `input_video` in the same `input` list. `input_video` takes either `{"video_url": "data:video/mp4;base64,..."}` (inline, no upload) or `{"file_id": ...}`. The reward agent loop (`muse/agent_loop.py`, `docs/MUSE_AGENT.md`) uses inline videos, so no files are left behind on Meta's side (uploads never expire by default; the smoke-test upload was deleted).
+- **`previous_response_id` carries the whole context, and it is billed again:** the second turn's 1,725 input tokens include the first turn's 646. A long loop pays for its history each turn (cached tokens are $0.15/M, but none were reported cached in these calls).
+- **A tool call is not always all the calls asked for.** Told to call `set_weight` and then `start_round`, the model called only `set_weight` in its first response. With `tool_choice` limited to `auto`, a loop must keep answering tool calls until the model calls the tool that ends its turn (`muse/agent_loop.py` does: up to 6 responses per turn, with a nudge after a text-only reply).
+- **Responses latency with video is ~30 s per turn,** against ~7-11 s for the same video in Chat Completions. Irrelevant next to a training round, but not for an interactive page.
+- §1.3 says `config.MUSE_MODEL` defaults to `muse-spark-1.1`: it has defaulted to `muse-spark-1.3` since Oct 27.
+- Not re-tested: `reasoning_effort: none` (said to return 400), the `-contributor` variants (not used on footage of people, by rule), `tool_choice` values other than `auto`.
 
 ## Sources
 

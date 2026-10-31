@@ -106,6 +106,23 @@ class MuseClient:
     def mode(self):
         return "live" if self.live else f"fixture:{self.fixture.name}"
 
+    def _openai(self):
+        if self._client is None:
+            from openai import OpenAI
+            self._client = OpenAI(api_key=api_key(), base_url=config.META_API_BASE)
+        return self._client
+
+    def respond(self, **request):
+        """One Responses API request (multi-turn: previous_response_id; tools) -> the response as a dict;
+        None once a fixture is used up. Fixture entries are response dicts ({"id", "output", "usage"})."""
+        req = {"model": self.model, **copy.deepcopy(request)}
+        self.requests.append(req)
+        if not self.live:
+            return self._responses.pop(0) if self._responses else None
+        raw = self._openai().responses.create(**req).model_dump()
+        self._raw.append(raw)
+        return raw
+
     def complete(self, messages, schema, name, effort):
         """One request -> the raw chat completion as a dict; None once a fixture is used up."""
         req = {"model": self.model, "messages": copy.deepcopy(messages), "reasoning_effort": effort,
@@ -114,10 +131,7 @@ class MuseClient:
         self.requests.append(req)
         if not self.live:
             return self._responses.pop(0) if self._responses else None
-        if self._client is None:
-            from openai import OpenAI
-            self._client = OpenAI(api_key=api_key(), base_url=config.META_API_BASE)
-        raw = self._client.chat.completions.create(**req).model_dump()
+        raw = self._openai().chat.completions.create(**req).model_dump()
         self._raw.append(raw)
         return raw
 

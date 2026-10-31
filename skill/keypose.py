@@ -779,24 +779,36 @@ class KeyposeMachine:
         return torch.cat([one, self.p[:, None], self.done.float()[:, None]], -1)
 
 
+def compile_clip(clip, skill_path=None, out=None):
+    """A clip folder from pipeline.py (qpos.npy, meta.json; skill_spec.json optional) -> its task spec,
+    self-checked on the clip's own retarget and written to out (default <clip>/task_spec.json)."""
+    clip = Path(clip)
+    fps = json.loads((clip / "meta.json").read_text())["fps"]
+    pos = T.body_positions_from_qpos(np.load(clip / "qpos.npy"))
+    skill_path = Path(skill_path) if skill_path else clip / "skill_spec.json"
+    skill = json.loads(skill_path.read_text()) if skill_path.exists() else None
+    spec = compile_keypose_spec(pos, fps, skill, name=clip.name)
+    spec["self_check"] = T.evaluate({**spec, "down": spec["down_ref"], "air": spec["air_ref"]}, pos, fps)
+    out = Path(out or clip / "task_spec.json")
+    out.write_text(json.dumps(spec, indent=1))
+    return spec, out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("clip", help="a clip folder from pipeline.py (qpos.npy, meta.json; skill_spec.json optional)")
     ap.add_argument("--out", help="default <clip>/task_spec.json")
     ap.add_argument("--skill", help="Muse skill_spec.json (default <clip>/skill_spec.json if present)")
+    ap.add_argument("--video", help="the clip's video, for Muse to name the key moments (default: found by name)")
+    ap.add_argument("--no-names", action="store_true", help="keep the measured names even when MUSE_API_KEY is set")
     a = ap.parse_args(argv)
-    clip = Path(a.clip)
-    fps = json.loads((clip / "meta.json").read_text())["fps"]
-    pos = T.body_positions_from_qpos(np.load(clip / "qpos.npy"))
-    skill_path = Path(a.skill) if a.skill else clip / "skill_spec.json"
-    skill = json.loads(skill_path.read_text()) if skill_path.exists() else None
-    spec = compile_keypose_spec(pos, fps, skill, name=clip.name)
-    spec["self_check"] = T.evaluate({**spec, "down": spec["down_ref"], "air": spec["air_ref"]}, pos, fps)
-    out = Path(a.out or clip / "task_spec.json")
-    out.write_text(json.dumps(spec, indent=1))
+    spec, out = compile_clip(a.clip, a.skill, a.out)
     sc = spec["self_check"]
     print(f"{out}: {spec['summary']}; retarget completes {sc['stages_completed']}/{sc['stages_total']}"
           + "".join(f"\n  warning: {w}" for w in spec["warnings"]))
+    if not a.no_names:  # Muse names the key moments when the key is set; otherwise nothing happens
+        from muse.moment_namer import name_if_available
+        name_if_available(out, a.video)
 
 
 if __name__ == "__main__":

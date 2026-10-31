@@ -51,6 +51,8 @@ TASKS = {"tracking": "Mjlab-Tracking-Flat-Unitree-G1", "hybrid": "A2H-Hybrid-Fla
          "multi_future": "A2H-TrackingFuture-Flat-Unitree-G1",
          "multi_vjc": "A2H-TrackingVJCausal-Flat-Unitree-G1"}  # the latent of the video so far only
 TASKS["multi_vjp"] = TASKS["multi_vjl"] = "A2H-TrackingVJPred-Flat-Unitree-G1"  # + the predicted latent ahead (experiments/worldmodel_policy.py)
+# experiments/agent_round.py's arms: the task policy under Muse's reward settings, and its untouched control
+TASKS |= {f"task_{arm}": TASKS["task"] for arm in ("start", "agent", "base")}
 TASK_FIRST = ("task", "taskphase", "taskcmd", "taskhybrid", "taskhybrid_var")  # trained on the semantic task spec (skill/task.py)
 
 
@@ -139,6 +141,9 @@ def main(a):
             spec = skill_task.compile_spec(pos, 30.0, skill, a.max_clearance, name=a.target)
         spec["self_check"] = skill_task.evaluate({**spec, "down": spec["down_ref"], "air": spec["air_ref"]}, pos, 30.0)
         spec_f.write_text(json.dumps(spec, indent=1))
+        # Muse names the key moments when MUSE_API_KEY is set here (not on the GPU hosts); the reward never reads names
+        from muse.moment_namer import find_video, name_if_available
+        name_if_available(spec_f, video=find_video(tgt["dir"], spec) or tgt["dir"] / "side_by_side.mp4", log=log)
     spec = json.loads(spec_f.read_text())
     if spec.get("type") == "keypose" and not a.importance:  # style weighted toward the key moments
         from skill import keypose
