@@ -28,10 +28,10 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 from server import runs as R  # noqa: E402
 
-RUN_FILES = ["eval.json", "status.json", "task_spec.json", "distill_report.json", "comparison.mp4", "reward.pt", "web.json",
+RUN_FILES = ["eval.json", "status.json", "task_spec.json", "distill_report.json", "comparison.mp4", "reward.pt", "web.json", "variants.json",
              "poster.jpg"]
 POLICY_FILES = ["policy.mp4", "policy_metrics.json", "policy.onnx"]
-CLIP_FILES = ["meta.json", "retarget_report.json", "motion.csv", "side_by_side.mp4", "silhouette.mp4"]
+CLIP_FILES = ["meta.json", "retarget_report.json", "motion.csv", "side_by_side.mp4", "silhouette.mp4", "human.npy"]
 
 # The gallery: the runs trained on the SAM 3D Body references (docs/PIPELINE_ACCURACY.md, fix 3): single-clip
 # tracking on the squat jump, front kick and squat, the keypose task on jumping jacks, lunge and punches.

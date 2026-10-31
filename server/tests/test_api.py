@@ -133,6 +133,29 @@ def test_run_detail(client):
     assert {"checkpoint", "motion", "metrics"} <= kinds
 
 
+def test_build_view_files(client, runs_dir):
+    """What the 3D build view reads from a stored run: the clip named after its task spec (no --target in its
+    command), the pose model that ran, its 3D skeleton (human.npy) and the variants preview (variants.json)."""
+    from .test_task_spec import keypose_spec
+    run = runs_dir / "remote_latent"
+    (run / "status.json").write_text(json.dumps({"state": "done", "cmd": ["python3", "experiments/latent_policy.py"]}))
+    (run / "task_spec.json").write_text(json.dumps({**keypose_spec(), "name": "squat"}))
+    clip = run / "clips" / "squat"
+    (clip / "meta.json").write_text(json.dumps({**json.loads((clip / "meta.json").read_text()), "frontend": "sam3d"}))
+    (clip / "human.npy").write_bytes(b"\x93NUMPY\x01\x00" + b"\x00" * 8)
+    (run / "variants.json").write_text(json.dumps({"total": 2, "kept": 1, "rows": [], "ghosts": []}))
+    d = client.get("/api/runs/latent").json()
+    assert d["target"] == "squat" and d["clips"][0]["is_target"]
+    c = d["clips"][0]
+    assert c["frontend"] == "sam3d" and c["skeleton"]["url"] == "/api/runs/latent/files/clips/squat/human.npy"
+    assert d["variants"]["url"] == "/api/runs/latent/files/variants.json"
+    for u in (c["skeleton"]["url"], d["variants"]["url"]):
+        assert client.get(u).status_code == 200
+    # a spec named after no clip of the run leaves the target unset
+    (run / "task_spec.json").write_text(json.dumps({**keypose_spec(), "name": "../squat"}))
+    assert client.get("/api/runs/latent").json()["target"] is None
+
+
 def test_artifact_serving(client):
     r = client.get("/api/runs/latent/files/comparison.mp4")
     assert r.status_code == 200 and r.content == MP4 and r.headers["content-type"] == "video/mp4"

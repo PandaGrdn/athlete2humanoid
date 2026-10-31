@@ -1,11 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { api, checkVideo, demo, fmt, url, watchJob, type Job, type LiveData, type Replay, type ReplayIndex, type RunSummary, type TaskSpec } from "../api";
 import { useHealth } from "../App";
-import { EnvironmentPanel } from "../components/environment";
-import { PoseOverlay, RewardBox, RobotView, TaskBreakdown } from "../components/live";
+import { emptyInput, fromLive, loadRun, type BuildInput, type StageKey } from "../buildview/data";
+import { liveJobStatus } from "../buildview/hooks";
+import { RewardBox, TaskBreakdown } from "../components/live";
 import { Icon, StatusPill } from "../components/ui";
 import { Typed } from "../components/pixel";
+
+// three.js loads with the build view, after the page
+const BuildView = lazy(() => import("../buildview/BuildView"));
+const BuildFallback = <div className="skeleton" style={{ height: "min(74svh, 720px)", minHeight: 500, margin: "8px 0 28px" }} />;
 
 const STEPS = [
   { key: "video", label: "Video check", model: "ffmpeg" },
@@ -31,8 +36,9 @@ export async function startLiveBuild(f: File, nav: (to: string) => void) {
 const done = (job: Job | null, key: string) => job?.stages.find((s) => s.key === key)?.status === "done";
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
-/** Fetches `load` once `ready`, again whenever `version` changes, retrying every 3 s while the job runs. */
-function useWhenReady<T>(ready: boolean, version: string, running: boolean, load: () => Promise<T>) {
+/** Fetches `load` once `ready`, again whenever `version` changes, retrying every 3 s while the job runs.
+ *  Returns the data and whether it is for the current version. */
+function useWhenReady<T>(ready: boolean, version: string, running: boolean, load: () => Promise<T>): [T | null, boolean] {
   const [data, setData] = useState<T | null>(null);
   const [got, setGot] = useState<string | null>(null);
   const fn = useRef(load);
@@ -47,7 +53,7 @@ function useWhenReady<T>(ready: boolean, version: string, running: boolean, load
     go();
     return () => { stopped = true; window.clearTimeout(timer); };
   }, [ready, version, running, got]);
-  return data;
+  return [data, got === version];
 }
 
 /** The video's clock for React, ~10 times a second (canvases read currentTime themselves every frame). */
@@ -232,14 +238,18 @@ function RecordedBuilds({ live }: { live: boolean }) {
   );
 }
 
-/** Where LiveView reads a build's data: the API (a live job), or a recording (Replay). */
-type Source = { live: () => Promise<LiveData>; spec: () => Promise<TaskSpec>; video: string; policy: ReactNode; title: string };
+/** Where LiveView reads a build's data: the API (a live job), or a recording (Replay). A recording's live.json has
+ *  no 3D skeleton, qpos or variants: `extra` fetches them from the stored run of the same clip, when the API is up. */
+type Source = {
+  live: () => Promise<LiveData>; spec: () => Promise<TaskSpec>; video: string; policy: ReactNode; title: string; clip: string;
+  extra?: (set: (p: Partial<BuildInput>) => void) => Promise<string | null>; // resolves to the run it used
+};
 
 function LiveView({ job, file, uploading, err, source }: { job: Job | null; file: File | null; uploading: boolean; err: string | null; source?: Source }) {
   const [video, setVideo] = useState<HTMLVideoElement | null>(null);
   const [blob, setBlob] = useState<string | null>(null);
-  const [procFailed, setProcFailed] = useState(false);
-  const [ratio, setRatio] = useState<number | null>(null);
+  const [extra, setExtra] = useState<Partial<BuildInput>>({});
+  const [extraRun, setExtraRun] = useState<string | null | undefined>(undefined); // undefined: still loading
   const t = useVideoTime(video);
   const running = job?.status === "running" || job?.status === "queued";
   const id = job?.id ?? "";
@@ -250,17 +260,51 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
     setBlob(u);
     return () => URL.revokeObjectURL(u);
   }, [file]);
-  useEffect(() => setProcFailed(false), [id]);
+  const loadExtra = source?.extra; // stable per recording (the page re-creates `source` on every tick)
+  useEffect(() => {
+    setExtra({});
+    setExtraRun(loadExtra ? undefined : null);
+    if (!loadExtra) return;
+    let live = true;
+    loadExtra((p) => live && setExtra((x) => ({ ...x, ...p }))).then((r) => live && setExtraRun(r)).catch(() => live && setExtraRun(null));
+    return () => { live = false; };
+  }, [loadExtra]);
 
   const st = (k: string) => job?.stages.find((s) => s.key === k)?.status ?? "pending";
-  const live = useWhenReady<LiveData>(done(job, "pose"), `${st("retarget")}/${st("environment")}`, running, () => source ? source.live() : api.live(id));
-  const spec = useWhenReady<TaskSpec>(done(job, "environment"), "1", running, () => source ? source.spec() : api.jobTaskSpec(id));
+  // live.json grows: refetched as the retarget and the environment finish, and once more at the end (the variants)
+  const version = `${st("retarget")}/${st("environment")}/${job?.status}`;
+  const [live, fresh] = useWhenReady<LiveData>(done(job, "pose"), version, running, () => source ? source.live() : api.live(id));
+  const [spec] = useWhenReady<TaskSpec>(done(job, "environment"), "1", running, () => source ? source.spec() : api.jobTaskSpec(id));
 
   // The processed copy once it exists (trimmed and rescaled, so the landmarks line up); until then the local file.
-  const processed = done(job, "video") && !procFailed ? (source ? source.video : api.liveVideo(id)) : null;
+  const processed = done(job, "video") ? (source ? source.video : api.liveVideo(id)) : null;
   const src = processed ?? blob ?? (source ? source.video : job?.input ? url(job.input.url) : null);
   const aligned = !!processed && src === processed;
-  const aspect = live?.video && aligned ? live.video.width / live.video.height : ratio;
+
+  // live.json is refetched as it grows: keep each piece's previous object while its content is the same, so the
+  // scene doesn't replay its arrival (a skeleton growing in, the G1 snapping on) on every refetch
+  const prev = useRef<Partial<BuildInput>>({});
+  const input = useMemo<BuildInput>(() => {
+    const base = { ...emptyInput(), ...(live ? fromLive(live, null) : {}) };
+    for (const k of ["skeleton", "qpos", "variants"] as const) {
+      const was = prev.current[k];
+      if (was && base[k] && signature(was) === signature(base[k])) (base as Record<string, unknown>)[k] = was;
+      else (prev.current as Record<string, unknown>)[k] = base[k];
+    }
+    const own = (k: keyof BuildInput) => (base[k] == null ? extra[k] : base[k]);
+    return {
+      ...base,
+      video: src ? { src, sideBySide: false, label: source?.title ? "Recorded clip" : aligned ? "Processed clip" : file ? `Your upload · ${file.name}` : "Your upload" } : null,
+      landmarks: aligned ? base.landmarks : null,
+      skeleton: own("skeleton") as BuildInput["skeleton"],
+      qpos: own("qpos") as BuildInput["qpos"],
+      variants: own("variants") as BuildInput["variants"],
+      spec,
+      clip: source?.clip ?? null,
+    };
+  }, [live, extra, src, aligned, source?.title, source?.clip, file, spec]);
+  const status = liveJobStatus(job, input, (k: StageKey) => fresh && (!source?.extra || extraRun !== undefined || k === "video"));
+  const fromRun = extraRun ? <>3D from the stored run <Link to={`/build/${extraRun}`}>{extraRun}</Link> of the same clip (same SAM 3D Body front end); this recording kept the 2D landmarks only.</> : null;
 
   const seek = useCallback((s: number) => {
     if (video) video.currentTime = Math.max(0, Math.min(s, (video.duration || s + 1) - 0.02));
@@ -289,36 +333,18 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
       )}
       {(job?.error || (err && !uploading)) && <div className="error-box" style={{ marginBottom: 20 }}>{job?.error ?? err}</div>}
 
+      <Suspense fallback={BuildFallback}>
+        <BuildView input={input} status={status} follow onVideo={setVideo}
+          kicker={source ? <>Recorded build · {source.clip.replace(/_/g, " ")}</> : <>Live build{file ? <> · {file.name}</> : null}</>}
+          notes={{
+            video: !source && !aligned && src ? "Your local copy; the landmarks appear on the processed clip." : null,
+            skeleton: fromRun, retarget: fromRun, variants: fromRun ?? (input.variants && !source ? "Generated on this host from your retarget, the same way the GPU runs make their training set." : null),
+            policy: source && !["front_kick", "squat_jump", "squat"].includes(source.clip) ? "This clip's own trained policies are below, as videos; the site has 3D recordings for three clips." : null,
+          }} />
+      </Suspense>
+
       <div className="live-grid">
         <div className="live-left">
-          <div className="video-frame live-video" style={{ aspectRatio: aspect ? String(aspect) : "16 / 10", maxWidth: aspect ? `calc(var(--live-h) * ${aspect.toFixed(4)})` : undefined }}>
-            {src && (
-              <video key={src} ref={setVideo} src={src} muted loop playsInline autoPlay controls
-                onLoadedMetadata={(e) => e.currentTarget.videoWidth && setRatio(e.currentTarget.videoWidth / e.currentTarget.videoHeight)}
-                onError={() => aligned && setProcFailed(true)} />
-            )}
-            {live && aligned && <PoseOverlay video={video} data={live} />}
-            <div className="tag">
-              <span className="pill">{source ? "Recorded clip" : aligned ? "Processed clip" : file ? `Your upload · ${file.name}` : "Your upload"}</span>
-              {live?.landmarks && aligned && <span className="pill accent">pose landmarks</span>}
-            </div>
-          </div>
-          <div className="live-legend">
-            <span><i className="dot" style={{ background: "#3987e5" }} />left</span>
-            <span><i className="dot" style={{ background: "#d95926" }} />right</span>
-            <span className="faint">{aligned ? "The video is the only clock: the robot and the timeline follow it." : "Local preview; landmarks appear on the processed clip."}</span>
-          </div>
-          {live && (
-            <dl className="kv card card-pad live-stats">
-              <dt>Clip</dt><dd>{live.duration_s.toFixed(1)} s · {live.frames} frames @ {Math.round(live.fps)} fps</dd>
-              {live.video && <><dt>Processed size</dt><dd>{live.video.width}×{live.video.height}</dd></>}
-              <dt>Pose found</dt><dd>{fmt.pct(live.pose_found)}{live.pose_model ? ` · ${live.pose_model}` : ""}</dd>
-              {live.retarget_error_cm && <><dt>Retarget error (mean / max)</dt><dd>{retargetErr(live.retarget_error_cm)}</dd></>}
-            </dl>
-          )}
-        </div>
-
-        <div className="live-right">
           <div className="card stepper live-steps">
             {(job?.stages.length ? job.stages : STEPS.map((s) => ({ ...s, status: "pending" as const, progress: 0, description: "", started_at: null, finished_at: null }))).map((s, i) => {
               const took = live?.timings_s[s.key] ?? (s.started_at && s.finished_at ? s.finished_at - s.started_at : null);
@@ -340,20 +366,20 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
               );
             })}
           </div>
+          {live && (
+            <dl className="kv card card-pad live-stats">
+              <dt>Clip</dt><dd>{live.duration_s.toFixed(1)} s · {live.frames} frames @ {Math.round(live.fps)} fps</dd>
+              {live.video && <><dt>Processed size</dt><dd>{live.video.width}×{live.video.height}</dd></>}
+              <dt>Pose found</dt><dd>{fmt.pct(live.pose_found)}{live.pose_model ? ` · ${live.pose_model}` : ""}</dd>
+              {live.retarget_error_cm && <><dt>Retarget error (mean / max)</dt><dd>{retargetErr(live.retarget_error_cm)}</dd></>}
+              {input.variants && <><dt>Variants kept</dt><dd>{input.variants.kept} of {input.variants.total}</dd></>}
+            </dl>
+          )}
+        </div>
 
-          <div className="card live-robot-card">
-            <div className="live-card-head">
-              <div className="eyebrow">Unitree G1 · retarget</div>
-              {live?.robot && <span className="faint" style={{ fontSize: 12 }}>drag to turn</span>}
-            </div>
-            {live?.robot ? <RobotView video={video} data={live} /> : (
-              <div className="ex-pending-media live-pending">{done(job, "pose") || st("retarget") === "running" ? "Retargeting onto the G1…" : "The robot appears when the retarget finishes"}</div>
-            )}
-          </div>
-
+        <div className="live-right">
           {spec ? (
             <div className="fade-in live-env">
-              <EnvironmentPanel spec={spec} live={running} t={t} onSeek={seek} />
               <TaskBreakdown spec={spec} t={t} onSeek={seek} />
               <RewardBox spec={spec} />
             </div>
@@ -383,6 +409,14 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
       </div>
     </div>
   );
+}
+
+/** A cheap content signature of a build piece: frames by length and end values, variants by counts. */
+function signature(x: BuildInput["skeleton"] | BuildInput["qpos"] | BuildInput["variants"] | undefined): string {
+  if (!x) return "";
+  if ("rows" in x) return `v${x.total}/${x.kept}/${x.ghosts.length}`;
+  const a = x.data;
+  return `${a.length}:${a[0]}:${a[a.length - 1]}`;
 }
 
 function retargetErr(e: Record<string, [number, number]>) {
@@ -463,6 +497,9 @@ function PolicyCard({ job, file }: { job: Job; file: File | null }) {
   );
 }
 
+// the stored run of each recorded build's clip (same clip, same SAM 3D Body front end): its 3D skeleton, qpos and variants
+const DEMO_RUN: Record<string, string> = { "front-kick": "latent_s3_kick", "squat-jump": "latent_s3_sj", "jumping-jacks": "latent_s3_jacks", lunge: "latent_s3_lunge", punches: "latent_s3_punch" };
+
 const TRAIN_REPLAY_S = 24; // the recorded 1,500 PPO iterations (~1 h on an A100), replayed in this many seconds
 
 /** A recorded build as a Job that grows with the clock, as the API's would: stages start and finish at
@@ -538,6 +575,17 @@ export function LiveReplayPage() {
   retargeted.current = done(job, "retarget");
   const source = useMemo<Source | null>(() => replay && {
     title: `Recorded build · ${replay.title} · ${replay.recorded}`,
+    clip: replay.clip.replace(/\.[a-z0-9]+$/i, ""),
+    extra: async (set) => {
+      const rid = DEMO_RUN[demoId];
+      if (!rid) return null;
+      const run = await api.run(rid);
+      await loadRun(run, (p) => {
+        const keep = Object.fromEntries(Object.entries(p).filter(([k, v]) => (k === "skeleton" || k === "qpos" || k === "variants") && v));
+        if (Object.keys(keep).length) set(keep);
+      });
+      return rid;
+    },
     // the recording has everything; hand it out stage by stage, as the API would
     live: () => demo.live(demoId).then((d) => (retargeted.current ? d : { ...d, robot: null, retarget_error_cm: null })),
     spec: () => demo.spec(demoId),

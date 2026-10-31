@@ -322,6 +322,51 @@ def generate(qpos, fps=FPS, grid=None, seed=0, g1=None, log=print):
     return out
 
 
+# A smaller grid for a live build on a CPU host (no warps): mirrored or not, three tempos, three amplitudes.
+PREVIEW = [(m, s, a, 0.0) for m in (False, True) for s in (0.75, 1.0, 1.33) for a in (0.85, 1.0, 1.1)]
+# The variants the web build view draws as ghosts, when kept: (mirror, tempo, amplitude, warp, label)
+GHOSTS = [(True, 1.0, 1.0, 0.0, "mirrored"), (False, 0.75, 1.0, 0.0, "0.75x tempo"),
+          (False, 1.33, 1.0, 0.0, "1.33x tempo"), (False, 1.0, 1.1, 0.0, "1.1x amplitude")]
+
+
+def preview(rows, qpos_of, fps=FPS, ghost_fps=15.0, ghosts=GHOSTS):
+    """A variant set as the web build view shows it: every variant's params and verdict, and a few kept ones'
+    qpos at ghost_fps to draw as ghosts. rows: write()'s index rows (or generate()'s variants); qpos_of(name):
+    that variant's (T, 36) qpos at fps."""
+    def key(p):
+        return (bool(p["mirror"]), round(float(p["tempo"]), 3), round(float(p["amplitude"]), 3), round(float(p.get("warp", 0)), 3))
+    kept = {key(r["params"]): r for r in rows if r["ok"]}
+    picks = [(kept.get((m, s, a, w)), label) for m, s, a, w, label in ghosts]
+    used = {id(r) for r, _ in picks if r}
+    spare = (r for r in kept.values() if id(r) not in used)
+    out = []
+    for r, label in picks:
+        if r is None:  # dropped (or not in the grid): another kept variant instead
+            r = next(spare, None)
+            label = None
+        if r is None:
+            continue
+        q = np.asarray(qpos_of(r["name"]), np.float64)
+        idx = np.unique(np.round(np.arange(0, len(q), fps / ghost_fps)).astype(int).clip(0, len(q) - 1))
+        q = q[idx]
+        q = np.column_stack([np.round(q[:, :3], 3), np.round(q[:, 3:7], 4), np.round(q[:, 7:], 3)])
+        p = r["params"]
+        out.append({"name": r["name"], "label": label or _label(p), "params": p, "fps": ghost_fps, "qpos": q.tolist()})
+    return {
+        "total": len(rows), "kept": sum(bool(r["ok"]) for r in rows),
+        "rows": [{"name": r["name"], "params": {k: r["params"][k] for k in ("mirror", "tempo", "amplitude", "warp")},
+                  "frames": int(r["frames"]), "ok": bool(r["ok"]), "rules": list(r.get("rules") or []), "why": r.get("why") or ""}
+                 for r in rows],
+        "ghosts": out,
+    }
+
+
+def _label(p):
+    parts = (["mirrored"] if p["mirror"] else []) + ([f"{p['tempo']:g}x tempo"] if p["tempo"] != 1 else []) \
+        + ([f"{p['amplitude']:g}x amplitude"] if p["amplitude"] != 1 else []) + (["warped"] if p.get("warp") else [])
+    return ", ".join(parts) or "as filmed"
+
+
 def write(variants, out_dir):
     """Each kept variant -> out_dir/<name>/{qpos.npy, src_frame.npy, motion.csv, task_spec.json}; index.json
     lists them all."""

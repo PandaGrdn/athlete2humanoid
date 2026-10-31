@@ -42,6 +42,7 @@ emit(stage="pose", progress=0.5); emit(stage="pose", done=True, log="pose found 
 emit(stage="retarget", done=True, log="retarget error 1.0 cm")
 (out / "task_spec.json").write_text(Path({spec!r}).read_text())
 emit(stage="environment", done=True, log="task spec: 3 key moments")
+emit(stage="environment", note="variants: 18 of 18 kept")
 """
 
 
@@ -79,6 +80,7 @@ def test_live_job_builds_the_environment(live_client):
     assert {s["key"]: s["status"] for s in j["stages"]} == {"video": "done", "pose": "done", "retarget": "done",
                                                             "environment": "done", "policy": "skipped"}
     assert any("needs a GPU" in line[2] for line in j["logs"])
+    assert ["environment", "variants: 18 of 18 kept"] in [line[1:] for line in j["logs"]]  # a note: a log line only
     live = c.get(f"/api/jobs/{j['id']}/live").json()
     assert live["frames"] == 60 and live["landmarks"]["frames"][0] == [[0.5, 0.2]]
     v = c.get(f"/api/jobs/{j['id']}/live/video")
@@ -165,6 +167,10 @@ def test_real_worker(tmp_path):
     spec = json.loads((out / "task_spec.json").read_text())
     assert live["robot"]["frames"] and len(live["robot"]["frames"]) == live["frames"] and live["pose_found"] > 0.9
     assert spec["type"] == "keypose" and spec["self_check"]["success"]
+    # the build view's data: the 3D skeleton and qpos per frame, and the variants' preview
+    assert len(live["skeleton"]["frames"]) == len(live["qpos"]) == live["frames"] and len(live["qpos"][0]) == 36
+    v = live["variants"]
+    assert v["total"] == len(v["rows"]) >= v["kept"] > 0 and v["ghosts"] and len(v["ghosts"][0]["qpos"][0]) == 36
     # the worker's body positions are the ones the task spec is scored on everywhere else
     from latent.reward_net import BODIES
     assert tuple(live_worker.BODIES) == BODIES

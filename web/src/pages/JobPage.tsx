@@ -1,10 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { api, fmt, policyColor, url, watchJob, type Job, type RunSummary, type TaskSpec } from "../api";
 import { LineChart } from "../components/charts";
 import { EnvironmentPanel } from "../components/environment";
 import { Icon, LoopVideo, StatusPill } from "../components/ui";
 import { Typed } from "../components/pixel";
+import { demoJobStatus, useRunInput } from "../buildview/hooks";
+
+// three.js loads with the build view, after the page
+const BuildView = lazy(() => import("../buildview/BuildView"));
 
 const MODEL: Record<string, string> = {
   silhouette: "SAM 3.1", pose: "SAM 3D Body", retarget: "mink", environment: "key poses", latent: "V-JEPA 2", train: "mjlab PPO", eval: "V-JEPA 2",
@@ -55,6 +59,8 @@ export default function JobPage() {
   const spec = useTaskSpec(job);
   const live = job?.status === "running" || job?.status === "queued";
   const now = useNow(!!live);
+  // a demo job replays a stored run: its build, stage by stage as the replay reaches each one
+  const build = useRunInput(job?.demo && job.source_run ? job.source_run : null);
 
   useEffect(() => {
     api.job(id).then(setJob).catch((e) => setErr(e.message));
@@ -107,6 +113,14 @@ export default function JobPage() {
         </div>
       )}
       {job.error && <div className="error-box" style={{ marginBottom: 20 }}>{job.error}</div>}
+
+      {build.run && (
+        <Suspense fallback={<div className="skeleton" style={{ height: "min(74svh, 720px)", minHeight: 500, margin: "8px 0 28px" }} />}>
+          <BuildView input={build.input} status={demoJobStatus(job, build.input, build.done)} follow
+            kicker={<>Replaying {build.run.title}</>}
+            notes={{ policy: <>The recorded run trained: {build.run.policies_trained.join(", ") || "none"}. The 3D robot is the showcase recording with pushes.</> }} />
+        </Suspense>
+      )}
 
       <div className="job-grid">
         <div className="card stepper">

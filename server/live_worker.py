@@ -17,7 +17,9 @@ stderr, which the server logs and never shows.
   environment  skill/keypose.py: key moments, contacts, the reward machine, and the retarget's own
                score against it (the self-check) -> task_spec.json
 
-live.json grows as stages finish: what the page draws (2D landmarks, the robot's bodies, timings).
+live.json grows as stages finish: what the page draws (2D landmarks and the 3D skeleton, the robot's bodies
+and qpos, timings), then a preview of the clip's variants (skill/variations.py, best effort, after the
+environment: the build view's ghosts).
 """
 
 import argparse
@@ -36,6 +38,7 @@ FPS = 30
 MAX_SIDE = 640
 MIN_SECONDS = 1.0
 MIN_POSE_FOUND = 0.5
+VARIANT_MAX_S = 12  # longer clips get the four ghost variants only (CPU time)
 # MediaPipe landmarks drawn over the video: the body, not the face or hands
 LANDMARKS = {0: "nose", 11: "left shoulder", 12: "right shoulder", 13: "left elbow", 14: "right elbow",
              15: "left wrist", 16: "right wrist", 23: "left hip", 24: "right hip", 25: "left knee",
@@ -96,7 +99,7 @@ def _round(a, nd):
 def run(video, out, max_seconds, name="clip", sam3d=None):
     out.mkdir(parents=True, exist_ok=True)
     live = {"fps": FPS, "frames": 0, "duration_s": 0.0, "video": None, "landmarks": None, "pose_found": None,
-            "robot": None, "retarget_error_cm": None, "timings_s": {}}
+            "skeleton": None, "robot": None, "qpos": None, "retarget_error_cm": None, "variants": None, "timings_s": {}}
 
     def save():
         tmp = out / "live.json.tmp"
@@ -152,13 +155,16 @@ def run(video, out, max_seconds, name="clip", sam3d=None):
     if found < MIN_POSE_FOUND:
         save()
         raise ClipError(f"a person was found in only {found:.0%} of frames; film one person, whole body in shot")
+    # the 3D skeleton the retarget reads: metres, z up, the athlete facing +x (ground not yet at 0)
+    human = pose.human_trajectory(world, image_xy, boxes)
+    live["skeleton"] = {"names": [LANDMARKS[i] for i in keep], "edges": live["landmarks"]["edges"],
+                        "frames": _round(human[:, keep], 3)}
     done("pose", t0, f"pose ({model}) found in {found:.0%} of frames")
 
     # retarget
     t0 = time.monotonic()
     import retarget
     emit(stage="retarget", progress=0.1)
-    human = pose.human_trajectory(world, image_xy, boxes)
     rt = retarget.G1Retargeter()
     targets, rotations = retarget.human_to_targets(human, rt, fps=FPS)
     emit(stage="retarget", progress=0.4)
@@ -167,6 +173,7 @@ def run(video, out, max_seconds, name="clip", sam3d=None):
     pos = body_positions(rt.model, qpos)
     np.save(out / "qpos.npy", qpos)
     live["robot"] = {"names": list(BODY_NAMES), "edges": [list(e) for e in BODY_EDGES], "frames": _round(pos, 3)}
+    live["qpos"] = [[round(float(x), 4) for x in q] for q in qpos]
     live["retarget_error_cm"] = {k: [round(float(x), 1) for x in v] for k, v in report.items()}
     mean = np.mean([v[0] for v in report.values()]) if report else float("nan")
     done("retarget", t0, f"retarget error {mean:.1f} cm (mean over end effectors)")
@@ -182,6 +189,25 @@ def run(video, out, max_seconds, name="clip", sam3d=None):
     sc = spec["self_check"]
     done("environment", t0, f"task spec: {spec['summary']} (the retarget scores "
                             f"{sc['stages_completed']}/{sc['stages_total']})")
+
+    # variants (best effort: the environment is done, and a failure here never fails the build)
+    try:
+        live["variants"] = variant_preview(qpos)
+        save()
+        v = live["variants"]
+        emit(stage="environment", note=f"variants: {v['kept']} of {v['total']} kept (mirrored, re-timed, rescaled; "
+                                       f"each passes its own key-moment check and the physics filter)")
+    except Exception as e:  # noqa: BLE001
+        emit(stage="environment", note=f"variants skipped ({type(e).__name__})")
+
+
+def variant_preview(qpos):
+    """skill/variations.py on this retarget: PREVIEW's 18 (6 above VARIANT_MAX_S), with a few kept as ghosts."""
+    from skill import variations
+    grid = variations.PREVIEW if len(qpos) <= VARIANT_MAX_S * FPS else [g[:4] for g in variations.GHOSTS]
+    vs = variations.generate(qpos, fps=FPS, grid=grid, log=lambda *a: None)
+    by_name = {v["name"]: v["qpos"] for v in vs}
+    return variations.preview(vs, by_name.__getitem__, fps=FPS)
 
 
 def main(argv=None):

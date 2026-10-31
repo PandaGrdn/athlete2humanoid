@@ -55,3 +55,35 @@ Also useful:
 - **Frozen reference** 0% / 100% / 100%; **1.5 m/s shove** 14% vs 81%; **18 conditions × 64 rollouts:** `outputs/remote_robust_final/robust.json` (`docs/results/squat_jump_robustness.md`).
 - **Retarget "three to ten times":** `docs/RETARGET.md`.
 - **Muse runs on recorded fixtures** until the API key exists. Say "Muse names its stages" only once the live run is in, or show the fixture as "example output".
+
+## Showing the 3D build view live
+
+The build view (`web/src/buildview/`) turns the pipeline into the demo: one black stage where each step appears as its
+data arrives, in order. **01** the clip (with SAM 3.1's mask beside it on GPU builds; 2D landmarks on a CPU build),
+**02** the 3D skeleton from SAM 3D Body (or MediaPipe), **03** the G1 snapping onto it and stepping aside (blue lines join
+each wrist, elbow, knee and ankle to the body it drives), **04** the key moments on the timeline (Muse's names when the
+spec has them; a ring pulses under the robot and the name flashes as each passes), **05** the variants fanning out
+behind as ghosts (mirrored, 0.75× and 1.33× tempo, 1.1× amplitude) with the kept/dropped grid below, **06** a trained
+policy you can push. Click a stage chip to swing the camera to it; drag to orbit.
+
+Where it appears:
+
+| Page | What it shows |
+|---|---|
+| `/live` → drop a clip | A real build of the upload on the API's CPU, stage by stage from the job's events (about 15–40 s). Training needs a GPU, so stage 06 offers the nearest stored policy, labelled **pre-trained**. |
+| `/build/latent_s3_kick` (any `/api/runs` id; "Build in 3D" on a run page) | A stored run replayed from its own files, one stage every 2.6 s. "Replay the build" restarts it. |
+| `/live/demo/front-kick` | A recorded live build; its 3D pieces come from the stored run of the same clip. |
+| `/jobs/<id>` for a demo-runner job | The same view, each stage revealed as the replayed job reaches it. |
+
+To show it live (about 60 s):
+
+1. Open `/build/latent_s3_kick` and let it run: say what each stage is as its chip lights up. Stop on 03 and orbit
+   once around the skeleton and the G1 to show the retarget lines.
+2. Click **06 Policy**, press **Push** (or click the robot) with **Shove**: the policy's recorded recovery plays.
+3. Go to `/live`, drop `clips/punches.mov` (or any phone clip of one person): the same stages build from scratch on the
+   server. Point at 05 (variants generated on this host from the upload) and 06 (pre-trained, not this clip's policy).
+
+Before a live demo, the API needs this branch's server (skeleton, qpos and variants in `live.json`) and the runs need
+`variants.json` and `human.npy`: run `python scripts/build_variants_view.py outputs/remote_latent_s3_*` (the repo's
+venv), then redeploy (`docs/DEPLOY.md`; `scripts/build_space.py` ships both files). On an older API the view still
+works and marks the missing stages "n/a".

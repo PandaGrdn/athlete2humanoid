@@ -60,7 +60,10 @@ export default function RunPage() {
           </div>
           {run.description && <p className="muted" style={{ marginTop: 12, maxWidth: 720 }}>{run.description}</p>}
         </div>
-        <button className="btn" onClick={replay} disabled={busy}><Icon name="play" size={16} />Replay pipeline</button>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Link className="btn primary" to={`/build/${run.id}`}><Icon name="cube" size={16} />Build in 3D</Link>
+          <button className="btn" onClick={replay} disabled={busy}><Icon name="play" size={16} />Replay pipeline</button>
+        </div>
       </div>
 
       <div className="result-hero">

@@ -27,7 +27,7 @@ export type Q = [number, number, number, number];
 
 /** qpos frames: 36 numbers each (root position, root quaternion wxyz, 29 joint angles), decoded from int16. */
 export type Frames = { n: number; data: Float32Array };
-const NQ = 36;
+export const NQ = 36;
 const SCALE = [...Array(3).fill(1e-3), ...Array(4).fill(1 / 32767), ...Array(29).fill(1e-4)];
 
 function decode(buf: ArrayBuffer, byteOffset = 0, frames?: number): Frames {
@@ -56,19 +56,25 @@ export type ClipEntry = {
 };
 export const loadIndex = () => get(`${BASE}showcase/index.json`, "json") as Promise<{ clips: ClipEntry[] }>;
 
-export async function loadShowcase(id: string) {
+/** The G1's meshes and kinematic tree, as a showcase bundle ships them (the same robot in every bundle). */
+export async function loadRobot(id: string): Promise<Robot> {
   const d = dir(id);
-  const [show, robotJson] = await Promise.all([get(`${d}showcase.json`, "json") as Promise<Showcase>, get(`${d}g1.json`, "json") as Promise<RobotJson>]);
-  const [bin, nominal, reference] = await Promise.all([
-    get(d + robotJson.bin, "bin") as Promise<ArrayBuffer>,
-    get(d + show.nominal, "bin") as Promise<ArrayBuffer>,
-    get(d + show.reference, "bin") as Promise<ArrayBuffer>,
-  ]);
-  const robot: Robot = {
+  const robotJson = await (get(`${d}g1.json`, "json") as Promise<RobotJson>);
+  const bin = await (get(d + robotJson.bin, "bin") as Promise<ArrayBuffer>);
+  return {
     ...robotJson,
     pos: new Float32Array(bin, robotJson.positions[0] * 4, robotJson.positions[1]),
     idx: new Uint16Array(bin, robotJson.indices[0], robotJson.indices[1]),
   };
+}
+
+export async function loadShowcase(id: string) {
+  const d = dir(id);
+  const [show, robot] = await Promise.all([get(`${d}showcase.json`, "json") as Promise<Showcase>, loadRobot(id)]);
+  const [nominal, reference] = await Promise.all([
+    get(d + show.nominal, "bin") as Promise<ArrayBuffer>,
+    get(d + show.reference, "bin") as Promise<ArrayBuffer>,
+  ]);
   return { show, robot, nominal: decode(nominal), reference: decode(reference), pushes: new PushStore(d, show) };
 }
 export type Loaded = Awaited<ReturnType<typeof loadShowcase>>;
