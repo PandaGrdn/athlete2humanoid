@@ -1,9 +1,11 @@
 """Run in place (retarget.py in_place): which way of removing a run's travel leaves the feet planted? For each clip
 folder (human.npy, meta.json), retarget it travelling and with each of retarget.IN_PLACE_METHODS, then measure on the
 G1 (MuJoCo forward kinematics of the solved qpos, not the targets):
-  - foot slip: each foot's horizontal speed on the frames the retarget plants it (its contacts, found on the
-    travelling motion, so the same frames for every method) and its sole is down (lowest contact sphere within 2 cm
-    of the floor), mean and 95th percentile, cm/s;
+  - foot slip: each foot's horizontal speed on the frames the retarget plants it (the contacts that method's motion
+    finds; in place, after retarget.level_floor and restore_travel) and its sole is down (lowest contact sphere within
+    2 cm of the floor), mean and 95th percentile, cm/s; and, whatever the contacts say, the lowest sole's median speed
+    while a sole is down;
+  - knee (and other) angle error to the human, from the audit;
   - root travel left: the pelvis's net horizontal travel, and its largest distance from where it starts;
   - the pipeline audit's IK numbers (experiments/pipeline_audit/retarget_audit.audit): tracking error, penetration,
     joint speed.
