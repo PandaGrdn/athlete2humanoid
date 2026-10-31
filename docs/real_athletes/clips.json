@@ -1,0 +1,34 @@
+{
+ "note": "Real-athlete clips (docs/REAL_ATHLETES.md). Licences read on each clip's page on 2026-10-30. Videos are kept out of git (clips_pro/athletes/, trimmed copies in clips_pro/athletes_upload/). Pexels and Mixkit licences need no attribution; the site credits every clip anyway.",
+ "clips": [
+  {"name": "jog_lakeside", "short": "jog", "title": "Lakeside run, in place",
+   "description": "A runner filmed side-on in a tracking shot along a lakeside road. The robot learns the gait from the video.",
+   "page": "https://www.pexels.com/video/a-man-wearing-sunglasses-running-in-the-street-4065467/",
+   "file": "https://videos.pexels.com/video-files/4065467/4065467-uhd_2560_1440_30fps.mp4",
+   "licence": "Pexels License", "author": "Pavel Danilyuk", "credit": "Pavel Danilyuk, \"A Man Wearing Sunglasses Running in the Street\", Pexels",
+   "trim_s": [0.0, 6.0], "in_place": true},
+  {"name": "jog_bridge", "short": "bridge", "title": "Bridge run, in place",
+   "description": "A runner crossing a bridge, filmed side-on. The robot learns the gait from the video.",
+   "page": "https://www.pexels.com/video/a-beautiful-woman-jogging-on-a-sunny-day-8402092/",
+   "file": "https://videos.pexels.com/video-files/8402092/8402092-hd_1920_1080_30fps.mp4",
+   "licence": "Pexels License", "author": "RDNE Stock project", "credit": "RDNE Stock project, \"A Beautiful Woman Jogging on a Sunny Day\", Pexels",
+   "trim_s": [0.0, 7.5], "in_place": true},
+  {"name": "taekwondo_kick", "short": "tkd", "title": "Taekwondo side kick",
+   "description": "A taekwondo black belt's side kick, filmed side-on against black. The robot learns the kick from the video.",
+   "page": "https://mixkit.co/free-stock-video/a-young-man-performs-a-karate-kick-to-the-air-49634/",
+   "file": "https://assets.mixkit.co/videos/49634/49634-1080.mp4",
+   "licence": "Mixkit Stock Video Free License", "author": "rubenvelasco", "credit": "rubenvelasco, \"A young man performs a karate kick to the air\", Mixkit",
+   "trim_s": [0.0, 6.38], "in_place": false},
+  {"name": "shadow_boxing", "short": "box", "title": "Shadow boxing",
+   "description": "A boxer shadow boxing in a gym, backlit. The robot learns the combination from the video.",
+   "page": "https://www.pexels.com/video/woman-doing-shadow-boxing-8745108/",
+   "file": "https://videos.pexels.com/video-files/8745108/8745108-uhd_2732_1440_25fps.mp4",
+   "licence": "Pexels License", "author": "Ron Lach", "credit": "Ron Lach, \"Woman doing Shadow Boxing\", Pexels",
+   "trim_s": [0.0, 5.5], "in_place": false}
+ ],
+ "rejected": [
+  {"page": "https://www.pexels.com/video/man-running-on-a-sports-field-7187054/", "why": "cuts; runs toward and away from the camera"},
+  {"page": "https://www.pexels.com/video/a-man-running-in-the-soccer-field-7187058/", "why": "a cut about every second"},
+  {"page": "https://commons.wikimedia.org/wiki/File:Neymar_takes_a_free_kick_-_BRA_v._RSA,_Rio_2016.ogv", "why": "CC BY-SA 4.0 (the file page's {{self|cc-by-sa-4.0}}), outside the allowed licences; not downloaded"}
+ ]
+}

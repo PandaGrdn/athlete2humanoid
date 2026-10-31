@@ -3,6 +3,7 @@ demo's run folders.
 
     python experiments/real_athletes.py inputs outputs/remote_pro_ra --out outputs/athletes_inputs
         # the processed clips (remote_run.py pro --iters 0) whose spec its own retarget completes, + the warm start
+    python experiments/real_athletes.py audit outputs/remote_pro_ra    # -> docs/results/real_athletes/audit.json
     python experiments/real_athletes.py assemble outputs/remote_athletes_ra
         # each clip's results -> outputs/remote_latent_ra_<short> (the run the site lists: eval.json, the policy, the
         # clip, web.json with the source's credit, robust.json), remote_variants_ra_<short> (its variants, for
@@ -61,6 +62,48 @@ def inputs(a):
     shutil.copy2(warm, out / "policy_tracking_var" / warm.name)
     (out / "inputs.json").write_text(json.dumps({"warm_start": f"{WARM_START}/policy_tracking_var/{warm.name}", "clips": rows}, indent=1))
     print(f"-> {out}: {sum(r['kept'] for r in rows.values())}/{len(rows)} clips, warm start {warm}")
+
+
+def audit(a):
+    """The pipeline audit's numbers per processed clip (experiments/pipeline_audit): pose noise and bones (pose_stats),
+    the retarget's IK error, joint speed and limits, the feet (retarget_audit, run in place as meta.json says), the
+    camera's motion (camera.json), the spec and its self-check, and how many variants the filter keeps."""
+    import numpy as np
+    from experiments.pipeline_audit.pose_stats import clip_stats
+    from experiments.pipeline_audit.retarget_audit import audit as retarget_audit
+    from skill import keypose
+    from skill import variations as V
+    proc = Path(a.processed) / "process" / "clips"
+    rows = {}
+    for d in sorted(proc.iterdir()):
+        meta = json.loads((d / "meta.json").read_text())
+        P, fps = np.load(d / "human.npy"), meta["fps"]
+        ip = (meta.get("in_place") or {}).get("method")
+        r = retarget_audit(P, fps, in_place=ip)
+        spec, _ = keypose.compile_clip(d)
+        sc = spec["self_check"]
+        vs = V.generate(np.load(d / "qpos.npy"), fps, log=lambda *x: None)
+        cam = json.loads((d / "camera.json").read_text()) if (d / "camera.json").exists() else {}
+        rows[d.name] = {
+            "frames": meta["frames"], "seconds": round(meta["frames"] / fps, 2), "frontend": meta.get("frontend"),
+            "in_place": meta.get("in_place"), "retarget_warnings": meta.get("retarget_warnings"),
+            "camera": {"height_px": (cam.get("height") or {}).get("height_px"),
+                       **{k: (cam.get("camera") or {}).get(k) for k in ("static", "compensated", "max_shift_px", "max_zoom")},
+                       "cuts": len((cam.get("camera") or {}).get("cuts") or []), "warnings": cam.get("warnings")},
+            "pose": clip_stats(P, fps, meta.get("view_azimuth") or 0.0),
+            "retarget": {k: r[k] for k in ("tracking_cm", "joint_speed", "limits", "feet", "angle_err_deg")},
+            "spec": {"summary": spec["summary"], "self_check": f"{sc['stages_completed']}/{sc['stages_total']}",
+                     "warnings": spec.get("warnings")},
+            "variants": {"kept": sum(v["ok"] for v in vs), "total": len(vs),
+                         "dropped_for": sorted({w for v in vs if not v["ok"] for w in v.get("rules", [])})},
+        }
+        t = r["tracking_cm"]
+        print(f"{d.name}: {rows[d.name]['seconds']} s, IK feet {t['left_foot']['mean']}/{t['right_foot']['mean']} cm, "
+              f"hands {t['left_hand']['mean']}/{t['right_hand']['mean']} cm, slide {r['feet']['slide_cm_per_s']} cm/s, "
+              f"spec {rows[d.name]['spec']['self_check']}, variants {rows[d.name]['variants']['kept']}/{len(vs)}")
+    out = ROOT / "docs" / "results" / "real_athletes" / "audit.json"
+    out.write_text(json.dumps(rows, indent=1, default=float))
+    print("->", out)
 
 
 def run_eval(spec, metrics, robust):
@@ -130,8 +173,10 @@ if __name__ == "__main__":
     p = sub.add_parser("inputs")
     p.add_argument("processed", help="remote_run.py pro --iters 0's folder (process/results.tar.gz)")
     p.add_argument("--out", required=True)
+    p = sub.add_parser("audit")
+    p.add_argument("processed", help="remote_run.py pro --iters 0's folder")
     p = sub.add_parser("assemble")
     p.add_argument("results", help="remote_run.py athletes' folder")
     p.add_argument("--iters", type=int)
     a = ap.parse_args()
-    inputs(a) if a.cmd == "inputs" else assemble(a)
+    {"inputs": inputs, "audit": audit, "assemble": assemble}[a.cmd](a)
