@@ -170,6 +170,11 @@ export default function BuildView({ input, status, kicker, follow = false, notes
               <span className="bv-n mono">{String(i + 1).padStart(2, "0")}</span>
               <span className="bv-l">{s.short}</span>
               <span className="bv-s mono">{s.key === "policy" && status.policy === "offer" ? "pre-trained" : STATUS_WORD[status[s.key]]}</span>
+              <span className="bv-tags">
+                {stageModels(s.key, input, status[s.key]).map((m) => (
+                  <span key={m.name} className={`bv-tag mono ${m.meta ? "meta" : ""} ${m.off ? "off" : ""}`} title={m.why}>{m.name}</span>
+                ))}
+              </span>
             </button>
           </li>
         ))}
@@ -284,6 +289,36 @@ function MomentTag({ spec, t }: { spec: NonNullable<BuildInput["spec"]>; t: numb
       <strong>{s.name}</strong>
     </div>
   );
+}
+
+// Which model did each stage: Meta's are filled. Before a stage's data is in, its chip names the model the pipeline
+// uses there; once it is in, the model this build actually used. One a build skipped (a CPU build has no SAM 3.1,
+// a spec named without a Muse key) stays, struck through, so the chip says what is missing.
+type StageModel = { name: string; meta: boolean; off?: boolean; why: string };
+function stageModels(k: StageKey, input: BuildInput, st: StageStatus): StageModel[] {
+  const done = st === "ready" || st === "offer";
+  switch (k) {
+    case "video":
+      return [input.segmenter || !done
+        ? { name: "SAM 3.1", meta: true, why: "Meta's SAM 3.1 segments and tracks the athlete from a text prompt" }
+        : { name: "SAM 3.1", meta: true, off: true, why: "Not run on this CPU build: the pose model reads the whole frame" }];
+    case "skeleton":
+      if (input.poseModel === "MediaPipe") return [{ name: "MediaPipe", meta: false, why: "Google's MediaPipe Pose, the CPU fallback for SAM 3D Body" }];
+      return input.poseModel || !done ? [{ name: "SAM 3D Body", meta: true, why: "Meta's SAM 3D Body lifts the masked athlete to a 3D skeleton" }] : [];
+    case "retarget":
+      return [{ name: "mink IK", meta: false, why: "Inverse kinematics (mink, MuJoCo) on the G1's own bone lengths" }];
+    case "moments":
+      return [input.spec?.named_by || !done || !input.spec
+        ? { name: "Muse Spark", meta: true, why: "The keypose compiler finds the moments in the motion; Meta's Muse Spark names them from the video" }
+        : { name: "Muse Spark", meta: true, off: true, why: "Not named by Muse in this build: the compiler's measured names" }];
+    case "variants":
+      return [{ name: "rule-based", meta: false, why: "Mirror, tempo and amplitude rules plus a physics filter (skill/variations.py); no model" }];
+    case "policy":
+      return [
+        { name: "mjlab PPO", meta: false, why: "PPO in mjlab (MuJoCo Warp) across 4,096 simulated G1s" },
+        { name: "V-JEPA 2", meta: true, why: "Meta's V-JEPA 2 scores the rollout's likeness to the video, and is the style reward in the task policies" },
+      ];
+  }
 }
 
 function Caption({ k, input, status, pick, accepted, note }: { k: StageKey | null; input: BuildInput; status: BuildViewProps["status"]; pick: PolicyPick | null; accepted: boolean; note: ReactNode }) {
