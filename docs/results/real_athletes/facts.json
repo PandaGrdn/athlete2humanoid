@@ -1,0 +1,221 @@
+{
+ "sources": {
+  "processing": "outputs/remote_pro_ra/job.log",
+  "kick": "outputs/remote_athletes_ra3_partial/taekwondo_kick/robust_cpu.log, policy_tracking_var/train.log",
+  "jog_feet": "reference: outputs/remote_pro_ra/process/clips/<clip>/qpos.npy; policy: outputs/remote_athletes_ra5/<clip>/robust/rollouts.npz (clean, the rollouts it saves)",
+  "warm_start_squat_jump": "outputs/remote_robust_s3_sj/robust.json summary.tracking_var"
+ },
+ "processing": {
+  "jog_bridge": {
+   "sam31_visible_pct": 100.0,
+   "sam3d_pose_found_pct": 100.0,
+   "intake_warnings": [
+    "athlete is 383 px tall (< 400): pose noise grows as 1 / height; use a closer or higher-resolution clip"
+   ]
+  },
+  "jog_lakeside": {
+   "sam31_visible_pct": 100.0,
+   "sam3d_pose_found_pct": 100.0,
+   "intake_warnings": []
+  },
+  "shadow_boxing": {
+   "sam31_visible_pct": 99.0,
+   "sam3d_pose_found_pct": 100.0,
+   "intake_warnings": []
+  },
+  "taekwondo_kick": {
+   "sam31_visible_pct": 100.0,
+   "sam3d_pose_found_pct": 100.0,
+   "intake_warnings": [
+    "camera motion is unreliable here (few frames register: archive film, little background); left uncompensated",
+    "camera motion not measurable in 23/191 frames (no background texture)"
+   ]
+  }
+ },
+ "kick": {
+  "ref_tilt_max_rad": 1.3856,
+  "fall_rule_tilt_rad": 1.4,
+  "clip_steps_50hz": 317,
+  "eval_refused": true,
+  "last_terminations_per_window": {
+   "ee_body_pos": 47.7917,
+   "anchor_pos": 8.4583,
+   "time_out": 0.3333,
+   "anchor_ori": 0.0
+  }
+ },
+ "modal_training_before_the_limit": {
+  "jog_lakeside": {
+   "training_started_utc": "06:28:56",
+   "training_variants": "36/36",
+   "last_iteration_logged": 448,
+   "time_elapsed_at_it": "0:17:01",
+   "iteration_time_s": 2.1,
+   "mean_episode_length": 499.19
+  },
+  "jog_bridge": {
+   "training_started_utc": "06:27:46",
+   "training_variants": "35/36",
+   "last_iteration_logged": 489,
+   "time_elapsed_at_it": "0:18:04",
+   "iteration_time_s": 2.2,
+   "mean_episode_length": 500.0
+  },
+  "shadow_boxing": {
+   "training_started_utc": "06:28:43",
+   "training_variants": "36/36",
+   "last_iteration_logged": 455,
+   "time_elapsed_at_it": "0:17:07",
+   "iteration_time_s": 2.2,
+   "mean_episode_length": 468.91
+  },
+  "taekwondo_kick": {
+   "training_started_utc": "06:21:10",
+   "training_variants": "24/36",
+   "last_iteration_logged": 999,
+   "time_elapsed_at_it": "0:23:31",
+   "iteration_time_s": 2.33,
+   "mean_episode_length": 87.01
+  }
+ },
+ "jog_feet": {
+  "jog_lakeside": {
+   "reference_ankle_z_m": {
+    "max": [
+     0.252,
+     0.213
+    ],
+    "p90": [
+     0.199,
+     0.18
+    ]
+   },
+   "policy_clean_ankle_z_m": {
+    "rollouts": 2,
+    "max": [
+     0.176,
+     0.086
+    ],
+    "p90": [
+     0.07,
+     0.056
+    ],
+    "median": [
+     0.035,
+     0.037
+    ]
+   },
+   "left_right": "left, right ankle roll link",
+   "second_key_moment": {
+    "name": "left foot up, right foot forward",
+    "feet_down": [
+     false,
+     true
+    ],
+    "hold_s": 0.1,
+    "foot_height_tol_m": [
+     0.0593,
+     0.0546
+    ]
+   }
+  },
+  "jog_bridge": {
+   "reference_ankle_z_m": {
+    "max": [
+     0.202,
+     0.218
+    ],
+    "p90": [
+     0.176,
+     0.187
+    ]
+   },
+   "policy_clean_ankle_z_m": {
+    "rollouts": 2,
+    "max": [
+     0.078,
+     0.106
+    ],
+    "p90": [
+     0.036,
+     0.035
+    ],
+    "median": [
+     0.035,
+     0.035
+    ]
+   },
+   "left_right": "left, right ankle roll link",
+   "second_key_moment": {
+    "name": "left foot up, right hand forward",
+    "feet_down": [
+     false,
+     true
+    ],
+    "hold_s": 0.1,
+    "foot_height_tol_m": [
+     0.0433,
+     1.2649
+    ]
+   }
+  }
+ },
+ "boxing_clean_tracking_rms_m": {
+  "pelvis": 0.0808,
+  "left_hip_roll_link": 0.0851,
+  "left_knee_link": 0.1002,
+  "left_ankle_roll_link": 0.0996,
+  "right_hip_roll_link": 0.085,
+  "right_knee_link": 0.1131,
+  "right_ankle_roll_link": 0.1305,
+  "torso_link": 0.0805,
+  "left_shoulder_roll_link": 0.089,
+  "left_elbow_link": 0.1029,
+  "left_wrist_yaw_link": 0.1202,
+  "right_shoulder_roll_link": 0.0862,
+  "right_elbow_link": 0.092,
+  "right_wrist_yaw_link": 0.0999
+ },
+ "warm_start_squat_jump": {
+  "clean_task_success": 1.0,
+  "held_out_task_success": 0.8214,
+  "clean_joint_err_rad": 0.093,
+  "clean_torso_err_m": 0.065
+ },
+ "synthetic_jog_slip": {
+  "world": {
+   "mean_cm_s": 0.6,
+   "p95_cm_s": 1.0,
+   "foot_down_frac": 0.676,
+   "lowest_sole_median_cm_s": 0.6
+  },
+  "stride": {
+   "mean_cm_s": 192.1,
+   "p95_cm_s": 192.7,
+   "foot_down_frac": 0.676,
+   "lowest_sole_median_cm_s": 192.1
+  },
+  "soft": {
+   "mean_cm_s": 0.6,
+   "p95_cm_s": 1.0,
+   "foot_down_frac": 0.676,
+   "lowest_sole_median_cm_s": 0.6
+  }
+ },
+ "job_times": {
+  "remote_pro_ra": [
+   "22:37:48 pro_ra running on Modal (call fc-01M687DMESBWR3H13R28ZW5D5P)",
+   "22:49:50 job state: done"
+  ],
+  "remote_athletes_ra3": [
+   "23:00:19 athletes_ra3 running on Modal (call fc-01M688PVC9NTDE2MY9C3BXXZZG)"
+  ],
+  "remote_athletes_ra5": [
+   "02:51:58 L4 ready; uploading inputs",
+   "02:52:39 athletes_ra5 job launched",
+   "04:26:08 job state: done (attempt 1)",
+   "04:26:22 VM stopped. Results in /Users/ethan/Documents/Github/athlete2humanoid/.claude/worktrees/kind-goldwasser-2aa397/outputs/remote_athletes_ra5"
+  ],
+  "note": "remote_athletes_ra3: the Modal container was stopped by the spend limit; its runner was stopped by hand after the call had failed, so its log has no end time (see modal_training_before_the_limit)"
+ }
+}

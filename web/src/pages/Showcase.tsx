@@ -125,6 +125,13 @@ export default function Showcase() {
             <span className="sc-n mono">01</span>
             <h3>Video</h3>
             <p>{entry?.video}</p>
+            {entry?.credit && (
+              <p className="muted" style={{ fontSize: 13 }}>
+                Source: {/^https:\/\/[^\s"'<>]+$/.test(entry.credit.url)
+                  ? <a href={entry.credit.url} target="_blank" rel="noopener noreferrer">{entry.credit.text}</a>
+                  : entry.credit.text} ({entry.credit.licence})
+              </p>
+            )}
           </div>
           <div className="sc-step">
             <span className="sc-n mono">02</span>

@@ -27,7 +27,7 @@ comes from; all docs are in https://github.com/PandaGrdn/athlete2humanoid/tree/m
 
 **Where it doesn't hold yet:** on two of the three unseen clips (punches, jumping jacks), 1,500 iterations, about half an hour, were not enough for any starting point (`docs/FRONTIER_ADAPTATION.md`). "About 20 minutes" is a measured result for one move, not a guarantee for every move.
 
-**Real-athlete clips:** REAL_ATHLETE_RESULTS (added by the session processing real-athlete footage).
+**Real-athlete clips:** four free-licence stock clips (two jogs, a shadow boxer, a side kick) went through the pipeline, with a new run-in-place mode that turns the jogs' travel into a gait on the spot at 0.3–0.5 cm/s of foot slip. No tracker trained on them passes its spec yet: after 1,250 iterations the jogs shuffle instead of lifting their feet, though the lakeside jog's policy completes its half-speed variant in every rollout, and the kick needs more hip range than the G1 has (`docs/REAL_ATHLETES.md`).
 
 **Who benefits:**
 - **Robot learning teams and humanoid makers.** A new skill today means a mocap session or a hand-written reward. Here the input is a video anyone can film, and the output is a policy plus the evaluation that says how robust it is.

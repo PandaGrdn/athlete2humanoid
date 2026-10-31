@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router";
 import BuildView from "../buildview/BuildView";
 import { timedStatus, useRunInput } from "../buildview/hooks";
 import { Typed } from "../components/pixel";
-import { Icon } from "../components/ui";
+import { CreditLine, Icon } from "../components/ui";
 
 // /build/:rid: a stored run's build replayed in 3D from its files, one stage every few seconds, the way an
 // upload's live build arrives. Nothing is recomputed: every stage is that run's own output.
@@ -42,6 +42,7 @@ export default function BuildPage() {
         the 3D skeleton, the G1 retargeted onto it, the key moments the reward is built from, the variants it trains on,
         and a trained policy you can push. Click a stage to look at it; drag to orbit.
       </p>
+      <CreditLine credit={run?.credit} />
       <BuildView input={input} status={status} follow kicker={<>Recorded build · {run?.id ?? rid}</>}
         notes={{ policy: run ? <>This run trained: {run.policies_trained.join(", ") || "none"} (<Link to={`/runs/${run.id}`}>scores and videos</Link>). The 3D robot is the showcase recording with pushes.</> : null }} />
     </div>

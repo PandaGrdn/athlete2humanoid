@@ -32,8 +32,9 @@ CATEGORY = {"squat_jump": ("vertical_jump", "squat_"), "squat": "squat_", "lunge
             "arms": "arms_raise_", "jump": "vertical_jump", "march": "march", "punch": "punch"}
 
 
-def _processed(path):
-    """A pipeline output folder; videos are run through pipeline.py into outputs/<name> first."""
+def _processed(path, in_place=None):
+    """A pipeline output folder; videos are run through pipeline.py into outputs/<name> first (in_place: its
+    --in-place method, or None)."""
     path = Path(path)
     if path.suffix.lower() in (".mp4", ".mov", ".avi", ".mkv"):
         import subprocess
@@ -48,7 +49,7 @@ def _processed(path):
             clip = out / "clip30.mp4"
             subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-loglevel", "error", "-i", str(path),
                             "-vf", "fps=30,scale=-2:720", "-an", str(clip)], check=True)
-            pipeline.video_to_motion(clip, out, use_sam=True)
+            pipeline.video_to_motion(clip, out, use_sam=True, in_place=in_place)
         return out
     return path
 

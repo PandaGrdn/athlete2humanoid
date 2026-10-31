@@ -22,6 +22,7 @@ Meta Global AI Developer Hackathon · track: *Push the Frontier* (robotics). Sub
 
 | Doc | One line |
 |---|---|
+| [`REAL_ATHLETES.md`](docs/REAL_ATHLETES.md) | Free-licence stock clips (two jogs, a boxer, a kick) through the pipeline, and a run-in-place mode (0.3–0.5 cm/s foot slip); no tracker passes its spec yet, the jogs shuffle. |
 | [`FRONTIER_ADAPTATION.md`](docs/FRONTIER_ADAPTATION.md) | Minutes from a new clip to a robust policy, from scratch, a specialist and the generalist: 18 min for discus; punches and jumping jacks not reached. |
 | [`FRONTIER_TRAVEL.md`](docs/FRONTIER_TRAVEL.md) | Why tracking policies stayed in place on travelling moves, and the reward and termination changes that make the shot put glide (0–8% → 100%). |
 | [`FRONTIER_GENERALIST.md`](docs/FRONTIER_GENERALIST.md) | One tracker on 5 → 328 motions: zero-shot falls halve, zero-shot success stays at ≤7%. |

@@ -97,7 +97,11 @@ def main(a):
     out.mkdir(parents=True, exist_ok=True)
     py = Path(os.environ.get("A2H_MJLAB_PYTHON", "/content/mjlab_env/bin/python"))
     env = dict(os.environ, MUJOCO_GL=os.environ.get("MUJOCO_GL", "egl"), WANDB_MODE="disabled")
-    csv, fps = build(clip, out, py, env, a.seed)
+    if a.reuse_build and (out / "variants" / "variants.json").exists() and (out / "motion_variants.npz").exists():
+        csv, fps = out / "variants" / ORIGINAL / "motion.csv", float(json.loads((clip / "meta.json").read_text())["fps"])
+        log(f"reusing the variants already built in {out}")
+    else:
+        csv, fps = build(clip, out, py, env, a.seed)
     if a.build_only:
         return
     procs = {}
@@ -154,4 +158,6 @@ if __name__ == "__main__":
     ap.add_argument("--num-envs", type=int, default=4096)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--build-only", action="store_true", help="make the variants and motion files, train nothing")
+    ap.add_argument("--reuse-build", action="store_true", help="--out already has the variants and motion files (an "
+                    "interrupted run's): train on them instead of building them again")
     main(ap.parse_args())
