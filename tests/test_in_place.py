@@ -108,6 +108,30 @@ class InPlaceMotion(unittest.TestCase):
         a, b = retarget._runs(st)[1]
         self.assertGreater(np.linalg.norm(left[b - 1, :2] - left[a, :2]), 0.1)  # carried back by the drift
 
+    def test_soft_stays_within_its_bound(self):
+        m = self.motion("soft")
+        hip = m["joints"]["hip_mid"]
+        self.assertLessEqual(np.linalg.norm(hip[:, :2] - hip[0, :2], axis=-1).max(), 2 * retarget.IN_PLACE_SOFT_M + 1e-6)
+        for f, s in enumerate(("left", "right")):
+            feet = m["joints"][f"{s}_ankle"]
+            for a, b in retarget._runs(m["stance"][:, f]):
+                np.testing.assert_allclose(feet[a:b, :2] - feet[a, :2], 0, atol=1e-9)
+
+    def test_dolly_shot_travel_is_restored(self):
+        # A camera that ran alongside: the hips stay put in the image and the planted feet slide back under them.
+        P = self.P.copy()
+        P[..., 0] -= (P[:, [23, 24], 0].mean(1))[:, None]
+        travel = retarget.proportional_motion(self.P, self.rt, FPS)
+        m = retarget.proportional_motion(P, self.rt, FPS, in_place="world")
+        self.assertGreater(m["in_place"]["travel_restored_m"], 0.8 * m["in_place"]["travel_removed_m"])
+        np.testing.assert_allclose(m["stance"].mean(0), travel["stance"].mean(0), atol=0.06)  # its contacts are found
+        _, added = retarget.restore_travel(*self._root_ankles(self.P), FPS)
+        self.assertIsNone(added)  # a clip that already travels gets nothing added
+
+    def _root_ankles(self, P):
+        root = P[:, [23, 24]].mean(1)
+        return root, P[:, [27, 28]] - root[:, None]
+
     def test_rejects_unknown_method(self):
         with self.assertRaises(ValueError):
             self.motion("treadmill")
