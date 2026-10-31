@@ -203,6 +203,9 @@ def assemble(a):
         spec = json.loads((run / "task_spec.json").read_text())
         metrics = json.loads((run / "policy_tracking_var" / "policy_metrics.json").read_text())
         ev = run_eval(spec, metrics, robust)
+        if not (ev["tracking_var"]["task_success"] or a.all):
+            print(f"{name}: clean success {ev['tracking_var']['task_success_rate']:.0%}: not a demo run (--all to assemble anyway)")
+            continue
 
         var = outputs / f"remote_variants_{TAG}_{short}"  # build_variants_view.py's trained variant set
         shutil.copytree(run, var, dirs_exist_ok=True)
@@ -211,8 +214,9 @@ def assemble(a):
         dst = outputs / f"remote_latent_{TAG}_{short}"
         (dst / "policy_tracking_var").mkdir(parents=True, exist_ok=True)
         shutil.copytree(run / "clips", dst / "clips", dirs_exist_ok=True)
-        for f in ("task_spec.json", "importance.json"):
-            shutil.copy2(run / f, dst / f)
+        shutil.copy2(run / "importance.json", dst / "importance.json")
+        # the run's spec is its original variant's (named o_t1_a1); the site and build_variants_view look for the clip
+        (dst / "task_spec.json").write_text(json.dumps({**spec, "name": name}, indent=1))
         for f in run.joinpath("policy_tracking_var").iterdir():
             if f.suffix in (".mp4", ".json", ".npy", ".npz", ".pt") or f.name == "train.log":
                 shutil.copy2(f, dst / "policy_tracking_var" / f.name)
@@ -250,5 +254,6 @@ if __name__ == "__main__":
     p = sub.add_parser("assemble")
     p.add_argument("results", help="remote_run.py athletes' folder")
     p.add_argument("--iters", type=int)
+    p.add_argument("--all", action="store_true", help="also the clips whose policy doesn't complete its clip (to inspect)")
     a = ap.parse_args()
     {"inputs": inputs, "reretarget": reretarget, "audit": audit, "assemble": assemble, "showcase": showcase}[a.cmd](a)

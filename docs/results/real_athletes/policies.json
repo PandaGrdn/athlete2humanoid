@@ -1,5 +1,5 @@
 {
- "note": "Training of the real-athlete trackers (docs/REAL_ATHLETES.md). GPU: Modal L40S, 4096 envs, warm start the squat-jump variants tracker; the container was stopped by the workspace spend limit. CPU: this Mac, 512 envs, continued from the GPU iteration-250 checkpoint; the processes ended at CPU iteration 567. Evaluations: experiments/robustness_eval.py on CPU (mjlab/Warp), no V-JEPA, 32 rollouts per condition.",
+ "note": "Training of the real-athlete trackers (docs/REAL_ATHLETES.md). GPU: Modal L40S, 4096 envs, warm start the squat-jump variants tracker; the container was stopped by the workspace spend limit. CPU: this Mac, 512 envs, continued from the GPU iteration-250 checkpoint; the processes ended at CPU iteration 567. Evaluations: experiments/robustness_eval.py on CPU (mjlab/Warp), no V-JEPA, 32 rollouts per condition. Final: Colab (one L4, job athletes_ra5), 750 more GPU iterations from the CPU iteration-500 checkpoint (so 250 GPU + 250 CPU at 512 envs + 750 GPU), then robustness_eval on the GPU, 64 rollouts per condition.",
  "gpu_training": {
   "jog_lakeside": {
    "last_iteration": 448,
@@ -374,6 +374,239 @@
     "fall_rate": 0.0,
     "torso_err_m": 0.249,
     "joint_err_rad": 0.182
+   }
+  }
+ },
+ "colab_training": {
+  "jog_lakeside": {
+   "last_iteration": 749,
+   "mean_episode_length": 499.6
+  },
+  "jog_bridge": {
+   "last_iteration": 749,
+   "mean_episode_length": 498.42
+  },
+  "shadow_boxing": {
+   "last_iteration": 749,
+   "mean_episode_length": 479.65
+  }
+ },
+ "eval_final": {
+  "jog_lakeside": {
+   "clean:nominal": {
+    "task_success": 0.0,
+    "stages_frac": 0.167,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.053,
+    "joint_err_rad": 0.145
+   },
+   "push:1 m/s": {
+    "task_success": 0.0,
+    "stages_frac": 0.167,
+    "fall_rate": 0.016,
+    "torso_err_m": 0.255,
+    "joint_err_rad": 0.153
+   },
+   "transfer:m_t0.6_a0.8": {
+    "task_success": 0.0,
+    "stages_frac": 0.0,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.052,
+    "joint_err_rad": 0.141
+   },
+   "transfer:m_t1.6_a1.2": {
+    "task_success": 1.0,
+    "stages_frac": 1.0,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.14,
+    "joint_err_rad": 0.155
+   },
+   "transfer:o_t0.5_a1": {
+    "task_success": 0.0,
+    "stages_frac": 0.077,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.07,
+    "joint_err_rad": 0.15
+   },
+   "transfer:o_t1_a0.7": {
+    "task_success": 0.0,
+    "stages_frac": 0.0,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.06,
+    "joint_err_rad": 0.139
+   },
+   "transfer:o_t1_a1.25": {
+    "task_success": 0.0,
+    "stages_frac": 0.117,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.078,
+    "joint_err_rad": 0.156
+   },
+   "transfer:o_t1_a1_w0.5": {
+    "task_success": 0.0,
+    "stages_frac": 0.0,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.054,
+    "joint_err_rad": 0.144
+   },
+   "transfer:o_t2_a1": {
+    "task_success": 1.0,
+    "stages_frac": 1.0,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.105,
+    "joint_err_rad": 0.157
+   },
+   "held_out_mean": {
+    "task_success": 0.286,
+    "fall_rate": 0.0
+   },
+   "policy_metrics": {
+    "steps": 298,
+    "fps": 50,
+    "falls": 0,
+    "mean_joint_error_rad": 0.14863389641696576,
+    "mean_torso_position_error_m": 0.11519111044524821,
+    "max_torso_position_error_m": 0.22013415396213531
+   }
+  },
+  "jog_bridge": {
+   "clean:nominal": {
+    "task_success": 0.0,
+    "stages_frac": 0.182,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.035,
+    "joint_err_rad": 0.116
+   },
+   "push:1 m/s": {
+    "task_success": 0.0,
+    "stages_frac": 0.188,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.287,
+    "joint_err_rad": 0.128
+   },
+   "transfer:m_t0.6_a0.8": {
+    "task_success": 0.0,
+    "stages_frac": 0.1,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.023,
+    "joint_err_rad": 0.103
+   },
+   "transfer:o_t0.5_a1": {
+    "task_success": 0.0,
+    "stages_frac": 0.1,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.044,
+    "joint_err_rad": 0.119
+   },
+   "transfer:o_t1_a0.7": {
+    "task_success": 0.0,
+    "stages_frac": 0.1,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.035,
+    "joint_err_rad": 0.115
+   },
+   "transfer:o_t1_a1.25": {
+    "task_success": 0.0,
+    "stages_frac": 0.083,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.05,
+    "joint_err_rad": 0.123
+   },
+   "transfer:o_t1_a1_w0.5": {
+    "task_success": 0.0,
+    "stages_frac": 0.083,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.04,
+    "joint_err_rad": 0.114
+   },
+   "held_out_mean": {
+    "task_success": 0.0,
+    "fall_rate": 0.0
+   },
+   "policy_metrics": {
+    "steps": 373,
+    "fps": 50,
+    "falls": 0,
+    "mean_joint_error_rad": 0.11455370926225793,
+    "mean_torso_position_error_m": 0.026978791294754896,
+    "max_torso_position_error_m": 0.07235227525234222
+   }
+  },
+  "shadow_boxing": {
+   "clean:nominal": {
+    "task_success": 0.0,
+    "stages_frac": 0.206,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.072,
+    "joint_err_rad": 0.146
+   },
+   "push:1 m/s": {
+    "task_success": 0.016,
+    "stages_frac": 0.262,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.246,
+    "joint_err_rad": 0.155
+   },
+   "transfer:m_t0.6_a0.8": {
+    "task_success": 0.0,
+    "stages_frac": 0.056,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.144,
+    "joint_err_rad": 0.127
+   },
+   "transfer:m_t1.6_a1.2": {
+    "task_success": 0.0,
+    "stages_frac": 0.0,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.171,
+    "joint_err_rad": 0.157
+   },
+   "transfer:o_t0.5_a1": {
+    "task_success": 0.0,
+    "stages_frac": 0.0,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.137,
+    "joint_err_rad": 0.148
+   },
+   "transfer:o_t1_a0.7": {
+    "task_success": 0.25,
+    "stages_frac": 0.534,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.059,
+    "joint_err_rad": 0.13
+   },
+   "transfer:o_t1_a1.25": {
+    "task_success": 0.0,
+    "stages_frac": 0.0,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.094,
+    "joint_err_rad": 0.162
+   },
+   "transfer:o_t1_a1_w0.5": {
+    "task_success": 0.0,
+    "stages_frac": 0.0,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.077,
+    "joint_err_rad": 0.145
+   },
+   "transfer:o_t2_a1": {
+    "task_success": 0.0,
+    "stages_frac": 0.0,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.077,
+    "joint_err_rad": 0.151
+   },
+   "held_out_mean": {
+    "task_success": 0.036,
+    "fall_rate": 0.0
+   },
+   "policy_metrics": {
+    "steps": 274,
+    "fps": 50,
+    "falls": 0,
+    "mean_joint_error_rad": 0.14176025479542512,
+    "mean_torso_position_error_m": 0.08777485676084298,
+    "max_torso_position_error_m": 0.2084338665008545
    }
   }
  }
