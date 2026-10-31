@@ -7,7 +7,7 @@
    "method": "world",
    "travel_removed_m": 5.776,
    "mean_speed_m_s": 0.77,
-   "stride_s": 1.333,
+   "stride_s": 1.35,
    "root_travel_left_m": 0.0,
    "travel_restore": {
     "before_m": 6.596,
@@ -92,33 +92,33 @@
   "retarget": {
    "tracking_cm": {
     "pelvis": {
-     "mean": 0.44,
-     "p95": 0.99,
-     "max": 1.31,
+     "mean": 0.73,
+     "p95": 1.65,
+     "max": 2.12,
      "frames_gt3cm": 0.0
     },
     "left_knee": {
-     "mean": 4.3,
-     "p95": 6.76,
-     "max": 7.33,
-     "frames_gt3cm": 0.729
+     "mean": 3.93,
+     "p95": 8.81,
+     "max": 9.71,
+     "frames_gt3cm": 0.582
     },
     "right_knee": {
-     "mean": 4.36,
-     "p95": 8.12,
-     "max": 12.36,
-     "frames_gt3cm": 0.729
+     "mean": 4.49,
+     "p95": 9.53,
+     "max": 14.15,
+     "frames_gt3cm": 0.698
     },
     "left_foot": {
      "mean": 0.11,
-     "p95": 0.23,
-     "max": 0.26,
+     "p95": 0.26,
+     "max": 0.4,
      "frames_gt3cm": 0.0
     },
     "right_foot": {
-     "mean": 0.1,
-     "p95": 0.22,
-     "max": 0.29,
+     "mean": 0.11,
+     "p95": 0.28,
+     "max": 0.4,
      "frames_gt3cm": 0.0
     },
     "left_elbow": {
@@ -147,54 +147,52 @@
     }
    },
    "joint_speed": {
-    "max_rad_s": 10.3,
-    "p99_rad_s": 4.7,
+    "max_rad_s": 10.4,
+    "p99_rad_s": 4.5,
     "frames_any_joint_at_cap": 0,
     "hand_err_at_cap_cm_max": 0.0,
     "cap_joints": {}
    },
    "limits": {
-    "frames_any": 0.16,
+    "frames_any": 0.44,
     "ankle_roll": 0.0,
     "worst": {
-     "right_ankle_pitch_joint": 0.107,
-     "left_ankle_pitch_joint": 0.053
+     "left_ankle_pitch_joint": 0.249,
+     "right_ankle_pitch_joint": 0.191
     }
    },
    "feet": {
     "penetration_max_cm": 0.22,
     "penetration_frames_gt1cm": 0.0,
-    "stance_float_mean_cm": 0.13,
-    "stance_float_p95_cm": 0.2,
-    "lowest_sole_gt2cm_frac": 0.0,
-    "slide_cm_per_s": 3.18
+    "stance_float_mean_cm": 0.08,
+    "stance_float_p95_cm": 0.19,
+    "lowest_sole_gt2cm_frac": 0.022,
+    "slide_cm_per_s": 0.24
    },
    "angle_err_deg": {
     "mean": {
-     "knee": 11.0,
-     "hip": 13.3,
+     "knee": 12.6,
+     "hip": 10.4,
      "elbow": 0.8,
-     "shoulder": 1.2
+     "shoulder": 1.0
     },
     "max": {
-     "knee": 30.8,
-     "hip": 33.8,
+     "knee": 36.3,
+     "hip": 35.5,
      "elbow": 1.1,
-     "shoulder": 5.3
+     "shoulder": 3.6
     }
    }
   },
   "spec": {
-   "summary": "10 key moments: ready -> right hand back, left hand up -> left foot up, right hand forward -> right foot up, left foot down -> right foot down, left foot up -> right foot up, left foot down -> right foot down, left foot up -> right foot up, left foot down -> right foot down, left foot up -> left foot forward, left foot down -> right foot forward, right hand back (finish)",
-   "self_check": "11/11",
+   "summary": "15 key moments: ready -> right foot up, left foot down -> right foot forward, right foot down -> left foot up, right hand forward -> left foot down, right foot up -> right foot down, right foot forward -> right hand forward, left foot forward -> right foot up, left foot down -> right foot down, left foot up -> left foot forward, right hand forward -> right foot up, right foot back -> right foot down, left foot up -> left foot forward, left foot down -> left foot back, left foot up -> left foot forward, left foot down -> right foot forward, right hand back (finish)",
+   "self_check": "16/16",
    "warnings": []
   },
   "variants": {
-   "kept": 35,
+   "kept": 36,
    "total": 36,
-   "dropped_for": [
-    "self-check"
-   ]
+   "dropped_for": []
   }
  },
  "jog_lakeside": {
@@ -290,33 +288,33 @@
   "retarget": {
    "tracking_cm": {
     "pelvis": {
-     "mean": 2.4,
-     "p95": 4.16,
-     "max": 5.77,
-     "frames_gt3cm": 0.356
+     "mean": 1.8,
+     "p95": 3.08,
+     "max": 3.89,
+     "frames_gt3cm": 0.072
     },
     "left_knee": {
-     "mean": 4.64,
-     "p95": 7.75,
-     "max": 10.26,
-     "frames_gt3cm": 0.867
+     "mean": 3.9,
+     "p95": 7.06,
+     "max": 9.14,
+     "frames_gt3cm": 0.65
     },
     "right_knee": {
-     "mean": 6.12,
-     "p95": 9.44,
-     "max": 12.32,
-     "frames_gt3cm": 1.0
+     "mean": 4.91,
+     "p95": 7.49,
+     "max": 8.37,
+     "frames_gt3cm": 0.867
     },
     "left_foot": {
-     "mean": 0.23,
-     "p95": 0.68,
-     "max": 0.91,
+     "mean": 0.2,
+     "p95": 0.67,
+     "max": 0.9,
      "frames_gt3cm": 0.0
     },
     "right_foot": {
-     "mean": 0.4,
-     "p95": 0.88,
-     "max": 1.16,
+     "mean": 0.28,
+     "p95": 0.78,
+     "max": 0.85,
      "frames_gt3cm": 0.0
     },
     "left_elbow": {
@@ -345,8 +343,8 @@
     }
    },
    "joint_speed": {
-    "max_rad_s": 12.7,
-    "p99_rad_s": 7.2,
+    "max_rad_s": 11.7,
+    "p99_rad_s": 7.5,
     "frames_any_joint_at_cap": 0,
     "hand_err_at_cap_cm_max": 0.0,
     "cap_joints": {}
@@ -357,31 +355,31 @@
     "worst": {}
    },
    "feet": {
-    "penetration_max_cm": 0.01,
+    "penetration_max_cm": 0.0,
     "penetration_frames_gt1cm": 0.0,
-    "stance_float_mean_cm": null,
-    "stance_float_p95_cm": null,
-    "lowest_sole_gt2cm_frac": 0.05,
-    "slide_cm_per_s": 0.0
+    "stance_float_mean_cm": 0.32,
+    "stance_float_p95_cm": 0.77,
+    "lowest_sole_gt2cm_frac": 0.25,
+    "slide_cm_per_s": 0.36
    },
    "angle_err_deg": {
     "mean": {
-     "knee": 19.9,
-     "hip": 12.9,
+     "knee": 16.1,
+     "hip": 11.2,
      "elbow": 1.0,
      "shoulder": 1.3
     },
     "max": {
-     "knee": 52.1,
-     "hip": 33.0,
+     "knee": 39.3,
+     "hip": 30.7,
      "elbow": 1.3,
-     "shoulder": 4.8
+     "shoulder": 4.1
     }
    }
   },
   "spec": {
-   "summary": "11 key moments: ready -> left foot forward, left foot down -> left foot up, right foot forward -> left foot down, right foot up -> left foot up, right foot down -> right foot up, left foot down -> left foot back, left foot up -> left foot forward, left foot down -> left foot up, right foot forward -> right foot back, left foot down -> left foot up, right foot down -> left foot down, left foot forward (finish)",
-   "self_check": "12/12",
+   "summary": "13 key moments: ready -> left foot forward, right foot up -> right foot forward, left foot up -> right foot back, left foot down -> left foot back, right foot forward -> left foot forward, right foot back -> right foot forward, left foot back -> right foot back, left foot forward -> left foot back, right foot forward -> left foot forward, right foot back -> right foot forward, left foot back -> right foot back, left foot forward -> left foot back, right foot forward -> left foot forward, left foot down (finish)",
+   "self_check": "14/14",
    "warnings": []
   },
   "variants": {

@@ -2,7 +2,7 @@
  "sources": {
   "processing": "outputs/remote_pro_ra/job.log",
   "kick": "outputs/remote_athletes_ra3_partial/taekwondo_kick/robust_cpu.log, policy_tracking_var/train.log",
-  "jog_feet": "reference: outputs/remote_pro_ra/process/clips/<clip>/qpos.npy; policy: outputs/remote_athletes_ra5/<clip>/robust/rollouts.npz (clean, the rollouts it saves)",
+  "jog_feet": "reference: the one it trained on, outputs/remote_athletes_ra5/<clip>/run/clips/*/qpos.npy; policy: outputs/remote_athletes_ra5/<clip>/robust/rollouts.npz (clean, the rollouts it saves)",
   "warm_start_squat_jump": "outputs/remote_robust_s3_sj/robust.json summary.tracking_var"
  },
  "processing": {

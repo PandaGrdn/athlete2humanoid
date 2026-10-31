@@ -228,7 +228,7 @@ def facts(a):
 
     feet = {}
     for c in ("jog_lakeside", "jog_bridge"):
-        ref = T.body_positions_from_qpos(np.load(out_d / "remote_pro_ra" / "process" / "clips" / c / "qpos.npy"))
+        ref = T.body_positions_from_qpos(np.load(next((out_d / "remote_athletes_ra5" / c / "run" / "clips").glob("*/qpos.npy"))))
         z = np.load(out_d / "remote_athletes_ra5" / c / "robust" / "rollouts.npz")
         pol = np.concatenate([z[k][..., [3, 6], 2] for k in z.files if k.startswith("0/tracking_var/") and k.endswith("/body")])
         spec = json.loads((out_d / "remote_athletes_ra5" / c / "run" / "task_spec.json").read_text())
@@ -244,7 +244,7 @@ def facts(a):
                    "second_key_moment": {"name": st["name"], "feet_down": st["feet_down"], "hold_s": st.get("hold_s"),
                                          "foot_height_tol_m": [round(st["tol"][names.index(f"{s} foot height")], 4) for s in ("left", "right")]}}
     res["jog_feet"] = feet
-    res["sources"]["jog_feet"] = "reference: outputs/remote_pro_ra/process/clips/<clip>/qpos.npy; policy: outputs/remote_athletes_ra5/<clip>/robust/rollouts.npz (clean, the rollouts it saves)"
+    res["sources"]["jog_feet"] = "reference: the one it trained on, outputs/remote_athletes_ra5/<clip>/run/clips/*/qpos.npy; policy: outputs/remote_athletes_ra5/<clip>/robust/rollouts.npz (clean, the rollouts it saves)"
 
     r = json.loads((out_d / "remote_athletes_ra5" / "shadow_boxing" / "robust" / "robust.json").read_text())
     res["boxing_clean_tracking_rms_m"] = r["conditions"][0]["policies"]["tracking_var"]["tracking_rms_m"]

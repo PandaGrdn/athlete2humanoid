@@ -98,7 +98,7 @@ def audit(P, fps, stored=None, save_qpos=None, in_place=None):
     at_cap = speed >= retarget.MAX_JOINT_SPEED * 0.98
     hit = (q < lo + np.radians(1)) | (q > hi - np.radians(1))
     sole = sole_heights(model, qpos)
-    stance = retarget.proportional_motion(P, rt, fps)["stance"]
+    stance = retarget.proportional_motion(P, rt, fps, in_place=in_place)["stance"] if in_place else retarget.proportional_motion(P, rt, fps)["stance"]
     feet = np.stack([rt.skeleton(qpos)[f"{s}_ankle"] for s in ("left", "right")], 1)
     step = np.linalg.norm(np.diff(feet[..., :2], axis=0), axis=-1)
     both = stance[1:] & stance[:-1]
