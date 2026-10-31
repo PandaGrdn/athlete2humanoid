@@ -11,7 +11,7 @@ set -u
 ITERS=$1; shift
 FROM=""
 if [ "${1:-}" = "--from" ]; then FROM=$2; shift 2; fi
-D=$A2H_JOB_DATA
+D=${A2H_JOB_DATA:-/content/a2h}  # Colab sets none
 IN=$D/inputs
 OUT=$D/outputs/athletes
 mkdir -p "$OUT"
@@ -39,7 +39,7 @@ for c in $CLIPS; do
     --push 1.0 --init --dynamics 0 --speed --tempo --phase-push --starts --no-noref --no-vjepa \
     --transfer "$OUT/$c/run"/held_out/*.npz || echo "$c: robustness_eval failed"
   # the 3D showcase's recorded pushes (scripts/build_showcase.py), so the site's build view plays this policy
-  $A2H_MJLAB_PYTHON experiments/push_showcase.py --runs "$OUT/$c/run" --policy tracking_var --out "$OUT/$c/pushes" \
+  ${A2H_MJLAB_PYTHON:-/content/mjlab_env/bin/python} experiments/push_showcase.py --runs "$OUT/$c/run" --policy tracking_var --out "$OUT/$c/pushes" \
     || echo "$c: push_showcase failed"
 done
 
