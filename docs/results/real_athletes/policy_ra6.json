@@ -1,0 +1,129 @@
+{
+ "job": "remote_athletes_ra6",
+ "status": {
+  "state": "done",
+  "cmd": [
+   "bash",
+   "-c",
+   "cd /content/athlete2humanoid && bash scripts/setup_colab.sh --with-main && bash scripts/real_athletes.sh 1000 --from /content/a2h/inputs/from --reward-config docs/real_athletes/reward_feet_height.json jog_lakeside"
+  ],
+  "started": "2026-10-31T18:34:37",
+  "returncode": 0,
+  "finished": "2026-10-31T19:35:55"
+ },
+ "jog_lakeside": {
+  "training": {
+   "last_iteration": 999,
+   "mean_episode_length": 497.36,
+   "iteration_time_s": 3.14,
+   "time_elapsed": "0:53:42",
+   "episode_rewards": {
+    "action_rate_l2": -0.5015,
+    "motion_global_root_pos": 0.3169,
+    "motion_global_root_ori": 0.4652,
+    "motion_body_ang_vel": 0.6487,
+    "motion_body_pos": 0.9456,
+    "self_collisions": -0.0252,
+    "motion_body_lin_vel": 0.7275,
+    "joint_limit": -0.004,
+    "motion_body_ori": 0.733,
+    "feet_height": 1.0011
+   },
+   "reward_config": null
+  },
+  "eval": {
+   "clean:nominal": {
+    "task_success": 1.0,
+    "stages_frac": 0.648,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.086,
+    "joint_err_rad": 0.124
+   },
+   "push:1 m/s": {
+    "task_success": 0.984,
+    "stages_frac": 0.637,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.302,
+    "joint_err_rad": 0.13
+   },
+   "transfer:m_t0.6_a0.8": {
+    "task_success": 1.0,
+    "stages_frac": 0.497,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.119,
+    "joint_err_rad": 0.125
+   },
+   "transfer:m_t1.6_a1.2": {
+    "task_success": 1.0,
+    "stages_frac": 1.0,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.291,
+    "joint_err_rad": 0.137
+   },
+   "transfer:o_t0.5_a1": {
+    "task_success": 1.0,
+    "stages_frac": 0.534,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.116,
+    "joint_err_rad": 0.124
+   },
+   "transfer:o_t1_a0.7": {
+    "task_success": 1.0,
+    "stages_frac": 0.6,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.093,
+    "joint_err_rad": 0.118
+   },
+   "transfer:o_t1_a1.25": {
+    "task_success": 1.0,
+    "stages_frac": 0.594,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.086,
+    "joint_err_rad": 0.134
+   },
+   "transfer:o_t1_a1_w0.5": {
+    "task_success": 1.0,
+    "stages_frac": 0.611,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.093,
+    "joint_err_rad": 0.124
+   },
+   "transfer:o_t2_a1": {
+    "task_success": 1.0,
+    "stages_frac": 1.0,
+    "fall_rate": 0.0,
+    "torso_err_m": 0.246,
+    "joint_err_rad": 0.143
+   }
+  },
+  "summary": {
+   "clean": {
+    "fall_rate": 0.0,
+    "torso_err_m": 0.08586108684539795,
+    "vjepa_aligned": null,
+    "task_success": 1.0,
+    "stages_frac": 0.6484375,
+    "dtw_joint_rad": 0.12319526076316833,
+    "vjepa_retained": null
+   },
+   "push": {
+    "fall_rate": 0.0,
+    "torso_err_m": 0.3015899956226349,
+    "vjepa_aligned": null,
+    "task_success": 0.984375,
+    "stages_frac": 0.6372767686843872,
+    "dtw_joint_rad": 0.12937282025814056,
+    "vjepa_retained": null
+   },
+   "transfer": {
+    "fall_rate": 0.0,
+    "torso_err_m": 0.14915514843804495,
+    "vjepa_aligned": null,
+    "task_success": 1.0,
+    "stages_frac": 0.6907680886132377,
+    "dtw_joint_rad": 0.12754421681165695,
+    "vjepa_retained": null
+   }
+  }
+ }
+}

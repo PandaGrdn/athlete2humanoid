@@ -434,10 +434,11 @@ def feet(a):
                 ax.set_ylabel("ankle height (cm)")
             if r == len(a.clips) - 1:
                 ax.set_xlabel("time (s)")
-    axes[0, 0].legend(frameon=False, fontsize=8, loc="upper left")
     fig.suptitle(a.title or "Ankle height: the video's pose and the G1 reference lift the feet; the policy does not",
                  fontsize=11, x=0.01, ha="left")
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0, 1, 1 - 0.55 / fig.get_figheight()))
+    fig.legend(*axes[0, 0].get_legend_handles_labels(), frameon=False, fontsize=9, ncol=3, loc="upper left",
+               bbox_to_anchor=(0.01, 1 - 0.3 / fig.get_figheight()))
     img = ROOT / "docs" / "img" / f"real_athletes_foot_lift{a.tag}.png"
     fig.savefig(img, dpi=130)
     out = ROOT / "docs" / "results" / "real_athletes" / f"foot_lift{a.tag}.json"
@@ -445,6 +446,38 @@ def feet(a):
     print("->", out, img)
     for c in a.clips:
         print(c, json.dumps({k: res[c][k] for k in ("human", "reference", "in_place_now", "travelling", "policy")}))
+
+
+def summarize(a):
+    """An athletes job's results -> one json (docs/results/real_athletes/policy_<tag>.json): per clip, the training's
+    last logged iteration, episode length, iteration time and reward terms (its train.log), and robustness_eval's
+    numbers per condition (robust.json), in policies.json's format."""
+    run = Path(a.results)
+    res = {"job": run.name, "status": json.loads((run / "status.json").read_text()) if (run / "status.json").exists() else None}
+    for c in a.clips:
+        t = (run / c / "run" / "policy_tracking_var" / "train.log").read_text(errors="ignore")
+        last = t[t.rfind("Learning iteration"):]
+        num = lambda pat: float(re.findall(pat, last)[-1]) if re.findall(pat, last) else None
+        r = json.loads((run / c / "robust" / "robust.json").read_text())
+        ev = {}
+        for cond in r["conditions"]:
+            name = f"{cond['suite']}:{cond['level']}"
+            m = cond["policies"]["tracking_var"]
+            ev[name] = {k: round(m[k], 3) if isinstance(m.get(k), float) else m.get(k)
+                        for k in ("task_success", "stages_frac", "fall_rate", "torso_err_m", "joint_err_rad")}
+        res[c] = {"training": {"last_iteration": int(re.findall(r"Learning iteration (\d+)/", t)[-1]),
+                               "mean_episode_length": num(r"Mean episode length: ([\d.]+)"),
+                               "iteration_time_s": num(r"Iteration time: ([\d.]+)s"),
+                               "time_elapsed": (re.findall(r"Time elapsed: ([\d:]+)", last) or [None])[-1],
+                               "episode_rewards": {k: float(v) for k, v in re.findall(r"Episode_Reward/(\w+): (-?[\d.]+)", last)},
+                               "reward_config": json.loads((run / c / "run" / "policy_tracking_var" / "reward_config.json").read_text())
+                               if (run / c / "run" / "policy_tracking_var" / "reward_config.json").exists() else None},
+                  "eval": ev, "summary": r["summary"]["tracking_var"]}
+    out = ROOT / "docs" / "results" / "real_athletes" / f"policy{a.tag}.json"
+    out.write_text(json.dumps(res, indent=1))
+    print("->", out)
+    for c in a.clips:
+        print(c, json.dumps(res[c]["summary"]))
 
 
 if __name__ == "__main__":
@@ -463,6 +496,10 @@ if __name__ == "__main__":
     p.add_argument("clips", nargs="+")
     p.add_argument("--force", action="store_true", help="also a clip whose policy doesn't pass (to inspect; don't commit it)")
     sub.add_parser("facts")
+    p = sub.add_parser("summarize")
+    p.add_argument("results", help="remote_run.py athletes' folder")
+    p.add_argument("--clips", nargs="+", default=["jog_lakeside"])
+    p.add_argument("--tag", required=True, help="e.g. _ra6 -> docs/results/real_athletes/policy_ra6.json")
     p = sub.add_parser("feet")
     p.add_argument("--clips", nargs="+", default=["jog_lakeside", "jog_bridge"])
     p.add_argument("--policy-run", default="outputs/remote_athletes_ra5", help="an athletes job's folder (<clip>/robust)")
@@ -474,4 +511,4 @@ if __name__ == "__main__":
     p.add_argument("--iters", type=int, required=True, help="the policies' training iterations (for the run page)")
     p.add_argument("--all", action="store_true", help="also the clips whose policy doesn't complete its clip (to inspect)")
     a = ap.parse_args()
-    {"inputs": inputs, "reretarget": reretarget, "audit": audit, "assemble": assemble, "showcase": showcase, "facts": facts, "feet": feet}[a.cmd](a)
+    {"inputs": inputs, "reretarget": reretarget, "audit": audit, "assemble": assemble, "showcase": showcase, "facts": facts, "feet": feet, "summarize": summarize}[a.cmd](a)

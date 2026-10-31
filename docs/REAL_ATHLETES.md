@@ -49,7 +49,10 @@ Each clip was checked by eye on contact sheets for one person, full body, and no
 
 Processing ran on Modal (job `pro_ra`, an L40S, 12 minutes for all four): SAM 3.1, then SAM 3D Body, the camera
 intake, and the retarget. The two jogs then had their retargets redone locally with the final in-place steps
-(`experiments/real_athletes.py reretarget`).
+(`experiments/real_athletes.py reretarget`), last with the lift-off trim ("Where the foot lift goes"). The jog rows
+below are that retarget. Before the trim they were: knee / hip error 19.9 / 12.9° (lakeside) and 11.0 / 13.3° (bridge),
+11 and 10 key moments, and the bridge at its ankle-pitch limit in 16% of frames, keeping 35/36 variants. With the trim the
+bridge's ankle is at its pitch limit more often (where in the stride is not yet measured).
 
 Columns: coverage comes from `facts.json` "processing"; the rest from `audit.json`
 (`experiments/real_athletes.py audit`).
@@ -60,8 +63,8 @@ Columns: coverage comes from `facts.json` "processing"; the rest from `audit.jso
 
 | Clip | SAM 3.1 visible | SAM 3D Body pose | IK error, knees / feet / hands (cm) | Angle error, knee / hip (°) | Fastest joint (rad/s) | Limits | Spec: key moments, self-check | Variants kept |
 |---|---|---|---|---|---|---|---|---|
-| `jog_lakeside` (in place) | 100% | 100% | 4.6–6.1 / 0.2–0.4 / 0.1 | 19.9 / 12.9 | 12.7 | 0% | 11, 12/12 | 36/36 |
-| `jog_bridge` (in place) | 100% | 100% | 4.3–4.4 / 0.1 / 0.1 | 11.0 / 13.3 | 10.3 | 16% (ankle pitch) | 10, 11/11 | 35/36 |
+| `jog_lakeside` (in place) | 100% | 100% | 3.9–4.9 / 0.2–0.3 / 0.1 | 16.1 / 11.2 | 11.7 | 0% | 13, 14/14 | 36/36 |
+| `jog_bridge` (in place) | 100% | 100% | 3.9–4.5 / 0.1 / 0.1 | 12.6 / 10.4 | 10.4 | 44% (ankle pitch: 25% / 19% left / right) | 15, 16/16 | 36/36 |
 | `shadow_boxing` | 99% | 100% | 1.0–1.5 / 0.0–0.1 / 0.1 | 3.8 / 3.6 | 13.4 | 5% | 3, 5/5 | 36/36 |
 | `taekwondo_kick` | 100% | 100% | 2.0–5.4 / 0.3–1.2 / 0.1 | 12.0 / 9.0 | 20.0 (at the cap) | **67%** | 4, 6/6 | 24/36 |
 
@@ -82,7 +85,97 @@ Travelling, the same clips retarget at 1.1° and 1.6° of knee error.
   mjlab's end-effector height check: 47.8 `ee_body_pos` terminations per logging window, against 8.5 `anchor_pos`.
 - A lower kick, or a front kick (as on our own clip), is what this robot can be trained for.
 
-## Policies: they stay up but complete none of the clips
+## Where the foot lift goes
+
+The first trackers (job `athletes_ra5`) shuffle: they keep the feet down while their reference lifts them. Is the lift
+already missing in the pose, lost in the in-place retarget, or lost in training? `experiments/real_athletes.py feet`
+plots each ankle's height per frame for three traces: SAM 3D Body's pose on the G1's skeleton (before any contact is
+used), the in-place G1 reference the policy trained on (its qpos through forward kinematics), and the policy's two
+saved clean rollouts. Its numbers are in `foot_lift_ra5.json`.
+
+![Ankle height per frame on the two jogs: the video's pose (blue) and the G1 reference (orange) lift each foot 15–25 cm every stride; the ra5 policy (green) stays at 3.5–8 cm](img/real_athletes_foot_lift_ra5.png)
+
+A swing is a run of frames with the ankle more than 3 cm above that trace's own floor (its 5th percentile). Duration
+and peak are medians over the clip, left / right:
+
+| | Lakeside: swing (s) | Lakeside: peak (cm) | Bridge: swing (s) | Bridge: peak (cm) |
+|---|---|---|---|---|
+| Video pose (SAM 3D Body) | 0.57 / 0.53 | 22.6 / 20.8 | 0.90 / 0.87 | 23.1 / 23.2 |
+| Travelling retarget (no `--in-place`) | 0.50 / 0.57 | 21.6 / 22.1 | 0.83 / 0.58 | 24.5 / 20.8 |
+| In-place reference the ra5 policy trained on | 0.37 / 0.38 | 17.4 / 15.4 | 0.50 / 0.53 | 15.5 / 17.1 |
+| In-place reference with the lift-off trim (below) | 0.43 / 0.43 | 19.7 / 18.2 | 0.60 / 0.63 | 19.9 / 20.7 |
+| ra5 policy, clean | 0.12 / 0.16 (7 and 1 swings) | 4.4 / 4.8 | none / 0.18 (0 and 1 swings) | – / 6.8 |
+
+- **Most of the loss is in training.** The reference lifts each ankle to 15–25 cm every stride. The policy's ankles sit
+  at a median of 3.5–3.7 cm and rarely clear 3 cm above that.
+- **The in-place retarget also cut each swing short**, by 9–40%: 0.37–0.53 s and 15–17 cm, against 0.50–0.83 s and
+  21–25 cm travelling. The cause was contact detection. Once the travel is restored (step 2 of "Run in place"), a
+  planted foot stands still. `stance_mask`'s test (within 10 cm of the floor and slow) then also took in the first and
+  last ~0.1 s of each swing, and `plant_feet` held those frames on the floor. Stance went to 39–51% per foot, against
+  28–33% of frames with the pose's ankle within 3 cm of its floor.
+- **The fix** (`retarget.trim_lift_off`, in place only): a contact starts once the pose's ankle is within 3 cm of the
+  contact's low level (its lower quartile) and ends when it rises past it. The swings come back to 0.43–0.63 s and
+  18–21 cm, stance to 30–37%. Slip stays at 0.2–0.4 cm/s (`in_place_jogs.json`). Both specs still compile and their
+  references complete them: 14 key moments on the lakeside, 16 on the bridge.
+- **What the pose itself shows:** clean, regular lifts on both clips. On the lakeside clip the pose's lower ankle rarely
+  reaches its floor (troughs at 8–10 cm), so its absolute heights read high. The swing peaks are measured above each
+  trace's own floor.
+
+## Retrained with the foot lift: the lakeside jog passes (job `athletes_ra6`)
+
+**Result: the lakeside jog's tracker completes its spec in all 64 clean rollouts.** It also does so in 98% of rollouts
+under 1 m/s pushes, and in all 64 rollouts of each of its 7 held-out variants. None of the 576 rollouts fell
+(`policy_ra6.json`).
+
+Three things changed from the first trackers (ra5, below):
+1. **The reference:** the in-place retarget with the lift-off trim ("Where the foot lift goes"). Its swings are longer
+   and higher, and its spec has 13 key moments instead of 11.
+2. **The reward:** a foot-height term on the tracking task (`mjlab_tasks.FeetHeight`). On the frames where the
+   reference's foot is more than 3 cm off its floor, it pays exp(−err² / 0.1²) per foot for the ankle's height error
+   against the reference's. It is set by `docs/real_athletes/reward_feet_height.json` (weight 2, std 0.1 m), through
+   `variant_policy.py --reward-config`. The default (weight 0) leaves the task as mjlab's.
+   - Why it was needed: mjlab's tracking terms see the feet only inside `motion_body_pos`, an average over 14 bodies
+     at std 0.3 m. A swing foot left 15 cm low costs that term about 1/50.
+3. **The training:** one continuous run of 1,000 iterations at 4,096 envs, from the squat-jump warm start. The first
+   trackers had three restarts (below).
+
+These were not ablated, so the result can't be credited to any one of them. What the figure does show: the policy's
+feet now follow the reference's.
+
+![Lakeside jog after the retrain: the video's pose (blue), the trimmed in-place reference (orange) and the ra6 policy's two clean rollouts (green); the policy's ankles rise to 20–26 cm every stride with the reference](img/real_athletes_foot_lift_ra6.png)
+
+| Lakeside jog | Swings (left / right) | Swing (s) | Peak above floor (cm) | Highest (cm) | Median (cm) |
+|---|---|---|---|---|---|
+| Reference (trimmed, in place) | 8 / 8 | 0.43 / 0.43 | 19.7 / 18.2 | 26.2 / 24.7 | 7.6 / 8.9 |
+| ra6 policy, clean | 8 / 8 | 0.36 / 0.38 | 21.6 / 19.9 | 26.6 / 24.4 | 4.2 / 5.7 |
+| ra5 policy, clean (for comparison) | 7 / 1 | 0.12 / 0.16 | 4.4 / 4.8 | 17.6 / 8.6 | 3.5 / 3.7 |
+
+**Evaluation** (`experiments/robustness_eval.py` on the Colab GPU, 64 rollouts per condition, no V-JEPA):
+
+| | Success | Falls | Torso error (m) | Joint error (rad) |
+|---|---|---|---|---|
+| Clean | 100% | 0% | 0.086 | 0.124 |
+| 1 m/s pushes | 98% | 0% | 0.302 | 0.130 |
+| Held-out, each of the 7 (half and double speed, 0.7x and 1.25x amplitude, a time warp, two mirrored) | 100% | 0% | 0.086–0.291 | 0.118–0.143 |
+
+- A run passes when it completes every required key moment in order without falling (`skill/keypose.py`).
+  - The spec marks some moments optional, details of how this person ran, and those may be skipped. The reference
+    itself skips 6 of its 14 stages and passes.
+  - So the eval's "stages" share, which counts only completed ones, reads 65% on a passing run.
+- The torso error is higher than ra5's 0.053 m. Our reading, not tested: a policy that swings its legs moves its
+  trunk more than one that shuffled under a still trunk.
+- **Training:** one Colab T4, 3.1 s per iteration, 53.7 minutes. Episodes ran their full length (497 of 500 steps).
+  The foot-height term's episode reward rose from 0.01 to 1.00. The job ran 61 minutes in all with the eval and the
+  recorded pushes.
+  - Colab refused the A100 and the L4 ("no quota or entitlement"), so it ran on the T4.
+- **In the demo:** `outputs/remote_latent_ra_jog`, assembled by `experiments/real_athletes.py assemble` with its Pexels
+  credit. It also has its build-view variants (`build_variants_view.py`: 36/36, 4 ghosts), a showcase tab
+  (`web/public/showcase/jog-lakeside`, 3.0 MB) and `OWN` in `web/src/buildview/data.ts`.
+  - Its `side_by_side.mp4` was rebuilt for the trimmed reference: the video half from the processed clip's, the robot
+    half re-rendered.
+  - Not deployed.
+
+## The first trackers (job `athletes_ra5`): they stay up but complete none of the clips
 
 **Result: none of the three trackers passes its spec.**
 - After training, each stays up: no falls on the clean clip, 0–2% under 1 m/s pushes.
@@ -199,7 +292,7 @@ It is an option of the retarget (`retarget.proportional_motion(in_place=...)`). 
 records it, for example the bridge jog:
 
 ```json
-"in_place": {"method": "world", "travel_removed_m": 5.776, "mean_speed_m_s": 0.77, "stride_s": 1.333,
+"in_place": {"method": "world", "travel_removed_m": 5.776, "mean_speed_m_s": 0.77, "stride_s": 1.35,
              "root_travel_left_m": 0.0, "floor_drift_removed_m": 0.303,
              "travel_restore": {"before_m": 6.596, "after_m": 5.776, "added_xy_m": [0.663, -3.674]}}
 ```
@@ -218,13 +311,16 @@ records it, for example the bridge jog:
    - **Lakeside jog (a dolly shot):** its background is far away and barely moves, so the camera compensation
      recovers 0.23 m of travel. The pose reads as a treadmill run: in the travelling retarget the lowest sole moves at
      1.8 m/s while down, and the contact detector, which needs a planted foot to stand still, finds no contacts. The
-     restore brings the travel to 5.90 m and the contacts back (stance 39% / 41% per foot).
+     restore brings the travel to 5.90 m and the contacts back (stance 33% / 30% per foot, after step 3's trim).
    - **Bridge jog (a panning camera):** the root already travels 6.60 m, but partly sideways of where the feet go. The
      change, (+0.66, −3.67) m, mostly removes that drift, leaving 5.78 m. With the floor levelled, stance goes from
-     24% / 21% to 51% / 46%.
+     24% / 21% to 37% / 34% (after step 3's trim).
    - **Hurdles:** 3.21 → 2.24 m.
    - Only with `--in-place`: the default retarget is unchanged.
-3. **Find the contacts** on that travelling motion, where a planted foot stands still.
+3. **Find the contacts** on that travelling motion, where a planted foot stands still, then trim each one where the
+   pose's ankle is more than 3 cm above the contact's lower quartile (`trim_lift_off`, `IN_PLACE_LIFT_M`). Without the
+   trim, the still-standing feet passed the detector's 10 cm test into the start and end of each swing, and the swings
+   came out 9–40% short ("Where the foot lift goes").
 4. **Remove the travel**, by one of three methods:
 
 | Method | What it does | What it costs |
@@ -247,23 +343,23 @@ without them.
 | Clip | Method | Slip (cm/s) | Knee error (°) | Root's farthest from start (m) |
 |---|---|---|---|---|
 | Lakeside jog | travelling | n/a: no contacts found; the lowest sole moves at 179 while down | 1.1 | 0.40 |
-| | **world** | **0.5** | 19.9 | 0.02 |
-| | soft | 0.6 | 20.6 | 0.08 |
-| | stride | 103 | 1.7 | 0.10 |
+| | **world** | **0.4** | 16.1 | 0.01 |
+| | soft | 0.4 | 17.3 | 0.08 |
+| | stride | 103 | 1.0 | 0.09 |
 | Bridge jog | travelling | 0.1 | 1.6 | 6.62 |
-| | **world** | **0.3** | 11.0 | 0.02 |
-| | soft | 0.3 | 10.4 | 0.10 |
-| | stride | 78 | 1.7 | 0.13 |
+| | **world** | **0.2** | 12.6 | 0.01 |
+| | soft | 0.2 | 11.6 | 0.06 |
+| | stride | 77 | 0.9 | 0.07 |
 | Hurdles run-up (1900 film) | travelling | 0.0 | 1.3 | 3.17 |
-| | **world** | **0.5** | 21.1 | 0.08 |
-| | soft | 0.6 | 18.6 | 0.16 |
-| | stride | 85 | 2.9 | 0.28 |
+| | **world** | **0.5** | 22.5 | 0.06 |
+| | soft | 0.5 | 20.3 | 0.14 |
+| | stride | 80 | 1.2 | 0.23 |
 
 - **`world` keeps the feet planted.** `stride` slides them at about the speed it removed. So `world` is the default.
-- **The cost is the knee:** 11–21° of mean knee-angle error, against 1–2° travelling. A stance leg that stays under the
+- **The cost is the knee:** 13–23° of mean knee-angle error, against 1–2° travelling. A stance leg that stays under the
   hip instead of sweeping behind it is a run in place, not a treadmill run. The arms, trunk and rhythm follow the
   person; the legs are the G1 jogging on the spot.
-- **The soft hold doesn't buy the knee back.** It changes the knee error by −2.5 to +0.7° at the same slip, so `world`
+- **The soft hold doesn't buy the knee back.** It changes the knee error by −2.2 to +1.2° at the same slip, so `world`
   stays the default.
 
 ### Tests
