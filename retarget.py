@@ -901,16 +901,24 @@ def proportional_motion(P, rt: G1Retargeter, fps=30.0, in_place=None):
     return out
 
 
-def level_floor(root, ankles, fps=30.0, window_s=0.5, min_drift=0.03):
+def level_floor(root, ankles, fps=30.0, window_s=0.5, min_drift=0.03, flight=0.05, support=0.75):
     """A floor that rises or sinks through the clip (a camera pitch error turns travel into height): the lowest foot's
-    lowest point per window_s, fitted by a line in time; where that line moves more than min_drift m over the clip, the
-    root is lowered by it. -> (root, metres of drift removed, or None)."""
+    lowest point per window_s, fitted by a line in time, refitted without the windows more than `flight` m above it
+    (a jump or a hurdle clearance, not the floor). Applied only if at least `support` of the windows lie on the line
+    and it moves more than min_drift m over the clip: the root is lowered by it. -> (root, metres removed, or None)."""
     low = (ankles[..., 2] + root[:, None, 2]).min(1)
     w = max(2, int(round(window_s * fps)))
-    idx = [a + int(np.argmin(low[a:a + w])) for a in range(0, len(low) - w // 2, w)]
-    if len(idx) < 3:
+    idx = np.array([a + int(np.argmin(low[a:a + w])) for a in range(0, len(low) - w // 2, w)], float)
+    if len(idx) < 4:
         return root, None
-    slope, _ = np.polyfit(np.array(idx, float), low[idx], 1)
+    on = np.ones(len(idx), bool)
+    for _ in range(3):
+        slope, icpt = np.polyfit(idx[on], low[idx.astype(int)][on], 1)
+        on = low[idx.astype(int)] - (slope * idx + icpt) < flight
+        if on.sum() < 2:
+            return root, None
+    if on.mean() < support:
+        return root, None
     drift = slope * (np.arange(len(root)) - idx[0])
     if abs(drift[-1] - drift[0]) < min_drift:
         return root, None

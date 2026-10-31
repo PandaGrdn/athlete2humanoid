@@ -53,6 +53,7 @@ async function get(url: string, kind: "json" | "bin") {
 export type ClipEntry = {
   id: string; tab: string; title: [string, string]; kicker: string; lede: string; video: string; policy: string;
   facts: { v: string; l: string }[]; research?: string | null; fallback?: string; caveat?: string;
+  credit?: { text: string; url: string; licence: string }; // the source video's attribution (a clip someone else filmed)
 };
 export const loadIndex = () => get(`${BASE}showcase/index.json`, "json") as Promise<{ clips: ClipEntry[] }>;
 

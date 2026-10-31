@@ -128,6 +128,18 @@ class InPlaceMotion(unittest.TestCase):
         _, added = retarget.restore_travel(*self._root_ankles(self.P), FPS)
         self.assertIsNone(added)  # a clip that already travels gets nothing added
 
+    def test_level_floor(self):
+        root, ankles = self._root_ankles(self.P)
+        T = len(root)
+        tilted = root + np.c_[np.zeros((T, 2)), np.linspace(0, 0.3, T)]  # the floor rises 30 cm through the clip
+        levelled, drift = retarget.level_floor(tilted, ankles, FPS)
+        self.assertAlmostEqual(drift, 0.3, delta=0.03)
+        np.testing.assert_allclose(levelled[:, 2] - levelled[0, 2], root[:, 2] - root[0, 2], atol=0.03)
+        self.assertIsNone(retarget.level_floor(root, ankles, FPS)[1])  # a level floor is left alone
+        jump = root.copy()  # the clip ends in a long flight: the feet leave the floor, the floor doesn't rise
+        jump[-25:, 2] += 0.4 * np.sin(np.linspace(0, np.pi / 2, 25))
+        self.assertIsNone(retarget.level_floor(jump, ankles, FPS)[1])
+
     def _root_ankles(self, P):
         root = P[:, [23, 24]].mean(1)
         return root, P[:, [27, 28]] - root[:, None]
