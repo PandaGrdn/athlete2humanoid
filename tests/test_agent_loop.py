@@ -8,6 +8,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from muse import agent_loop as al
 from muse import client as mc
@@ -137,6 +138,25 @@ class LoopTest(unittest.TestCase):
         self.assertEqual(rep["tokens"]["responses"], 6)
         self.assertGreater(rep["tokens"]["usd"], 0)
         self.assertTrue((self.tmp / "agent_jacks" / "report.md").read_text().startswith("# Reward agent loop"))
+
+    def test_transient_api_errors_are_retried(self):
+        class Flaky:
+            def __init__(self, inner):
+                self.inner, self.fails, self.requests = inner, 1, inner.requests
+
+            def respond(self, **req):
+                if self.fails:
+                    self.fails -= 1
+                    err = RuntimeError("internal server error")
+                    err.status_code = 500
+                    raise err
+                return self.inner.respond(**req)
+        self.loop.client = Flaky(self.client)
+        with mock.patch.object(al, "RETRY_S", (0,)):
+            rep = self.loop.go()
+        self.assertEqual(rep["finished"]["best_round"], 3)
+        self.assertIn("retry_in_s", (self.tmp / "agent_jacks" / "agent_log.jsonl").read_text())
+        self.assertFalse(al.transient(ValueError("bad request")))
 
     def test_resumes_without_rerunning_rounds(self):
         self.loop.go()

@@ -30,6 +30,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -317,7 +318,16 @@ class Loop:
         req = {"instructions": SYSTEM, "input": items, "tools": TOOLS, "reasoning": {"effort": self.effort}}
         if self.state["prev"]:
             req["previous_response_id"] = self.state["prev"]
-        resp = self.client.respond(**req)
+        for attempt in range(len(RETRY_S) + 1):
+            try:
+                resp = self.client.respond(**req)
+                break
+            except Exception as e:  # noqa: BLE001  (only transient API errors are retried)
+                if not transient(e) or attempt == len(RETRY_S):
+                    raise
+                self.log({"round": rnd, "error": f"{type(e).__name__}: {str(e)[:300]}", "retry_in_s": RETRY_S[attempt]})
+                print(f"round {rnd}: {type(e).__name__} from the API; retrying in {RETRY_S[attempt]} s", flush=True)
+                time.sleep(RETRY_S[attempt])
         if resp is None:
             raise RuntimeError("no response (fixture used up)")
         self.state["prev"] = resp["id"]
@@ -378,9 +388,17 @@ class Loop:
             self.save()
         while len(st["rounds"]) <= self.rounds and not st.get("finished"):
             k = len(st["rounds"])
-            decision, call_id, owed = self.turn(st["pending"], k)
-            st["decisions"].append({"round": k, **decision, "config": dict(self.session.cfg),
-                                    "changes": self.session.changes})
+            planned = st.get("planned")
+            if planned and planned["round"] == k:  # decided before a round that failed to run: don't ask again
+                decision, call_id, owed = planned["decision"], planned["call_id"], planned["owed"]
+                self.session.cfg, self.session.changes = dict(planned["config"]), planned["changes"]
+            else:
+                decision, call_id, owed = self.turn(st["pending"], k)
+                st["decisions"].append({"round": k, **decision, "config": dict(self.session.cfg),
+                                        "changes": self.session.changes})
+                st["planned"] = {"round": k, "decision": decision, "call_id": call_id, "owed": owed,
+                                 "config": dict(self.session.cfg), "changes": self.session.changes}
+                self.save()
             if decision["tool"] == "finish":
                 st["finished"] = decision
                 self.save()
@@ -422,6 +440,14 @@ class Loop:
         (self.out / "report.md").write_text(report_md(rep))
         print((self.out / "report.md").read_text())
         return rep
+
+
+RETRY_S = (10, 30, 60, 120)  # waits before retrying a request the API failed with 5xx, a timeout or no connection
+
+
+def transient(e):
+    return (getattr(e, "status_code", None) or 0) >= 500 or type(e).__name__ in (
+        "APIConnectionError", "APITimeoutError", "InternalServerError", "RateLimitError")
 
 
 def fco(call_id, value):
