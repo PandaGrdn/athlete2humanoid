@@ -20,12 +20,12 @@ CLIPS="$*"
 
 for c in $CLIPS; do
   INIT="$IN" REUSE=""
-  if [ -n "$FROM" ] && [ -f "$FROM/$c/variants/variants.json" ]; then
+  if [ -n "$FROM" ] && [ -f "$FROM/$c/variants/variants.json" ]; then  # its variants, if they came along
     mkdir -p "$OUT/$c" && cp -r "$FROM/$c/variants" "$FROM/$c/held_out" "$FROM/$c"/*.json "$FROM/$c/motion_variants.npz" "$OUT/$c/"
     REUSE="--reuse-build"
-    CK=$(ls "$FROM/$c"/policy_tracking_var/latest/model_*.pt 2>/dev/null | tail -1)  # latest/ holds the newest only
-    [ -n "$CK" ] && INIT="tracking_var=$CK"
   fi
+  CK=$([ -n "$FROM" ] && ls "$FROM/$c"/policy_tracking_var/latest/model_*.pt 2>/dev/null | tail -1)  # latest/: the newest only
+  [ -n "$CK" ] && INIT="tracking_var=$CK"
   python3 experiments/variant_policy.py "$IN/clips/$c" --out "$OUT/$c" --policies tracking_var --init "$INIT" $REUSE \
     --iters "$ITERS" > "$OUT/$c.log" 2>&1 &
   echo "=== $c: training (log $OUT/$c.log)"
