@@ -7,6 +7,10 @@
         # an earlier run's processed clips (no SAM) and its policies' rollouts (DAgger data)
     python3 scripts/remote_run.py robust --reuse outputs/remote_latent   # that run's policies under
         # perturbation (experiments/robustness_eval.py) -> outputs/remote_robust/robust.json
+    python3 scripts/remote_run.py pro --iters 0 --backend modal --clips-dir clips_athletes --min-clips 1 --in-place sprint
+        # new videos processed on Modal (SAM 3.1 + SAM 3D Body installed at job start), nothing trained
+    python3 scripts/remote_run.py athletes --backend modal --reuse outputs/athletes_inputs --with-weights --iters 600
+        # each processed clip -> a variants tracker + its held-out variants (scripts/real_athletes.sh)
     python3 scripts/remote_run.py relevance --reuse outputs/remote_latent_v2 --target squat_jump --iters 1000
         # goal relevance (experiments/goal_relevance.py): V-JEPA importance + with/without --importance
 
@@ -57,6 +61,11 @@ def job_spec(a):
             raise SystemExit(f"odd --in-place: {a.in_place}")
         return ("--with-main", f"POLICIES='{pols}' IN_PLACE='{a.in_place}' bash scripts/pro_clips.sh {a.iters} {{clips}}",
                 {"results.tar.gz": f"{REMOTE}/outputs/pro/results.tar.gz"})
+    if a.job == "athletes":  # scripts/real_athletes.sh: processed clips -> a variants tracker each, in parallel, + short eval
+        if not a.reuse:
+            raise SystemExit("athletes needs --reuse <a folder with clips/<name>/ and policy_tracking_var/model_*.pt> --with-weights")
+        return ("--with-main", f"bash scripts/real_athletes.sh {a.iters} {a.args}",
+                {"results.tar.gz": f"{REMOTE}/outputs/athletes/results.tar.gz"})
     if a.job == "process":  # experiments/process_clips.py: new videos -> clip folders (SAM, retarget, V-JEPA), no training
         out = f"{REMOTE}/outputs/process" + (f"_{a.tag}" if a.tag else "")
         return ("--with-sam", f"python3 experiments/process_clips.py {{clips}} --out {out}",
@@ -463,7 +472,7 @@ def main(a):
 def parser():
     ap = argparse.ArgumentParser()
     ap.add_argument("job", choices=["probe", "latent", "robust", "relevance", "variants", "multiclip", "process", "pro", "pushes",
-                                        "agentround"])
+                                        "agentround", "athletes"])
     ap.add_argument("--min-clips", type=int, default=6)
     ap.add_argument("--clips-dir", default=str(REPO / "clips"), help="where the videos to upload are (default clips/)")
     ap.add_argument("--max-wait-h", type=float, default=8)
