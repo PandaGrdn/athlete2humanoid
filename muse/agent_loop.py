@@ -27,6 +27,7 @@ import copy
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -92,7 +93,8 @@ SYSTEM = (
     "video (the stages); the policy is scored on a fixed copy of that task, which you cannot change. Between short "
     "training rounds you get the evaluation and a video of the robot's rollout, and you adjust settings with the "
     "tools, each change for a reason you can point to in the numbers or the video. Then call train_next_round. "
-    "Describe the robot's motion only; never address or advise the person in the video."
+    "Address no one, neither the operator nor the person in the video: describe the robot's training only, "
+    "in the third person, in your messages and in every tool argument."
 )
 
 OBJECTIVE = """How each round is scored (64 robots per condition: clean, random pushes, noisy starts):
@@ -132,13 +134,29 @@ def config_files(cfg):
 
 def function_calls(resp):
     """A Responses API response (dict) -> its function calls, [{"call_id", "name", "arguments"}], in order."""
-    return [{"call_id": o["call_id"], "name": o["name"], "arguments": o.get("arguments") or "{}"}
-            for o in resp.get("output", []) if o.get("type") == "function_call"]
+    return [{"call_id": o.get("call_id") or o.get("id") or f"missing_{i}", "name": o.get("name") or "",
+             "arguments": o.get("arguments") or "{}"}
+            for i, o in enumerate(resp.get("output") or []) if isinstance(o, dict) and o.get("type") == "function_call"]
 
 
 def output_text(resp):
-    return "\n".join(c.get("text", "") for o in resp.get("output", []) if o.get("type") == "message"
-                     for c in o.get("content", []) if c.get("type") == "output_text").strip()
+    return "\n".join(c.get("text", "") for o in resp.get("output") or [] if isinstance(o, dict) and o.get("type") == "message"
+                     for c in o.get("content") or [] if c.get("type") == "output_text").strip()
+
+
+ADDRESS = re.compile(r"\b(you|your|yours|yourself)\b", re.I)
+
+
+def addresses_someone(text):
+    """Text that speaks to someone (moment_namer.check's rule): the loop logs and reports the robot's training only."""
+    return isinstance(text, str) and bool(ADDRESS.search(text))
+
+
+def third_person(text):
+    """Muse's free text without the sentences that address someone -> (text, sentences dropped)."""
+    parts = re.split(r"(?<=[.!?])\s+|\n+", text or "")
+    keep = [x for x in parts if x.strip() and not addresses_someone(x)]
+    return " ".join(keep), sum(1 for x in parts if x.strip()) - len(keep)
 
 
 class Session:
@@ -156,9 +174,15 @@ class Session:
     def call(self, name, arguments):
         """-> (tool output dict, decision or None). Bad calls get an error the agent can act on, never an exception."""
         try:
-            args = json.loads(arguments) if isinstance(arguments, str) else dict(arguments)
+            args = json.loads(arguments) if isinstance(arguments, str) else arguments
         except json.JSONDecodeError as e:
             return {"ok": False, "error": f"arguments are not valid JSON ({e})"}, None
+        if not isinstance(args, dict):
+            return {"ok": False, "error": f"arguments must be a JSON object, not {type(args).__name__}"}, None
+        said = [k for k in ("reason", "hypothesis", "summary") if addresses_someone(args.get(k))]
+        if said:
+            return {"ok": False, "error": f"{', '.join(said)}: describe the robot's training; address no one "
+                                          "(no 'you'/'your'). Nothing was changed; call again."}, None
         if name == "set_param":
             return self.set_param(args), None
         if name == "get_config":
@@ -177,7 +201,7 @@ class Session:
 
     def set_param(self, args):
         path, value = args.get("path"), args.get("value")
-        if path not in PARAMS:
+        if not isinstance(path, str) or path not in PARAMS:
             return {"ok": False, "error": f"unknown setting {path!r}"}
         if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
             return {"ok": False, "error": f"{path}: value must be a number"}
@@ -332,8 +356,9 @@ class Loop:
             raise RuntimeError("no response (fixture used up)")
         self.state["prev"] = resp["id"]
         self.state["usage"].append(resp.get("usage") or {})
+        text, dropped = third_person(output_text(resp))
         self.log({"round": rnd, "request": redact(req) | {"tools": [t["name"] for t in TOOLS]}, "response_id": resp["id"],
-                  "calls": function_calls(resp), "text": output_text(resp), "usage": resp.get("usage")})
+                  "calls": function_calls(resp), "text": text, "text_dropped_sentences": dropped, "usage": resp.get("usage")})
         return resp
 
     def turn(self, items, rnd):
@@ -343,7 +368,7 @@ class Loop:
             calls = function_calls(resp)
             if not calls:
                 items = [{"role": "user", "content": [{"type": "input_text", "text":
-                          "Use the tools: change settings with set_param if you want, then call train_next_round "
+                          "Use the tools: set_param to change a setting (or none), then train_next_round "
                           "(or finish)."}]}]
                 continue
             # settings first, whatever order they came in; the turn ends at the first train/finish call
@@ -362,7 +387,8 @@ class Loop:
             if decision:
                 return decision, decision_id, owed
             items = owed
-        raise RuntimeError(f"round {rnd}: no train_next_round or finish after {MAX_STEPS} responses")
+        self.log({"round": rnd, "error": f"no train_next_round or finish after {MAX_STEPS} responses; stopping"})
+        return None, None, items
 
     def round_result(self, k, arms, eval_only):
         """Run (or reuse) round k -> (its results folder, round.json)."""
@@ -394,6 +420,10 @@ class Loop:
                 self.session.cfg, self.session.changes = dict(planned["config"]), planned["changes"]
             else:
                 decision, call_id, owed = self.turn(st["pending"], k)
+                if decision is None:  # it never ended its turn: stop here, with the best round scored so far
+                    st["finished"] = self.auto_finish(f"stopped before round {k}: no train_next_round or finish")
+                    self.save()
+                    break
                 st["decisions"].append({"round": k, **decision, "config": dict(self.session.cfg),
                                         "changes": self.session.changes})
                 st["planned"] = {"round": k, "decision": decision, "call_id": call_id, "owed": owed,
@@ -412,7 +442,7 @@ class Loop:
                                  "seconds": r.get("seconds")})
             last = k == self.rounds
             vid = small_video(arm_dir(res, "agent") / "policy.mp4", self.out / f"r{k}_rollout.mp4")
-            note = (f"Round {k} done (the agent arm, {r['iters']} more iterations with your settings). "
+            note = (f"Round {k} done (the agent arm, {r['iters']} more iterations with the current settings). "
                     + ("That was the last round: call finish with the best round and a short summary of what "
                        "helped and what didn't." if last else "Adjust and call train_next_round, or finish."))
             st["pending"] = owed + [fco(call_id, {"round": k, "result": summary(r["arms"]["agent"])}),
@@ -421,10 +451,23 @@ class Loop:
             self.save()
             if last:
                 decision, call_id, _ = self.turn(st["pending"], k + 1)
-                st["finished"] = decision
+                st["finished"] = (decision if decision and decision["tool"] == "finish" else
+                                  self.auto_finish("the last round's turn ended without finish"
+                                                   + (f" ({decision['tool']}: {decision.get('hypothesis', '')})" if decision else "")))
                 self.save()
                 break
         return self.report()
+
+    def best_round(self):
+        """The best round so far by the scores (agent arm; round 0 is the start): clean success, then stages, then V-JEPA."""
+        key = lambda h: tuple(h.get(k) if h.get(k) is not None else -1  # noqa: E731
+                              for k in ("clean_task_success", "clean_stages", "vjepa_aligned"))
+        scored = [(key(r["arms"].get("agent") or r["arms"].get("start") or {}), r["k"]) for r in self.state["rounds"]]
+        return max(scored)[1] if scored else None
+
+    def auto_finish(self, why):
+        return {"tool": "finish", "best_round": self.best_round(), "auto": True,
+                "summary": f"{why}; best round picked from the scores (clean success, stages, V-JEPA)"}
 
     def report(self):
         st = self.state

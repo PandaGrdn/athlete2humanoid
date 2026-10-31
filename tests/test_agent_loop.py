@@ -69,6 +69,36 @@ class ToolTest(unittest.TestCase):
         self.assertFalse(s.call("finish", '{"best_round": "two", "summary": ""}')[0]["ok"])
         self.assertEqual(s.call("finish", '{"best_round": 2, "summary": "s"}')[1]["best_round"], 2)
 
+    def test_malformed_calls_get_errors_not_exceptions(self):
+        s = al.Session(al.defaults(json.loads(KICK_SPEC.read_text())))
+        for name in ("set_param", "finish", "train_next_round", "get_config"):
+            for raw in ("null", "[1]", '"x"', "3"):
+                out, dec = s.call(name, raw)
+                self.assertFalse(out["ok"], (name, raw))
+                self.assertIn("JSON object", out["error"])
+                self.assertIsNone(dec)
+        for path in (["task.done"], {"p": 1}, None, 3):
+            out, _ = s.call("set_param", json.dumps({"path": path, "value": 2, "reason": ""}))
+            self.assertIn("unknown setting", out["error"])
+        # function_call items missing their call_id or name, and junk in the output list
+        calls = al.function_calls({"output": [{"type": "function_call", "arguments": "{}"}, "junk", None,
+                                              {"type": "function_call", "id": "fc_9", "name": "get_config"}]})
+        self.assertEqual([(c["call_id"], c["name"]) for c in calls], [("missing_0", ""), ("fc_9", "get_config")])
+        self.assertIn("unknown tool", s.call(calls[0]["name"], calls[0]["arguments"])[0]["error"])
+        self.assertEqual(al.function_calls({"output": None}), [])
+
+    def test_arguments_that_address_someone_are_refused(self):
+        s = al.Session(al.defaults(json.loads(KICK_SPEC.read_text())))
+        out, _ = s.call("set_param", '{"path": "task.done", "value": 8, "reason": "your robot skips the end"}')
+        self.assertFalse(out["ok"])
+        self.assertIn("address no one", out["error"])
+        self.assertEqual(s.cfg["task.done"], 4.0)
+        out, dec = s.call("train_next_round", '{"hypothesis": "You will see wider arms", "watch": "clean_stages"}')
+        self.assertIsNone(dec)
+        self.assertEqual(al.third_person("Your baseline is solid. The robot skips stage 1.\nYou see?"),
+                         ("The robot skips stage 1.", 2))
+        self.assertFalse(al.addresses_someone("the young robot"))  # whole words only
+
     def test_config_files_reach_mjlab_tasks(self):
         """Every setting lands where mjlab_tasks.reward_config / task_config (or the spec's weights) reads it."""
         spec = json.loads(KICK_SPEC.read_text())
@@ -157,6 +187,38 @@ class LoopTest(unittest.TestCase):
         self.assertEqual(rep["finished"]["best_round"], 3)
         self.assertIn("retry_in_s", (self.tmp / "agent_jacks" / "agent_log.jsonl").read_text())
         self.assertFalse(al.transient(ValueError("bad request")))
+
+    def scripted(self, *responses):
+        """A client whose fixture is these response dicts (output items as given)."""
+        f = self.tmp / "script.json"
+        f.write_text(json.dumps({"responses": [{"id": f"r{i}", "output": out, "usage": {}} for i, out in enumerate(responses)]}))
+        self.loop.client = mc.MuseClient(fixture=f)
+
+    def test_no_decision_finishes_with_the_best_round(self):
+        text = [{"type": "message", "content": [{"type": "output_text", "text": "Thinking about it."}]}]
+        self.scripted(*[text] * al.MAX_STEPS)
+        rep = self.loop.go()  # round 0 only, then a turn that never decides
+        self.assertEqual([k for k, *_ in self.seen], [0])
+        self.assertTrue(rep["finished"]["auto"])
+        self.assertEqual(rep["finished"]["best_round"], 0)
+        self.assertIn("no train_next_round", (self.tmp / "agent_jacks" / "agent_log.jsonl").read_text())
+
+    def test_last_turn_without_finish_falls_back_to_the_best_round(self):
+        train = lambda i: [{"type": "function_call", "call_id": f"c{i}", "name": "train_next_round",  # noqa: E731
+                            "arguments": '{"hypothesis": "h", "watch": "clean_stages"}'}]
+        self.scripted(train(1), train(2), train(3), train(4))  # the 4th, after the last round, isn't finish
+        rep = self.loop.go()
+        self.assertTrue(rep["finished"]["auto"])
+        self.assertIn(rep["finished"]["best_round"], (1, 2, 3))
+        self.assertNotIn("best round None", (self.tmp / "agent_jacks" / "report.md").read_text())
+
+    def test_logged_text_is_third_person(self):
+        self.loop.go()
+        texts = [json.loads(line).get("text") for line in (self.tmp / "agent_jacks" / "agent_log.jsonl").read_text().splitlines()]
+        rows = [json.loads(line) for line in (self.tmp / "agent_jacks" / "agent_log.jsonl").read_text().splitlines()]
+        self.assertFalse(any(al.addresses_someone(t) for t in texts if t))
+        self.assertIn("Success rose a little.", texts)  # the fixture's "Your policy improved." was dropped
+        self.assertEqual(sum(r.get("text_dropped_sentences", 0) for r in rows), 1)
 
     def test_resumes_without_rerunning_rounds(self):
         self.loop.go()

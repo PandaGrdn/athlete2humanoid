@@ -7,7 +7,7 @@ Two parts of the pipeline now call Meta's Muse Spark (`muse-spark-1.3`, Meta Mod
 
 The verification calls, and what the integration plan got wrong, are in [`META_INTEGRATION.md` §7](META_INTEGRATION.md#7-verified-live-oct-30).
 
-**Result in one line.** On jumping jacks, three agent rounds (900 PPO iterations) beat the same 900 iterations without the agent on likeness to the video: clean V-JEPA 2 similarity was **0.410 ± 0.008 vs 0.388 ± 0.017** (start 0.357). Success and falls stayed level. The agent did **not** reach its other target: the optional key moments it set out to recover were still skipped. One training run per arm; details and caveats [below](#the-run-jumping-jacks).
+**Result in one line.** On jumping jacks, three agent rounds (900 PPO iterations) beat the same 900 iterations without the agent on likeness to the video: clean V-JEPA 2 similarity was **0.410 ± 0.008 vs 0.388 ± 0.017** (start 0.357). Success and falls stayed level. Read that as "upweighting the likeness terms raised likeness": the gain came from Muse raising the tracking and V-JEPA style weights, which aim straight at the metric reported, while the control kept the old weights. It is not evidence that the agent beats a simple heuristic such as "raise the likeness weights". The agent did **not** reach its other target: the optional key moments it set out to recover were still skipped. One training run per arm; details and caveats [below](#the-run-jumping-jacks).
 
 ## What is live
 
@@ -30,12 +30,12 @@ The keypose compiler (`skill/keypose.py`) picks the key moments by measurement a
 It returns a plain-English name and one sentence per moment, plus the action. Strict `json_schema` output is checked again in code: one entry per moment, 1–5 words, nothing addressed to the person. On any failure Muse sees the errors and gets one retry.
 
 **The schema (`skill/spec_schema.py`).** Each named pose or flight stage gets four fields:
-- `muse_label`: the stable key front ends read (PR #32's build view reads it);
+- `muse_label`: the stable key for front ends (nothing on this branch reads it; PR #32's build view does);
 - `description`: Muse's one sentence;
 - `measured`: the compiler's name;
 - `name`: Muse's name, as the existing server display expects.
 
-Settle stages (ready, land, finish) are never named. `stage_label(st)` falls back from `muse_label` to `label` (the skill reader's), then `name`, then `kind`. `text_errors(spec)` checks the fields, and the tests run it on every named spec. The reward never reads any of these: naming a spec changes nothing a policy learns.
+Settle stages (ready, land, finish) are never named. `stage_label(st)` falls back from `muse_label` to `label` (the skill reader's), then `name`, then `kind`. `text_errors(spec)` checks the fields; the tests run it on the specs the fixtures name. The ten specs named live were checked with it once, by hand, and all passed. The reward never reads any of these: naming a spec changes nothing a policy learns.
 
 **The ten stored specs, named live.**
 
@@ -96,7 +96,7 @@ round 0   score the run's policy as it is ────────────�
 
 ## The run: jumping jacks
 
-**Starting point:** `outputs/remote_latent_s3_jacks`'s task policy (A2H-Task, 1500 iterations). In the simulator it already finishes the task and never falls: 100% success, clean and under 0.75 m/s pushes. That success counts optional stages as skippable, though. On average it completes 9 of the 11 stages, skipping three optional "arms overhead legs apart" moments: it does jumping jacks without its arms fully overhead. Its V-JEPA similarity to the video is 0.35, against 0.72 for the retargeted motion. So the headroom was:
+**Starting point:** `outputs/remote_latent_s3_jacks`'s task policy (A2H-Task, 1500 iterations). In the simulator it already finishes the task and never falls: 100% success, clean and under 0.75 m/s pushes. That success counts optional stages as skippable, though. The spec has 12 stages: a settle stage ("ready") and 11 key poses. Its deterministic rollout passes 9 of the 12 and skips the optional "arms overhead legs apart" moments 1, 3 and 5: it does jumping jacks without its arms fully overhead. (The in-sim "stages completed" of 9.00 below counts the stages left after the start, so its denominator is 11: robustness_eval's `stages_frac` is 0.818 = 9/11.) Its V-JEPA similarity to the video is 0.35, against 0.72 for the retargeted motion. So the headroom was:
 - the skipped moments;
 - likeness to the video;
 - staying up under harder conditions.
@@ -116,7 +116,7 @@ One misstep: `task.jump` has no effect on jumping jacks, because the spec has no
 
 **Per round** (64 robots per condition; V-JEPA is the mean of 2 rendered rollouts, clean condition):
 
-| Round | Arm | Clean success | Stages | Falls, noisy start (2×) | V-JEPA |
+| Round | Arm | Clean success | Stages (of 11 after the start) | Falls, noisy start (2×) | V-JEPA |
 |---|---|---|---|---|---|
 | 0 | start | 100% | 9.00 | 0% | 0.351 |
 | 1 | agent / base | 100% / 100% | 9.00 / 9.00 | 0% / 3% | 0.387 / 0.363 |
@@ -132,13 +132,13 @@ One misstep: `task.jump` has no effect on jumping jacks, because the spec has no
 | Push 1.0 m/s: V-JEPA | 0.378 ± 0.023 | 0.387 ± 0.038 | 0.407 ± 0.031 |
 | Push 1.5 m/s: success / falls | 100% / 0% | 98% / 2% | 98% / 2% |
 | Noisy start 4×: success / falls | 61% / 39% | 66% / 34% | 69% / 30% |
-| Stages completed, clean | 9.00 | 9.00 | 9.00 |
+| Stages completed, clean (of 11 after the start) | 9.00 | 9.00 | 9.00 |
 | Joint DTW to the clip (rad, lower = closer) | 0.396 | 0.411 | **0.382** |
 | V-JEPA of the deterministic rollout | 0.339 | 0.391 | **0.410** |
 
 **What this says.**
-- **Likeness: a small, consistent gain over the control.** The agent arm is ahead in every round, and at 0.75 m/s pushes. In the confirmation it leads by +0.022 on the clean clip (Welch t ≈ 3.3 over 8 + 8 rollouts) and +0.023 at 0.75 m/s (t ≈ 2.5). The lead shrinks to +0.020 at 1.0 m/s (t ≈ 1.6) and is a tie at 1.5 m/s. It is also closer to the retarget in joint space, the opposite of the control, which drifts away with more training.
-  - The changes that plausibly did it are the ones Muse credited: more tracking weight (0.1→0.3) and more V-JEPA style weight (1→2).
+- **Likeness: a small, consistent gain over the control.** The agent arm is ahead in every round, and at 0.75 m/s pushes. In the confirmation it leads by +0.022 on the clean clip (Welch t ≈ 3.2) and +0.023 at 0.75 m/s (t ≈ 2.5). The lead shrinks to +0.020 at 1.0 m/s (t ≈ 1.2, not significant) and +0.006 at 1.5 m/s (t ≈ 0.6). Welch t over the 8 + 8 rendered rollouts in `robust.json` (`vjepa_each`). It is also closer to the retarget in joint space, the opposite of the control, which drifts away with more training.
+  - The changes that plausibly did it are the ones Muse credited: more tracking weight (0.1→0.3) and more V-JEPA style weight (1→2). Both terms reward exactly what is measured here (V-JEPA likeness and closeness to the retarget), and the control kept the old weights. So this shows that upweighting the likeness terms raises likeness, at no cost in success or falls on this clip. It does not show that the agent beats a one-line heuristic ("raise the likeness weights"); that comparison was not run.
   - Training reward isn't comparable across arms (the agent changed the weights), so it isn't used as evidence.
 - **Key moments: a null result.** No arm completed more stages: 9.00 in every round, for all three policies. Raising the stage, progress and finish bonuses did not make the policy go back for the optional overhead poses.
 - **Robustness: unchanged within noise.** At 4× start noise the success rates (69% vs 66%, 64 robots) are within each other's noise.
@@ -183,4 +183,4 @@ Tests: `tests/test_agent_loop.py` (tools, bounds, tool-call parsing, the convers
 
 ## For the submission: use of Meta tooling
 
-> Meta's models run the whole loop from phone video to trained robot. SAM 3.1 segments the athlete, SAM 3D Body lifts them to 3D, and V-JEPA 2 is both the robot's "look like the video" reward and the judge of whether it does. Muse Spark is the agent on top, called live through the Meta Model API. It watches each clip and names the key moments of the robot's task in plain English ("arms overhead legs apart", "sink into right lunge"), written into the task spec the web app displays. Then it tunes the reward between training rounds. Through the Responses API it reads each round's evaluation, watches the robot's rollout video, and calls bounded tools to change reward weights and termination thresholds, each change with a stated reason. The next round trains on Modal from the last checkpoint. Measured against an identical run without the agent, three rounds (900 PPO iterations) raised the robot's V-JEPA likeness to the person's video from 0.388 to 0.410 (start: 0.357), at equal success and falls. Muse's own end-of-run summary named what worked (more tracking and style weight) and what didn't (bigger stage bonuses never recovered the skipped overhead poses), and the numbers agree. The whole agent run cost $0.10 in API credits, against $2.35 of GPU time.
+> Meta's models run the whole loop from phone video to trained robot. SAM 3.1 segments the athlete, SAM 3D Body lifts them to 3D, and V-JEPA 2 is both the robot's "look like the video" reward and the judge of whether it does. Muse Spark is the agent on top, called live through the Meta Model API. It watches each clip and names the key moments of the robot's task in plain English ("arms overhead legs apart", "sink into right lunge"), written into the task spec (`muse_label`), which the web app's build view (PR #32) shows. Then it tunes the reward between training rounds. Through the Responses API it reads each round's evaluation, watches the robot's rollout video, and calls bounded tools to change reward weights and termination thresholds, each change with a stated reason. The next round trains on Modal from the last checkpoint. Measured against an identical run without the agent, three rounds (900 PPO iterations) raised the robot's V-JEPA likeness to the person's video from 0.388 to 0.410 (start: 0.357), at equal success and falls. That gain came from Muse upweighting the tracking and V-JEPA style terms, which target the likeness being measured, so it shows that upweighting the likeness terms raised likeness, not that the agent beats a simple heuristic. It is one training run per arm, with seed variance unmeasured. Muse's own end-of-run summary named what worked (more tracking and style weight) and what didn't (bigger stage bonuses never recovered the skipped overhead poses), and the numbers agree. The whole agent run cost $0.10 in API credits, against $2.35 of GPU time.
