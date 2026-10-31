@@ -816,8 +816,9 @@ def proportional_motion(P, rt: G1Retargeter, fps=30.0, in_place=None):
     ankles = np.stack([J["left_ankle"], J["right_ankle"]], 1)
     # Floor first (also the fallback if nothing is ever planted): lowest ankles on the floor.
     root[:, 2] += rt.sole_height - np.percentile((root[:, None] + ankles)[..., 2].min(1), 5)
-    restored = None
+    restored = floor_drift = None
     if in_place:  # a camera that tracked the runner (a dolly) loses the travel, and with it the contacts
+        root, floor_drift = level_floor(root, ankles, fps)
         root, restored = restore_travel(root, ankles, fps)
     stance = stance_mask(root[:, None] + ankles, fps, root=root)
     J = level_feet(J, stance)
@@ -896,8 +897,24 @@ def proportional_motion(P, rt: G1Retargeter, fps=30.0, in_place=None):
                            "mean_speed_m_s": round(float(np.linalg.norm(travel) * fps / max(len(P) - 1, 1)), 2),
                            "stride_s": round(stride_s, 3),
                            "root_travel_left_m": round(float(np.linalg.norm(root[-1, :2] - root[0, :2])), 3),
-                           "travel_restored_m": restored}
+                           "travel_restored_m": restored, "floor_drift_removed_m": floor_drift}
     return out
+
+
+def level_floor(root, ankles, fps=30.0, window_s=0.5, min_drift=0.03):
+    """A floor that rises or sinks through the clip (a camera pitch error turns travel into height): the lowest foot's
+    lowest point per window_s, fitted by a line in time; where that line moves more than min_drift m over the clip, the
+    root is lowered by it. -> (root, metres of drift removed, or None)."""
+    low = (ankles[..., 2] + root[:, None, 2]).min(1)
+    w = max(2, int(round(window_s * fps)))
+    idx = [a + int(np.argmin(low[a:a + w])) for a in range(0, len(low) - w // 2, w)]
+    if len(idx) < 3:
+        return root, None
+    slope, _ = np.polyfit(np.array(idx, float), low[idx], 1)
+    drift = slope * (np.arange(len(root)) - idx[0])
+    if abs(drift[-1] - drift[0]) < min_drift:
+        return root, None
+    return root - np.c_[np.zeros((len(root), 2)), drift], round(float(drift[-1] - drift[0]), 3)
 
 
 def restore_travel(root, ankles, fps=30.0, near=0.05, window_s=1.0, min_speed=0.3):
