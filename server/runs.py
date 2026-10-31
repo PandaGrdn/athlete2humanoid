@@ -352,7 +352,8 @@ def _spec_stage(st, features, keypose, fps):
     kind = st.get("kind") if isinstance(st.get("kind"), str) else ""
     if keypose:
         k = kind if kind in ("pose", "flight", "settle") else "pose"
-        name = _text(st.get("name"), 120) or k
+        # Muse's label (skill/spec_schema.py stage_label: muse_label, then name, then kind)
+        name = _text(st.get("muse_label"), 120) or _text(st.get("name"), 120) or k
         parts = _body_parts(st.get("relevance"), features) if k == "pose" else []
         feet = _feet(st.get("feet_down"))
     else:  # stand / squat / jump / land

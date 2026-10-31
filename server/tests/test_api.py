@@ -151,6 +151,13 @@ def test_build_view_files(client, runs_dir):
     assert d["variants"]["url"] == "/api/runs/latent/files/variants.json"
     for u in (c["skeleton"]["url"], d["variants"]["url"]):
         assert client.get(u).status_code == 200
+    # a stage's Muse label is its name in the view, ahead of the compiler's
+    spec = {**keypose_spec(), "name": "squat"}
+    pose = next(st for st in spec["stages"] if st["kind"] == "pose")
+    pose |= {"muse_label": "kick right leg forward", "name": "right foot up"}
+    (run / "task_spec.json").write_text(json.dumps(spec))
+    names = [st["name"] for st in client.get("/api/runs/latent/task_spec").json()["stages"]]
+    assert "kick right leg forward" in names and "right foot up" not in names and names[0] == "ready"
     # a spec named after no clip of the run leaves the target unset
     (run / "task_spec.json").write_text(json.dumps({**keypose_spec(), "name": "../squat"}))
     assert client.get("/api/runs/latent").json()["target"] is None
