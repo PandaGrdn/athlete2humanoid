@@ -350,7 +350,11 @@ def run_modal(a, mr, found, setup, cmd, fetch, inputs):
         raise SystemExit("the Modal image has no SAM 3.1 (new videos): run this job on Colab, or --reuse processed clips")
     mr.deploy()
     mr.upload(found, inputs, REPO / ".env")
-    mr.submit(cmd.format(clips=" ".join(f"'{REMOTE}/clips/{p.name}'" for p in found)), a.branch)
+    try:
+        mr.submit(cmd.format(clips=" ".join(f"'{REMOTE}/clips/{p.name}'" for p in found)), a.branch)
+    except BaseException:  # refused (e.g. the workspace's spend limit): the uploaded token must not stay on the Volume
+        mr.cleanup()
+        raise
     try:
         state = wait(mr, lambda: sync_checkpoints(a, mr.download))
     except KeyboardInterrupt:
