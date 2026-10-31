@@ -64,7 +64,82 @@ Notes from the intake:
 - Training agreed: after 1,000 iterations its episodes lasted 87 of about 320 steps, ending on mjlab's hand and foot
   height check. A lower kick, or a front kick (as on our own clip), is what this robot can learn.
 
-<!-- POLICIES -->
+## Policies: not finished. The GPU budget ran out mid-training.
+
+**Result: no real-athlete policy passes its spec yet.**
+- The trackers stay up: no falls on the clean clip, almost none under 1 m/s pushes.
+- But they don't do every key moment yet. The jogs shuffle their feet instead of lifting them.
+- The failure is under-training, not the pipeline: the spend limit stopped training at 450–490 of 1,000 iterations.
+- The demo wiring is ready, but no run was added to the hosted demo, since none passes.
+
+**Recipe.** As for the squat jump:
+- `tracking_var` trained on the clip's variants (`experiments/variant_policy.py`), one policy per clip.
+- Warm-started from the squat-jump variants tracker (`remote_variants_s3_sj/policy_tracking_var/model_1499.pt`).
+- 1,000 iterations, the four clips in parallel on one Modal L40S (`remote_run.py athletes`, `scripts/real_athletes.sh`).
+- Then the held-out variants and recorded pushes.
+
+**What happened:**
+1. **Building the variants took about 30 minutes inside the job:** about 40 motion files per clip, four clips sharing
+   8 CPUs while the GPU idled. Build them beforehand next time (`variant_policy.py --build-only`, or reuse a build with
+   the new `--reuse-build` / `real_athletes.sh --from`).
+2. **The Modal workspace (`a2h`) hit its billing-cycle spend limit** at about 00:15. That stopped the container with
+   the jogs and the boxing at iterations 448–489. Checkpoints are saved every 250 iterations, so iteration 250 was
+   kept. A new job was refused (`ResourceExhaustedError`). The kick had finished its 1,000 iterations, but not its
+   rollout.
+3. **Training continued on this Mac's CPU** (mjlab on Warp's CPU backend; mjlab runs on CPU with
+   `CUDA_VISIBLE_DEVICES=` empty), from the GPU iteration-250 checkpoints.
+   - 512 envs at about 10 s per iteration: an eighth of the samples per iteration that a GPU's 4,096 envs give.
+   - The processes ended at CPU iteration 551–591. Iteration-500 checkpoints were kept.
+
+**Evaluation.** `experiments/robustness_eval.py` on CPU, 32 rollouts per condition. "Stages" is the share of the
+spec's key moments done in order; success needs all of them. Numbers are in `docs/results/real_athletes/policies.json`.
+
+| Clip | Checkpoint | Clean: success / stages / falls | Joint error (rad) | 1 m/s pushes: success / falls | Held-out variants: success |
+|---|---|---|---|---|---|
+| `jog_lakeside` (in place) | GPU 250 | 0% / 17% / 0% | 0.258 | n/a | 2/7 variants (half speed, and mirrored at 1.6x) |
+| | GPU 250 + CPU 500 | 0% / 17% / 0% | 0.167 | 0% / 0% | 2/7 (the same two, 100% each) |
+| `jog_bridge` (in place) | GPU 250 | 0% / 12% / 0% | 0.208 | n/a | 0/5 |
+| | GPU 250 + CPU 500 | 0% / 18% / 0% | 0.193 | 0% / 6% | 0/5 |
+| `shadow_boxing` | GPU 250 | 0% / 21% / 0% | 0.210 | n/a | 0/7 |
+| | GPU 250 + CPU 500 | 0% / 21% / 0% | 0.172 | 0% / 0% | 0/7 |
+| `taekwondo_kick` | GPU 1,000 | not scorable: the reference itself trips the fall rule (above) | | | |
+
+The joint error falls with training: 0.26 → 0.17 rad on the lakeside jog; the finished squat-jump tracker reaches
+0.09.
+
+**Where the jogs fail.** The reference lifts each ankle about 20 cm every stride. The policy lifts the left foot once,
+at the start, and then keeps both feet at 3–4 cm, so it never completes the second key moment ("left foot up, right
+foot forward"). That stage needs the left foot off the floor for 0.1 s, with ankle-height tolerances of 5–6 cm.
+
+Slowed down, it does jog. The lakeside policy completes every key moment of the half-speed variant and of the mirrored
+1.6x-slower one, in all 32 rollouts, with no falls. That's the expected path of a tracker learning a gait: the slower
+version first.
+
+**Squat-jump comparison.** The squat-jump tracker that is the warm start was trained the same way, for 1,500 GPU
+iterations. It reaches 100% clean and 82% on held-out variants (`outputs/remote_robust_s3_sj`, the showcase's figure).
+
+### To finish (needs GPU budget)
+
+The variants are built and the inputs are packed. One job retrains the three clips from the squat-jump tracker:
+about 30 minutes of building plus about 45 minutes of training on one L40S, around $3. That's less if the builds are
+reused: they're kept locally in `outputs/remote_athletes_ra3_partial/` and need uploading.
+
+```bash
+MODAL_PROFILE=a2h python3 scripts/remote_run.py athletes --backend modal --reuse outputs/athletes_inputs --with-weights \
+    --iters 1000 --tag ra --branch real-athletes --args "jog_lakeside jog_bridge shadow_boxing"
+python3 experiments/real_athletes.py assemble outputs/remote_athletes_ra    # -> outputs/remote_latent_ra_{jog,bridge,box}
+python3 scripts/build_variants_view.py outputs/remote_latent_ra_*          # the build view's variants.json
+python3 experiments/real_athletes.py showcase jog_lakeside ...             # the passing clips: 3D bundles + credited tabs
+```
+
+Then map each passing clip to its bundle in `web/src/buildview/data.ts` (`OWN`), so the build view's stage 6 plays
+its own policy.
+
+**What the deploy needs:**
+- `scripts/build_space.py` already ships `remote_latent_ra_*` and their `robust.json`; then the usual Space redeploy
+  (`docs/DEPLOY.md`).
+- The credit lines are served by the API (`web.json` "credit") and shown on the run, build and showcase pages. The
+  web build has to be redeployed for those components.
 
 ## Run in place (`pipeline.py --in-place`)
 
