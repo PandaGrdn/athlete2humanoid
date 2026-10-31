@@ -93,7 +93,7 @@ Everything below runs in a browser at https://athlete2humanoid.pages.dev.
 | `/live/demo/front-kick` | A recorded live build, if you'd rather not upload. |
 | `/research` | Each experiment's results with its videos. |
 
-**Cold start:** the API runs on Cloud Run with no minimum instance, so it scales to zero about 15 minutes after its last request (`docs/DEPLOY.md`). The first request after that starts a new instance: COLD_START_WAIT. The header shows "API online" once it answers. The examples, showcase and research pages are static and never wait.
+**Cold start:** the API runs on Cloud Run with no minimum instance, so it scales to zero about 15 minutes after its last request (`docs/DEPLOY.md`). The first request after that starts a new instance: about 23 s, measured on 2026-10-31; once it is up, a request takes 0.15 s (`docs/DEPLOY.md`). The header shows "API online" once it answers. The examples, showcase and research pages are static and never wait.
 
 **The video (3 min):** VIDEO_URL. The person's clip, the robot learning it, the build view, the push test, and the Muse agent's round-by-round decisions.
 

@@ -123,6 +123,8 @@ failure modes and health endpoints: `docs/SYSTEM_DESIGN.md`.
   The free tier (instance-based: 240k vCPU-s and 450k GiB-s a month) covers demo traffic: an instance stays
   up about 15 min after its last request, then scales to zero. Images over Artifact Registry's free 0.5 GB
   cost cents a month.
+  - **Cold start, measured 2026-10-31:** after 25 minutes with no request from us, the first `GET /readyz` took
+    23 s; the next took 0.15 s. Load `/readyz` once before a demo.
   - **Cloud Run needs a billing account linked to the project, even at $0:** a card on file, added by you in
     the console. A budget alert there is cheap insurance.
   - **Once:** `gcloud auth login`, a project (`gcloud projects create <id>`), billing linked
