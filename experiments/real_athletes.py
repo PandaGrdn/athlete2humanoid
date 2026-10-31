@@ -140,6 +140,38 @@ def audit(a):
     print("->", out)
 
 
+def showcase(a):
+    """Each assembled run whose policy completes its clip -> a 3D showcase bundle (scripts/build_showcase.py, its source
+    video credited) and its tab in web/public/showcase/index.json, so /showcase and the build view's stage 6 play it."""
+    import subprocess
+    known, outputs = clips(), ROOT / "outputs"
+    index_f = ROOT / "web" / "public" / "showcase" / "index.json"
+    index = json.loads(index_f.read_text())
+    for name in a.clips:
+        c = known[name]
+        run = outputs / f"remote_latent_{TAG}_{c['short']}"
+        ev = json.loads((run / "eval.json").read_text())["tracking_var"]
+        sid = name.replace("_", "-")
+        subprocess.run([sys.executable, str(ROOT / "scripts" / "build_showcase.py"), "--id", sid, "--run", run.name,
+                        "--policy", "tracking_var", "--pushes", f"remote_pushes_{TAG}_{c['short']}",
+                        "--video", str(run / "clips" / name / "side_by_side.mp4"), "--video-label", f"{c['licence']} video",
+                        "--task-spec", str(run / "task_spec.json")], check=True)
+        facts = [{"v": f"{ev['task_success_rate']:.0%}", "l": "of clean runs complete the clip's key moments"}]
+        if ev.get("held_out_success") is not None:
+            facts.append({"v": f"{ev['held_out_success']:.0%}", "l": "of held-out variants completed"})
+        entry = {"id": sid, "tab": c["tab"], "title": c["showcase_title"], "kicker": "Free-licence video → one policy",
+                 "lede": c["description"] + (" The clip travels; the G1 runs it in place." if c.get("in_place") else ""),
+                 "video": f"{c['author']}'s clip ({c['licence']}). SAM 3.1 segments the athlete, SAM 3D Body lifts the pose "
+                          "to 3D" + (", and the run's forward travel is taken out." if c.get("in_place") else "."),
+                 "policy": "PPO in mjlab on 36 automatic variants of the clip, warm-started from the squat-jump tracker, "
+                           f"{ev.get('iterations', 1000)} iterations. The network's own run in MuJoCo, recorded.",
+                 "facts": facts, "credit": {"text": c["credit"], "url": c["page"], "licence": c["licence"]},
+                 "fallback": None}
+        index["clips"] = [e for e in index["clips"] if e["id"] != sid] + [{k: v for k, v in entry.items() if v is not None}]
+        print(f"{sid}: bundle + tab")
+    index_f.write_text(json.dumps(index, indent=1, ensure_ascii=False) + "\n")
+
+
 def run_eval(spec, metrics, robust):
     """eval.json as server/runs.py reads it: the retarget's own spec check, and the policy's clean-clip numbers."""
     sc = spec["self_check"]
@@ -213,8 +245,10 @@ if __name__ == "__main__":
     p.add_argument("--video", help="the source video, to re-render side_by_side.mp4")
     p = sub.add_parser("audit")
     p.add_argument("processed", help="remote_run.py pro --iters 0's folder")
+    p = sub.add_parser("showcase")
+    p.add_argument("clips", nargs="+")
     p = sub.add_parser("assemble")
     p.add_argument("results", help="remote_run.py athletes' folder")
     p.add_argument("--iters", type=int)
     a = ap.parse_args()
-    {"inputs": inputs, "reretarget": reretarget, "audit": audit, "assemble": assemble}[a.cmd](a)
+    {"inputs": inputs, "reretarget": reretarget, "audit": audit, "assemble": assemble, "showcase": showcase}[a.cmd](a)

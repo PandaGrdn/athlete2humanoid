@@ -5,9 +5,12 @@
 #      from inputs/policy_tracking_var (the squat-jump variants tracker); the clips train in parallel
 #   2. per clip, experiments/robustness_eval.py: the clip clean, one 1 m/s push level, and its held-out variants
 #      (--transfer), no V-JEPA scoring; then its recorded pushes for the 3D showcase (experiments/push_showcase.py)
-#   bash scripts/real_athletes.sh <iters> [clip...]   (default: every clip in inputs/clips/)
+#   bash scripts/real_athletes.sh <iters> [--from <an interrupted run's outputs/athletes>] [clip...]
+#     (default: every clip in inputs/clips/). --from: reuse its built variants, and start from its newest checkpoints
 set -u
 ITERS=$1; shift
+FROM=""
+if [ "${1:-}" = "--from" ]; then FROM=$2; shift 2; fi
 D=$A2H_JOB_DATA
 IN=$D/inputs
 OUT=$D/outputs/athletes
@@ -16,7 +19,14 @@ CLIPS="$*"
 [ -n "$CLIPS" ] || CLIPS=$(ls "$IN/clips")
 
 for c in $CLIPS; do
-  python3 experiments/variant_policy.py "$IN/clips/$c" --out "$OUT/$c" --policies tracking_var --init "$IN" \
+  INIT="$IN" REUSE=""
+  if [ -n "$FROM" ] && [ -f "$FROM/$c/variants/variants.json" ]; then
+    mkdir -p "$OUT/$c" && cp -r "$FROM/$c/variants" "$FROM/$c/held_out" "$FROM/$c"/*.json "$FROM/$c/motion_variants.npz" "$OUT/$c/"
+    REUSE="--reuse-build"
+    CK=$(ls "$FROM/$c"/policy_tracking_var/latest/model_*.pt 2>/dev/null | tail -1)  # latest/ holds the newest only
+    [ -n "$CK" ] && INIT="tracking_var=$CK"
+  fi
+  python3 experiments/variant_policy.py "$IN/clips/$c" --out "$OUT/$c" --policies tracking_var --init "$INIT" $REUSE \
     --iters "$ITERS" > "$OUT/$c.log" 2>&1 &
   echo "=== $c: training (log $OUT/$c.log)"
 done
