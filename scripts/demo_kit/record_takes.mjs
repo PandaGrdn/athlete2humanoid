@@ -35,6 +35,7 @@ async function startRec(page, dir, { quality = 92, w = 1920, h = 1080 } = {}) {
     async stop(out, { fps = 30, speed = 1, trimStart = 0, dur = null } = {}) {
       await cdp.send("Page.stopScreencast");
       const t1 = Date.now() / 1000;
+      if (!frames.length) throw new Error(`${out}: no frames captured (is the page rendering? is ${BASE} up?)`);
       // concat list with per-frame durations; last frame lasts until stop
       let lines = ["ffconcat version 1.0"];
       for (let i = 0; i < frames.length; i++) {
@@ -130,7 +131,7 @@ async function live(clip, name) {
   await sleep(2000);
   mark("upload");
   await page.setInputFiles("input[type=file]", clip);
-  // follow the build until the policy stage offers a pre-trained policy or 120 s pass
+  // follow the build until the policy stage offers a pre-trained policy or 150 s pass
   const t0 = Date.now();
   let last = "";
   while (Date.now() - t0 < 150000) {
@@ -173,8 +174,15 @@ async function showcase(name) {
   await browser.close();
 }
 
-const which = process.argv[2];
-if (which === "build_sj") await build("latent_s3_sj", "build_sj");
-if (which === "build_kick") await build("latent_s3_kick", "build_kick");
-if (which === "live") await live(process.argv[3], "live_upload");
-if (which === "showcase") await showcase("showcase");
+const [which, clip] = process.argv.slice(2);
+const TAKES = {
+  build_sj: () => build("latent_s3_sj", "build_sj"),
+  build_kick: () => build("latent_s3_kick", "build_kick"),
+  live: () => (clip && fs.existsSync(clip) ? live(clip, "live_upload") : Promise.reject(new Error("live needs a video file: live <clip>"))),
+  showcase: () => showcase("showcase"),
+};
+if (!TAKES[which]) {
+  console.error(`unknown take ${JSON.stringify(which)}; one of: ${Object.keys(TAKES).join(", ")} (live takes a clip path)`);
+  process.exit(2);
+}
+await TAKES[which]();

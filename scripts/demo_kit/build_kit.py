@@ -7,8 +7,8 @@
 SHOTS follows docs/DEMO_SCRIPT.md; docs/demo_kit/EDIT_LIST.md lists the result. Each shot is a list of segments
 (source clip, trim, optional filter) plus captions (start, end, text) relative to the shot, which are burned in only
 for the rough cut. Sources: the final renders (scripts/make_final_demo.py), the retarget comparison, the goal-relevance
-plot, and the screen takes from scripts/demo_kit/record_takes.mjs in outputs/demo_kit/raw (their trims follow each
-take's .marks.json). Needs pillow and ffmpeg (FFMPEG, or imageio-ffmpeg's); title cards use macOS system fonts.
+plot, and the screen takes from scripts/demo_kit/record_takes.mjs in outputs/demo_kit/raw. A take's trims are given
+relative to the actions in its .marks.json, as (mark, offset in seconds), so a re-recorded take is cut at the same moments. Needs pillow and ffmpeg (FFMPEG, or imageio-ffmpeg's); title cards use macOS system fonts.
 """
 import json
 import os
@@ -23,7 +23,6 @@ O = Path(os.environ.get("A2H_OUTPUTS", M / "outputs"))  # a worktree can point a
 KIT = O / "demo_kit"
 RAW = KIT / "raw"
 WORK = KIT / "work"
-WORK.mkdir(parents=True, exist_ok=True)
 
 
 def _ffmpeg():
@@ -102,6 +101,17 @@ def seg(out, src, ss=0.0, to=None, vf=FIT, speed=1.0, hold=0.0, loop=0, pre=None
     ff(*args, "-i", src, "-vf", ",".join(chain) + ",format=yuv420p", *ENC, out)
 
 
+def at(src, ref):
+    """A trim point: seconds, or (mark, offset) resolved against the take's <name>.marks.json."""
+    if not isinstance(ref, tuple):
+        return ref
+    mark, off = ref
+    marks = dict(json.loads(Path(src).with_suffix(".marks.json").read_text())["marks"])
+    if mark not in marks:
+        raise SystemExit(f"{Path(src).name}: no mark {mark!r} (has {', '.join(marks)})")
+    return round(marks[mark] + off, 3)
+
+
 def concat(parts, out):
     lst = WORK / (Path(out).stem + ".txt")
     lst.write_text("".join(f"file '{p}'\n" for p in parts))
@@ -131,19 +141,20 @@ COMPARE = O / "retarget_compare" / "squat_jump" / "compare.mp4"
 GOAL = M / "docs" / "goal_relevance" / "squat_jump_hype_importance.png"
 SJ, KICK, LIVE, SHOW = (RAW / f"{n}.mp4" for n in ("build_sj", "build_kick", "live_upload", "showcase"))
 
-# cards
-card(WORK / "title.png", [("athlete2humanoid", 120, MONO, (255, 255, 255)),
-                          ("One phone video in. A humanoid that learns the move.", 40, SANS, (200, 200, 200))],
-     sub=True, foot=["Meta SAM 3.1 · SAM 3D Body · V-JEPA 2 · Muse Spark → PPO in mjlab → Unitree G1"])
-card(WORK / "end.png", [("athlete2humanoid", 120, MONO, (255, 255, 255)),
-                        ("Any video of a person moving can become robot training data.", 40, SANS, (200, 200, 200)),
-                        ("github.com/PandaGrdn/athlete2humanoid  ·  athlete2humanoid.pages.dev", 34, MONO, (76, 166, 255))],
-     sub=True, foot=["Code and weights are open", "Built with Meta SAM 3.1 · SAM 3D Body · V-JEPA 2 · Muse Spark"])
-card(WORK / "agent.png", [("Muse Spark as the reward agent", 64, MONO, (255, 255, 255)),
-                          ("Jumping jacks · 3 rounds · 900 PPO iterations", 36, SANS, (200, 200, 200)),
-                          ("V-JEPA 2 likeness  0.410 ± 0.008  vs  0.388 ± 0.017 without the agent", 40, MONO, (76, 166, 255)),
-                          ("start 0.357 · success and falls level · one training run per arm", 30, SANS, (150, 150, 150))],
-     sub=True)
+def cards():
+    card(WORK / "title.png", [("athlete2humanoid", 120, MONO, (255, 255, 255)),
+                              ("One phone video in. A humanoid that learns the move.", 40, SANS, (200, 200, 200))],
+         sub=True, foot=["Meta SAM 3.1 · SAM 3D Body · V-JEPA 2 · Muse Spark → PPO in mjlab → Unitree G1"])
+    card(WORK / "end.png", [("athlete2humanoid", 120, MONO, (255, 255, 255)),
+                            ("Any video of a person moving can become robot training data.", 40, SANS, (200, 200, 200)),
+                            ("github.com/PandaGrdn/athlete2humanoid  ·  athlete2humanoid.pages.dev", 34, MONO, (76, 166, 255))],
+         sub=True, foot=["Code and weights are open", "Built with Meta SAM 3.1 · SAM 3D Body · V-JEPA 2 · Muse Spark"])
+    card(WORK / "agent.png", [("Muse Spark as the reward agent", 64, MONO, (255, 255, 255)),
+                              ("Jumping jacks · 3 rounds · 900 PPO iterations", 36, SANS, (200, 200, 200)),
+                              ("V-JEPA 2 likeness  0.410 ± 0.008  vs  0.388 ± 0.017 without the agent", 40, MONO, (76, 166, 255)),
+                              ("start 0.357 · success and falls level · one training run per arm", 30, SANS, (150, 150, 150))],
+         sub=True)
+
 
 # left panels of the final renders, cropped so the % labels (shot 8's numbers) stay hidden
 PUSH_LEFT = "crop=880:670:40:120"
@@ -163,20 +174,20 @@ SHOTS = [
         dict(src=FROZEN, ss=0, to=4.0, pre=FROZEN_LEFT)],
         caps=[(5.2, 13.8, "A clip copier (tracking policy) shoved at 1.5 m/s"),
               (14.1, 17.9, "Same copier, clip frozen: it just stands")]),
-    dict(n=3, name="pipeline_build_sj", secs=18, segs=[dict(src=SJ, ss=0.8, to=18.8)],
-         caps=[(0.5, 4.5, "SAM 3.1 finds the person"), (4.6, 8.4, "SAM 3D Body: 17 joints in 3D"),
+    dict(n=3, name="pipeline_build_sj", secs=18, segs=[dict(src=SJ, ss=("replay", -0.2), to=("replay", 17.8))],
+         caps=[(0.5, 4.5, "SAM 3.1 finds the person"), (4.6, 8.4, "SAM 3D Body: 17 body joints shown"),
                (8.5, 11.8, "Retargeted onto the G1's 29 joints"),
                (11.9, 17.9, "Key moments named by Muse Spark: sink into squat · jump straight up")]),
     dict(n=4, name="retarget", secs=15, segs=[
-        dict(src=SJ, ss=21.3, to=27.3),
+        dict(src=SJ, ss=("orbit", -0.2), to=("orbit", 5.8)),
         dict(src=COMPARE, ss=0, to=9.0, pre=None, vf=FIT + "," + CMP_LABELS)],
-        caps=[(0.3, 5.8, "Rebuilt on the G1's own bone lengths · end-effector error 0.1 cm"),
+        caps=[(0.3, 5.8, "Rebuilt on the G1's own bone lengths · IK error 0.1 cm"),
               (6.2, 14.8, "Joint-angle error 2–10× lower (elbow 13.4° → 1.3°) · feet stay planted")]),
     dict(n=5, name="goal_relevance", secs=15, segs=[dict(still=GOAL, secs=15, zoom=True)],
          caps=[(0.5, 7.0, "V-JEPA 2 style reward, weighted by what the physics needs"),
                (7.4, 14.8, "Arm-waving: floor weight 0.1 · takeoff push and landing: 1.0")]),
     dict(n=6, name="reward_machine", secs=15, segs=[
-        dict(src=SJ, ss=27.9, to=33.2), dict(src=SJ, ss=47.1, to=56.8)],
+        dict(src=SJ, ss=("chip04", -0.3), to=("chip05", 0)), dict(src=SJ, ss=("scroll_timeline", -1.1), to=("end", 0))],
         caps=[(0.3, 5.1, "Each key moment is a stage of the reward"),
               (5.5, 14.8, "Reach the stages in order, own timing · a fall voids the attempt")]),
     dict(n=7, name="results_grid", secs=20, segs=[dict(src=GRID, ss=0, to=None, loop=1, hold=1.94)],
@@ -190,16 +201,16 @@ SHOTS = [
               (10.2, 21.8, "Shoved at 1.5 m/s: copier 14% · ours 81%"),
               (22.2, 31.8, "18 conditions × 64 rollouts per policy")]),
     dict(n=9, name="muse", secs=15, segs=[
-        dict(src=KICK, ss=28.0, to=33.0), dict(src=KICK, ss=49.6, to=55.6),
+        dict(src=KICK, ss=("chip04", -0.2), to=("chip04", 4.8)), dict(src=KICK, ss=("timeline", -0.2), to=("timeline", 5.8)),
         dict(still=WORK / "agent.png", secs=4)],
         caps=[(0.3, 10.8, "Muse Spark watches the clip and names its key moments"),
               (11.1, 14.9, "…then tunes the reward between training rounds")]),
     dict(n=10, name="live_and_end", secs=20, segs=[
-        dict(src=LIVE, ss=1.6, to=23.4, speed=3.63),
-        dict(src=KICK, ss=39.0, to=43.5),
-        dict(src=SHOW, ss=23.3, to=27.8),
+        dict(src=LIVE, ss=("upload", -0.4), to=("built", 0.3), fit=6.0),
+        dict(src=KICK, ss=("push1", -0.2), to=("push1", 4.3)),
+        dict(src=SHOW, ss=("push3", -0.25), to=("push3", 4.25)),
         dict(still=WORK / "end.png", secs=5)],
-        caps=[(0.2, 5.9, "Live: upload a phone clip · CPU build in ~21 s (shown 3.6×)"),
+        caps=[(0.2, 5.9, "Live: upload a phone clip · this CPU build took 21 s (shown 3.6×)"),
               (6.1, 14.9, "Push the trained robot yourself · recorded 1 m/s recoveries")]),
 ]
 
@@ -211,9 +222,10 @@ def build(shot):
         if "still" in s:
             still(s["still"], p, s["secs"], s.get("zoom", False))
         else:
-            pre = s.get("pre")
-            seg(p, s["src"], s.get("ss", 0), s.get("to"), vf=s.get("vf", FIT), speed=s.get("speed", 1.0),
-                hold=s.get("hold", 0), loop=s.get("loop", 0), pre=pre)
+            ss, to = at(s["src"], s.get("ss", 0)), at(s["src"], s.get("to"))
+            speed = (to - ss) / s["fit"] if "fit" in s else s.get("speed", 1.0)  # fit: play the trim in this many s
+            seg(p, s["src"], ss, to, vf=s.get("vf", FIT), speed=speed,
+                hold=s.get("hold", 0), loop=s.get("loop", 0), pre=s.get("pre"))
         parts.append(p)
     out = KIT / f"shot{shot['n']:02d}_{shot['name']}.mp4"
     tmp = WORK / f"shot{shot['n']:02d}_cat.mp4"
@@ -224,6 +236,8 @@ def build(shot):
 
 if __name__ == "__main__":
     only = {int(a) for a in sys.argv[1:]}
+    WORK.mkdir(parents=True, exist_ok=True)
+    cards()
     report = []
     capped = []
     for sh in SHOTS:
