@@ -45,6 +45,8 @@ export type Clip = {
   side_by_side: FileRef | null;
   silhouette: FileRef | null;
   motion_csv: FileRef | null;
+  frontend?: string | null; // the pose model that ran: "sam3d" (SAM 3D Body) or MediaPipe otherwise
+  skeleton?: FileRef | null; // human.npy: the 3D pose the retarget read, (T, 33, 3)
 };
 
 export type RobustCell = {
@@ -134,6 +136,7 @@ export type RunDetail = RunSummary & {
   robust: Robust | null;
   clips: Clip[];
   downloads: FileRef[];
+  variants?: FileRef | null; // variants.json (scripts/build_variants_view.py)
 };
 
 export type StageState = {
@@ -188,10 +191,27 @@ export type LiveData = {
   pose_found: number | null;
   // which 3D pose model ran (server/live_worker.py): "MediaPipe" on the CPU, "SAM 3D Body" in recorded builds
   pose_model?: string;
+  // The 3D skeleton the retarget read (the landmarks' joints): metres, z up, the athlete facing +x.
+  skeleton?: { names: string[]; edges: [number, number][]; frames: ([number, number, number] | null)[][] } | null;
   // G1 bodies in metres, world frame, z up.
   robot: { names: string[]; edges: [number, number][]; frames: [number, number, number][][] } | null;
+  qpos?: number[][] | null; // the retarget: G1 qpos (root xyz, quaternion wxyz, 29 joints) per frame
+  variants?: VariantsView | null; // skill/variations.py's preview, after the environment
   retarget_error_cm: Record<string, [number, number]> | null;
   timings_s: Record<string, number>;
+};
+
+/** A clip's variants as the build view shows them (skill/variations.py preview): every variant's verdict, and
+ *  a few kept ones' qpos (at their own fps) to draw as ghosts. */
+export type VariantsView = {
+  total: number;
+  kept: number;
+  rows: { name: string; params: { mirror: boolean; tempo: number; amplitude: number; warp: number }; frames: number; ok: boolean; rules: string[]; why: string }[];
+  ghosts: { name: string; label: string; fps: number; qpos: number[][] }[];
+  source?: string; // stored runs: the variants run it comes from, or "generated"
+  trained_on?: boolean;
+  policies?: string[];
+  clip?: string;
 };
 
 /** A path the API serves (/api/...) on the API's origin; the site's own static files (/examples, /live-demo, ...) stay here. */

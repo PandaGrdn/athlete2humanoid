@@ -5,6 +5,8 @@ import { blend, newQpos, sample, type Frames, type Loaded, type Moment, type Pus
 // The showcase's 3D view and its player. The robot is posed every frame from recorded qpos (forward
 // kinematics here, from the MJCF's kinematic tree): the policy's unpushed run, or, after a click, the
 // recorded run of the same policy pushed at that moment in that direction. Nothing is simulated here.
+// Stage (renderer, camera, lights, floor), G1 and PolicyActor (a policy and its recorded pushes) are shared
+// with the build view (buildview/scene.ts).
 
 export type PushState = {
   status: "queued" | "live" | "rejoined" | "fell";
@@ -17,7 +19,7 @@ export type PushState = {
 };
 export type PlayerState = { t: number; playing: boolean; speed: number; push: PushState | null; ghost: boolean; ready: boolean; note: string | null };
 
-const UP_FIX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2); // MuJoCo z-up -> three y-up
+export const UP_FIX = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2); // MuJoCo z-up -> three y-up
 const FADE_FRAMES = 15; // a rejoin eases the last few cm back onto the unpushed run over 0.3 s
 const FALL_HOLD_MS = 900;
 const TARGET_Y = 0.66; // the camera orbits a point at the robot's hips
@@ -25,7 +27,7 @@ const MIN_LEAD = 6; // frames between a click and its push: the crossfade into t
 
 type Pose = { pos: THREE.Vector3[]; quat: THREE.Quaternion[] };
 
-class G1 {
+export class G1 {
   readonly group = new THREE.Group();
   readonly bodies: THREE.Group[] = [];
   readonly meshes: THREE.Mesh[] = [];
@@ -80,9 +82,14 @@ class G1 {
   }
 
   root() { return this.pose.pos[0]; }
+  /** A body's position (MuJoCo frame, the robot's own group) after the last set(), by name. */
+  body(name: string) {
+    const i = this.robot.bodies.findIndex((b) => b.name === name);
+    return i >= 0 ? this.pose.pos[i] : null;
+  }
 }
 
-function geometries(robot: Robot) {
+export function geometries(robot: Robot) {
   return robot.parts.map((p) => {
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(robot.pos.slice(p.v[0] * 3, (p.v[0] + p.v[1]) * 3), 3));
@@ -92,6 +99,11 @@ function geometries(robot: Robot) {
     return g;
   });
 }
+
+export const solidMaterials = () => ({
+  light: new THREE.MeshStandardMaterial({ color: 0xd8d8d8, roughness: 0.42, metalness: 0.15 }),
+  dark: new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 0.55, metalness: 0.25 }),
+});
 
 /** The halo of the aether design, engraved on the floor: rings and radiating hairlines around the robot. */
 function floorHalo() {
@@ -137,36 +149,24 @@ function floorHalo() {
   return g;
 }
 
-export class ShowcasePlayer {
-  state: PlayerState = { t: 0, playing: true, speed: 1, push: null, ghost: false, ready: false, note: null };
-  private listeners = new Set<() => void>();
-  private renderer: THREE.WebGLRenderer;
-  private scene = new THREE.Scene();
-  private camera = new THREE.PerspectiveCamera(32, 1, 0.05, 60);
-  private controls: OrbitControls;
-  private world = new THREE.Group();
-  private robot: G1;
-  private ghost: G1;
-  private key: THREE.DirectionalLight;
-  private arrow: THREE.Group;
-  private ripple: THREE.Mesh;
-  private f = 0; // current frame (fractional, 50 Hz)
+/** The black exhibit: renderer, camera with orbit controls, lights, a shadowed floor with its grid, and the
+ *  render loop (paused while off screen). Subclasses add actors to `world` (MuJoCo frame) and move them in update(). */
+export class Stage {
+  protected renderer: THREE.WebGLRenderer;
+  protected scene = new THREE.Scene();
+  protected camera = new THREE.PerspectiveCamera(32, 1, 0.05, 60);
+  protected controls: OrbitControls;
+  protected world = new THREE.Group();
+  protected key: THREE.DirectionalLight;
+  protected halo: THREE.Group;
   private last = 0;
   private raf = 0;
   private visible = true;
-  private q = newQpos();
-  private q2 = newQpos();
-  // a recording starts a few frames before its push (pre-roll, its own env's run): blended into from b0 on
-  private pushed: { m: Moment; r: PushRow; frames: Frames | null; loopAhead: boolean; b0: number | null } | null = null;
-  private fade: { delta: Float32Array; from: number } | null = null;
-  private fellAt = 0;
-  private fx = { arrowAt: -1e9, rippleAt: -1e9 };
-  private down: { x: number; y: number; t: number } | null = null;
   private ro: ResizeObserver;
   private io: IntersectionObserver;
+  private wheelRoot: HTMLElement;
 
-  constructor(private canvas: HTMLCanvasElement, private data: Loaded, mps: number) {
-    this.mps = mps;
+  constructor(protected canvas: HTMLCanvasElement, opts: { maxDistance?: number; shadowBox?: number } = {}) {
     const r = (this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: "high-performance" }));
     r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     r.outputColorSpace = THREE.SRGBColorSpace;
@@ -183,7 +183,8 @@ export class ShowcasePlayer {
     key.position.set(2.2, 4, 2.6);
     key.castShadow = true;
     key.shadow.mapSize.set(1024, 1024);
-    Object.assign(key.shadow.camera, { left: -2.5, right: 2.5, top: 2.5, bottom: -2.5, near: 0.5, far: 12 });
+    const b = opts.shadowBox ?? 2.5;
+    Object.assign(key.shadow.camera, { left: -b, right: b, top: b, bottom: -b, near: 0.5, far: 12 });
     key.shadow.bias = -0.0004;
     key.shadow.radius = 4;
     this.scene.add(key, key.target);
@@ -199,18 +200,116 @@ export class ShowcasePlayer {
     (grid.material as THREE.Material).transparent = true;
     (grid.material as THREE.Material).opacity = 0.7;
     this.world.add(grid);
-    this.world.add(floorHalo());
+    this.halo = floorHalo();
+    this.world.add(this.halo);
 
-    const geoms = geometries(data.robot);
-    const solid = {
-      light: new THREE.MeshStandardMaterial({ color: 0xd8d8d8, roughness: 0.42, metalness: 0.15 }),
-      dark: new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 0.55, metalness: 0.25 }),
-    };
+    const c = (this.controls = new OrbitControls(this.camera, canvas));
+    c.enableDamping = true;
+    c.dampingFactor = 0.08;
+    c.enablePan = false;
+    c.minDistance = 1.3;
+    c.maxDistance = opts.maxDistance ?? 7;
+    c.minPolarAngle = 0.15;
+    c.maxPolarAngle = Math.PI / 2 - 0.04;
+    c.rotateSpeed = 0.7;
+    c.zoomSpeed = 0.8;
+
+    // A plain wheel / two-finger swipe scrolls the page; only a pinch (a trackpad pinch is a ctrl+wheel) or
+    // ctrl/cmd+wheel zooms. Caught on the way down, before OrbitControls sees it.
+    this.wheelRoot = canvas.parentElement ?? canvas;
+    this.wheelRoot.addEventListener("wheel", this.onWheel, { capture: true });
+    this.ro = new ResizeObserver(() => this.resize());
+    this.ro.observe(canvas.parentElement ?? canvas);
+    this.io = new IntersectionObserver(([e]) => { this.visible = e.isIntersecting; });
+    this.io.observe(canvas);
+  }
+
+  /** Point the camera at `target` (three's frame) from `target + offset`. */
+  protected frame(target: THREE.Vector3, offset: THREE.Vector3) {
+    this.controls.target.copy(target);
+    this.camera.position.copy(target).add(offset);
+    this.controls.update();
+  }
+
+  /** Call at the end of a subclass's constructor: sizes the canvas and starts the loop. */
+  protected start() {
+    this.resize();
+    this.last = performance.now();
+    this.raf = requestAnimationFrame(this.tick);
+  }
+
+  /** Once per animation frame while on screen: dt in seconds (capped), now from performance.now(). */
+  protected update(_dt: number, _now: number) {}
+
+  private onWheel = (e: WheelEvent) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation(); };
+
+  private tick = (now: number) => {
+    this.raf = requestAnimationFrame(this.tick);
+    const dt = Math.max(0, Math.min(0.1, (now - this.last) / 1000)); // a frame's timestamp can predate the constructor
+    this.last = now;
+    if (!this.visible || document.hidden) return;
+    this.update(dt, now);
+    this.controls.update();
+    this.renderer.render(this.scene, this.camera);
+  };
+
+  protected resize() {
+    const el = this.canvas.parentElement ?? this.canvas;
+    const w = el.clientWidth;
+    const h = el.clientHeight;
+    if (!w || !h) return;
+    this.renderer.setSize(w, h, false);
+    this.camera.aspect = w / h;
+    this.camera.fov = w < 560 ? 40 : 32;
+    this.camera.updateProjectionMatrix();
+  }
+
+  dispose() {
+    cancelAnimationFrame(this.raf);
+    this.ro.disconnect();
+    this.io.disconnect();
+    this.wheelRoot.removeEventListener("wheel", this.onWheel, { capture: true });
+    this.controls.dispose();
+    this.scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      m.geometry?.dispose();
+      const mat = m.material as THREE.Material | THREE.Material[] | undefined;
+      (Array.isArray(mat) ? mat : mat ? [mat] : []).forEach((x) => {
+        (x as THREE.MeshBasicMaterial).map?.dispose();
+        x.dispose();
+      });
+    });
+    this.renderer.dispose();
+  }
+}
+
+/** A trained policy's recorded run and its recorded pushes, on its own 50 Hz clock: the robot (and the
+ *  retarget as a ghost) in `group` (MuJoCo frame), the push arrow with it, and the click ripple (three's frame,
+ *  for the host's scene). The host feeds it time (update) and clicks (push). */
+export class PolicyActor {
+  state: PlayerState = { t: 0, playing: true, speed: 1, push: null, ghost: false, ready: false, note: null };
+  readonly group = new THREE.Group();
+  readonly robot: G1;
+  readonly ghost: G1;
+  readonly ripple: THREE.Mesh;
+  private listeners = new Set<() => void>();
+  private arrow: THREE.Group;
+  private f = 0; // current frame (fractional, 50 Hz)
+  private q = newQpos();
+  private q2 = newQpos();
+  // a recording starts a few frames before its push (pre-roll, its own env's run): blended into from b0 on
+  private pushed: { m: Moment; r: PushRow; frames: Frames | null; loopAhead: boolean; b0: number | null } | null = null;
+  private fade: { delta: Float32Array; from: number } | null = null;
+  private fellAt = 0;
+  private fx = { arrowAt: -1e9, rippleAt: -1e9 };
+  private lastPrefetch = 0;
+
+  constructor(readonly data: Loaded, private mps: number, geoms = geometries(data.robot)) {
     const ghostMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.1, depthWrite: false });
-    this.robot = new G1(data.robot, geoms, solid, true);
+    this.robot = new G1(data.robot, geoms, solidMaterials(), true);
     this.ghost = new G1(data.robot, geoms, { light: ghostMat, dark: ghostMat }, false);
     this.ghost.group.visible = false;
-    this.world.add(this.robot.group, this.ghost.group);
+    this.group.add(this.robot.group, this.ghost.group);
 
     // the push arrow (along +x in its own frame, laid on the floor plane at pelvis height) and the click ripple
     this.arrow = new THREE.Group();
@@ -222,46 +321,13 @@ export class ShowcasePlayer {
     head.rotation.z = -Math.PI / 2;
     head.position.x = 0.2;
     this.arrow.add(shaft, head);
-    this.world.add(this.arrow);
+    this.group.add(this.arrow);
     this.ripple = new THREE.Mesh(new THREE.RingGeometry(0.03, 0.036, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
-    this.scene.add(this.ripple);
 
     sample(data.nominal, 0, this.q);
     this.robot.set(this.q);
-    const root = this.robot.root();
-    const target = new THREE.Vector3(root.x, TARGET_Y, -root.y);
-    this.camera.position.set(target.x + 2.5, 1.35, target.z + 3.1);
-    const c = (this.controls = new OrbitControls(this.camera, canvas));
-    c.target.copy(target);
-    c.enableDamping = true;
-    c.dampingFactor = 0.08;
-    c.enablePan = false;
-    c.minDistance = 1.3;
-    c.maxDistance = 7;
-    c.minPolarAngle = 0.15;
-    c.maxPolarAngle = Math.PI / 2 - 0.04;
-    c.rotateSpeed = 0.7;
-    c.zoomSpeed = 0.8;
-    c.update();
-
-    canvas.addEventListener("pointerdown", this.onDown);
-    canvas.addEventListener("pointerup", this.onUp);
-    // A plain wheel / two-finger swipe scrolls the page; only a pinch (a trackpad pinch is a ctrl+wheel) or
-    // ctrl/cmd+wheel zooms. Caught on the way down, before OrbitControls sees it.
-    this.wheelRoot = canvas.parentElement ?? canvas;
-    this.wheelRoot.addEventListener("wheel", this.onWheel, { capture: true });
-    canvas.addEventListener("pointermove", this.onMove);
-    this.ro = new ResizeObserver(() => this.resize());
-    this.ro.observe(canvas.parentElement ?? canvas);
-    this.io = new IntersectionObserver(([e]) => { this.visible = e.isIntersecting; });
-    this.io.observe(canvas);
-    this.resize();
     this.state = { ...this.state, ready: true };
-    this.last = performance.now();
-    this.raf = requestAnimationFrame(this.tick);
   }
-
-  private mps: number;
 
   // --- the UI's side ------------------------------------------------------------------------------
   subscribe = (fn: () => void) => { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; };
@@ -275,6 +341,7 @@ export class ShowcasePlayer {
   setSpeed(speed: number) { this.emit({ speed }); }
   setStrength(mps: number) { this.mps = mps; }
   clearNote() { if (this.state.note) this.emit({ note: null }); }
+  note(note: string) { this.emit({ note }); }
   setGhost(ghost: boolean) { this.ghost.group.visible = ghost; this.emit({ ghost }); }
   /** Seek (seconds). Any push in progress ends: the recordings start from the unpushed run. */
   seek(t: number) {
@@ -284,63 +351,16 @@ export class ShowcasePlayer {
     this.emit({ t: this.f / this.data.show.fps, push: null, note: null });
   }
 
-  /** Push from the camera's side (the keyboard / button route to the same recordings). */
-  pushFromView() {
-    const d = new THREE.Vector3();
-    this.camera.getWorldDirection(d);
-    this.push(Math.atan2(-d.z, d.x), null);
-  }
-
-  dispose() {
-    cancelAnimationFrame(this.raf);
-    this.ro.disconnect();
-    this.io.disconnect();
-    this.canvas.removeEventListener("pointerdown", this.onDown);
-    this.canvas.removeEventListener("pointerup", this.onUp);
-    this.wheelRoot.removeEventListener("wheel", this.onWheel, { capture: true });
-    this.canvas.removeEventListener("pointermove", this.onMove);
-    this.controls.dispose();
-    this.scene.traverse((o) => {
-      const m = o as THREE.Mesh;
-      m.geometry?.dispose();
-      const mat = m.material as THREE.Material | THREE.Material[] | undefined;
-      (Array.isArray(mat) ? mat : mat ? [mat] : []).forEach((x) => x.dispose());
-    });
-    this.renderer.dispose();
-  }
-
-  // --- input --------------------------------------------------------------------------------------
-  private onDown = (e: PointerEvent) => {
-    this.down = { x: e.clientX, y: e.clientY, t: performance.now() };
-    this.data.pushes.prefetch(Math.floor(this.f) + MIN_LEAD);
-  };
-  private lastPrefetch = 0;
-  private onMove = () => {
+  /** Warm the cache for the next push moments (a click may follow); at most every 150 ms. */
+  prefetch(force = false) {
     const now = performance.now();
-    if (now - this.lastPrefetch < 150) return;
+    if (!force && now - this.lastPrefetch < 150) return;
     this.lastPrefetch = now;
     this.data.pushes.prefetch(Math.floor(this.f) + MIN_LEAD);
-  };
-  private wheelRoot: HTMLElement;
-  private onWheel = (e: WheelEvent) => { if (!e.ctrlKey && !e.metaKey) e.stopPropagation(); };
-  private onUp = (e: PointerEvent) => {
-    const d = this.down;
-    this.down = null;
-    if (!d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 7 || performance.now() - d.t > 450) return; // a drag
-    const rect = this.canvas.getBoundingClientRect();
-    const ndc = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
-    const ray = new THREE.Raycaster();
-    ray.setFromCamera(ndc, this.camera);
-    const hit = ray.intersectObjects(this.robot.meshes, false)[0];
-    if (!hit) {
-      this.emit({ note: "Click the robot itself to push it." });
-      return;
-    }
-    const dir = ray.ray.direction;
-    this.push(Math.atan2(-dir.z, dir.x), hit.point);
-  };
+  }
 
-  private push(angle: number, at: THREE.Vector3 | null) {
+  /** Push toward `angle` (rad, MuJoCo world frame); `at` (three's frame) is where the click landed, for the ripple. */
+  push(angle: number, at: THREE.Vector3 | null) {
     const s = this.state.push;
     if (s && (s.status === "live" || (s.status === "fell"))) {
       this.emit({ note: "Each recording starts from the unpushed run: wait until it has recovered." });
@@ -364,12 +384,8 @@ export class ShowcasePlayer {
     if (!this.state.playing) this.emit({ playing: true });
   }
 
-  // --- the clock ----------------------------------------------------------------------------------
-  private tick = (now: number) => {
-    this.raf = requestAnimationFrame(this.tick);
-    const dt = Math.max(0, Math.min(0.1, (now - this.last) / 1000)); // a frame's timestamp can predate the constructor
-    this.last = now;
-    if (!this.visible || document.hidden) return;
+  /** Advance the clock by dt seconds and pose the robot (and the ghost, if shown). */
+  update(dt: number, now: number, camera: THREE.Camera) {
     const { fps, frames } = this.data.show;
     const p = this.pushed;
     const s = this.state.push;
@@ -446,28 +462,15 @@ export class ShowcasePlayer {
       sample(this.data.reference, this.f, this.q2);
       this.ghost.set(this.q2);
     }
-    this.follow();
-    this.effects(now);
+    this.effects(now, camera);
     if (Math.abs(this.f / fps - this.state.t) > 1 / 30 || this.f / fps < this.state.t) this.emit({ t: this.f / fps });
-    this.controls.update();
-    this.renderer.render(this.scene, this.camera);
-  };
-
-  private follow() {
-    const root = this.robot.root();
-    const want = new THREE.Vector3(root.x, TARGET_Y, -root.y);
-    const delta = want.sub(this.controls.target).multiplyScalar(0.06);
-    this.controls.target.add(delta);
-    this.camera.position.add(delta);
-    this.key.target.position.set(root.x, 0, -root.y);
-    this.key.position.set(root.x + 2.2, 4, -root.y + 2.6);
   }
 
-  private effects(now: number) {
+  private effects(now: number, camera: THREE.Camera) {
     const ra = (now - this.fx.rippleAt) / 700;
     const rm = this.ripple.material as THREE.MeshBasicMaterial;
     if (ra >= 0 && ra < 1) {
-      this.ripple.quaternion.copy(this.camera.quaternion);
+      this.ripple.quaternion.copy(camera.quaternion);
       this.ripple.scale.setScalar(1 + ra * 3.2);
       rm.opacity = 0.9 * (1 - ra);
     } else rm.opacity = 0;
@@ -481,15 +484,94 @@ export class ShowcasePlayer {
       am.opacity = aa < 0 ? 0.5 * (1 + aa / 0.6) : 0.95 * (1 - aa);
     } else am.opacity = 0;
   }
+}
 
-  private resize() {
-    const el = this.canvas.parentElement ?? this.canvas;
-    const w = el.clientWidth;
-    const h = el.clientHeight;
-    if (!w || !h) return;
-    this.renderer.setSize(w, h, false);
-    this.camera.aspect = w / h;
-    this.camera.fov = w < 560 ? 40 : 32;
-    this.camera.updateProjectionMatrix();
+/** A click (not a drag) on a canvas: calls `onClick` with the ray through that point. */
+export function clickRays(canvas: HTMLCanvasElement, camera: THREE.Camera, onDown: () => void, onClick: (ray: THREE.Raycaster) => void) {
+  let down: { x: number; y: number; t: number } | null = null;
+  const pd = (e: PointerEvent) => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; onDown(); };
+  const pu = (e: PointerEvent) => {
+    const d = down;
+    down = null;
+    if (!d || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 7 || performance.now() - d.t > 450) return; // a drag
+    const rect = canvas.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(ndc, camera);
+    onClick(ray);
+  };
+  canvas.addEventListener("pointerdown", pd);
+  canvas.addEventListener("pointerup", pu);
+  return () => {
+    canvas.removeEventListener("pointerdown", pd);
+    canvas.removeEventListener("pointerup", pu);
+  };
+}
+
+/** A three.js direction -> its heading in MuJoCo's world frame (rad). */
+export const heading = (d: THREE.Vector3) => Math.atan2(-d.z, d.x);
+
+export class ShowcasePlayer extends Stage {
+  private actor: PolicyActor;
+  private unclick: () => void;
+
+  constructor(canvas: HTMLCanvasElement, data: Loaded, mps: number) {
+    super(canvas);
+    const a = (this.actor = new PolicyActor(data, mps));
+    this.world.add(a.group);
+    this.scene.add(a.ripple);
+
+    const root = a.robot.root();
+    const target = new THREE.Vector3(root.x, TARGET_Y, -root.y);
+    this.frame(target, new THREE.Vector3(2.5, 1.35 - TARGET_Y, 3.1));
+
+    this.unclick = clickRays(canvas, this.camera, () => a.prefetch(true), (ray) => {
+      const hit = ray.intersectObjects(a.robot.meshes, false)[0];
+      if (!hit) return a.note("Click the robot itself to push it.");
+      a.push(heading(ray.ray.direction), hit.point);
+    });
+    canvas.addEventListener("pointermove", this.onMove);
+    this.start();
+  }
+
+  // --- the UI's side: the actor's ----------------------------------------------------------------
+  get state() { return this.actor.state; }
+  subscribe = (fn: () => void) => this.actor.subscribe(fn);
+  getState = () => this.actor.state;
+  setPlaying(playing: boolean) { this.actor.setPlaying(playing); }
+  setSpeed(speed: number) { this.actor.setSpeed(speed); }
+  setStrength(mps: number) { this.actor.setStrength(mps); }
+  clearNote() { this.actor.clearNote(); }
+  setGhost(ghost: boolean) { this.actor.setGhost(ghost); }
+  seek(t: number) { this.actor.seek(t); }
+
+  /** Push from the camera's side (the keyboard / button route to the same recordings). */
+  pushFromView() {
+    const d = new THREE.Vector3();
+    this.camera.getWorldDirection(d);
+    this.actor.push(heading(d), null);
+  }
+
+  dispose() {
+    this.unclick();
+    this.canvas.removeEventListener("pointermove", this.onMove);
+    super.dispose();
+  }
+
+  private onMove = () => this.actor.prefetch();
+
+  protected update(dt: number, now: number) {
+    this.actor.update(dt, now, this.camera);
+    this.follow();
+  }
+
+  private follow() {
+    const root = this.actor.robot.root();
+    const want = new THREE.Vector3(root.x, TARGET_Y, -root.y);
+    const delta = want.sub(this.controls.target).multiplyScalar(0.06);
+    this.controls.target.add(delta);
+    this.camera.position.add(delta);
+    this.key.target.position.set(root.x, 0, -root.y);
+    this.key.position.set(root.x + 2.2, 4, -root.y + 2.6);
   }
 }

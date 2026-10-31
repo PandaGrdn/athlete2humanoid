@@ -1,0 +1,121 @@
+/* The 3D build view (buildview/BuildView.tsx). The stage is one black exhibit in every design, as on the showcase:
+   inside it the colour variables are redefined for ink-on-black, so each design's buttons and type keep their own
+   shapes (Pixel's square offset shadows, Aurora's and Aether's pills) with light-on-dark colours. */
+
+.bv { margin: 8px 0 28px; }
+
+/* --- the stage rail: six chips, one per pipeline stage --------------------------------------------- */
+.bv-rail { list-style: none; margin: 0 0 10px; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.bv-chip { width: 100%; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: baseline;
+  text-align: left; padding: 9px 11px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-1, transparent);
+  color: var(--text-3); font: inherit; cursor: pointer; transition: border-color 0.2s, color 0.2s, background 0.2s; }
+.bv-chip:disabled { cursor: default; }
+.bv-n { grid-row: span 2; font-size: 11px; opacity: 0.8; }
+.bv-l { font-size: 13.5px; font-weight: 600; color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bv-s { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.75; }
+.bv-chip.working { color: var(--text-2); border-color: rgba(var(--accent-rgb), 0.6); }
+.bv-chip.working .bv-s::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%;
+  background: var(--accent); vertical-align: 1px; animation: bv-blink 1s steps(2, start) infinite; }
+.bv-chip.ready, .bv-chip.offer { color: var(--text); border-color: var(--border-strong); }
+.bv-chip.missing { opacity: 0.55; }
+.bv-chip.missing .bv-l { text-decoration: line-through; }
+.bv-chip.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.bv-chip:not(:disabled):hover { border-color: var(--text); }
+@keyframes bv-blink { to { visibility: hidden; } }
+
+/* --- the stage ------------------------------------------------------------------------------------ */
+.bv-stage {
+  --text: #f2f4f6; --text-2: rgba(242, 244, 246, 0.74); --text-3: rgba(242, 244, 246, 0.5); --bg: #000;
+  --surface-1: rgba(255, 255, 255, 0.04); --surface-2: rgba(255, 255, 255, 0.08); --surface-3: rgba(255, 255, 255, 0.14);
+  --border: rgba(255, 255, 255, 0.22); --border-strong: rgba(255, 255, 255, 0.4);
+  position: relative; height: min(74svh, 720px); min-height: 500px; overflow: hidden; color: var(--text);
+  background: radial-gradient(70% 60% at 50% 48%, #121212 0%, #050505 55%, #000 100%);
+  border: 1px solid #000; border-radius: var(--radius); }
+.bv-view { position: absolute; inset: 0; }
+.bv-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; outline: none; }
+.bv-canvas:active { cursor: grabbing; }
+.bv-empty { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-3); }
+.bv-empty .dot { display: inline-block; margin-right: 10px; vertical-align: middle; }
+.bv-kicker { position: absolute; top: 14px; left: 16px; font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-3);
+  pointer-events: none; max-width: 46%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.bv-media { position: absolute; top: 40px; left: 16px; display: flex; gap: 8px; align-items: flex-start; }
+.bv-pip { margin: 0; width: clamp(92px, 11vw, 158px); }
+.bv-mask { width: clamp(70px, 8vw, 116px); }
+.bv-crop { position: relative; overflow: hidden; background: #000; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); }
+.bv-crop video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.bv-crop .live-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.bv-pip figcaption { margin-top: 6px; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-2); }
+
+.bv-caption { position: absolute; top: 14px; right: 16px; width: min(380px, 42%); padding: 12px 14px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: rgba(0, 0, 0, 0.62); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.bv-cap-k { display: block; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px; }
+.bv-caption p { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--text); }
+.bv-caption .bv-note { margin-top: 8px; font-size: 12px; color: var(--text-2); }
+
+.bv-offer { position: absolute; left: 50%; bottom: 118px; transform: translateX(-50%); width: min(460px, calc(100% - 32px)); padding: 14px 16px;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: rgba(0, 0, 0, 0.72); text-align: center; }
+.bv-offer p { margin: 0 0 10px; font-size: 13.5px; color: var(--text-2); }
+.bv-offer strong { color: var(--text); }
+
+.bv-policy { position: absolute; right: 16px; bottom: 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; max-width: calc(100% - 200px); }
+.bv-badge { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; padding: 4px 8px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--text); }
+.bv-badge.pre { border-color: #e0a43a; color: #f3c46d; }
+[data-ui="pixel"] .bv-badge { border-radius: 0; }
+.bv-seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.bv-seg button { background: transparent; border: 0; color: var(--text-2); padding: 0 10px; height: 30px; font: inherit; font-size: 12.5px; cursor: pointer; }
+.bv-seg button.on { background: var(--text); color: var(--bg); }
+.bv-seg button + button { border-left: 1px solid var(--border); }
+.bv-push { flex-basis: 100%; text-align: right; font-size: 11px; color: var(--text-2); }
+
+.bv-play { position: absolute; left: 16px; bottom: 16px; display: flex; gap: 12px; align-items: center; }
+.bv-play .btn { gap: 8px; }
+.bv-hint { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
+
+/* --- under the stage: the key moments' timeline and the variants ---------------------------------------- */
+.bv-below { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 20px; margin-top: 20px; align-items: start; }
+.bv-variants p { margin: 6px 0 10px; }
+.bv-why { display: flex; flex-wrap: wrap; gap: 6px; }
+.bv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); gap: 4px; margin-bottom: 10px; }
+.bv-cell { display: flex; flex-direction: column; gap: 1px; padding: 4px 6px; font-size: 11px; border: 1px solid var(--border); border-radius: 4px; }
+.bv-cell.ok { border-color: var(--border-strong); }
+.bv-cell.no { border-style: dashed; color: var(--bad); }
+.bv-cell.m { background: var(--surface-2); }
+[data-ui="pixel"] :is(.bv-chip, .bv-crop, .bv-caption, .bv-offer, .bv-seg, .bv-cell, .bv-stage) { border-radius: 0; }
+[data-ui="pixel"] .bv-chip { border-color: var(--px-ink); }
+[data-ui="pixel"] .bv-chip.waiting { border-color: var(--px-rule); }
+[data-ui="pixel"] .bv-chip.working { box-shadow: inset 0 0 0 2px var(--px-signal); border-color: var(--px-ink); }
+[data-ui="pixel"] .bv-chip.working .bv-s::before { border-radius: 0; background: var(--px-signal); }
+
+@media (max-width: 900px) {
+  .bv-below { grid-template-columns: 1fr; }
+  .bv-rail { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  /* a phone: the 3D view on top, the caption and the policy's controls under it */
+  .bv-stage { height: auto; min-height: 0; }
+  .bv-view { position: relative; inset: auto; height: 460px; }
+  .bv-hud { display: flex; flex-direction: column; gap: 10px; padding: 0 10px 12px; }
+  .bv-hud > * { position: static; transform: none; width: auto; max-width: none; left: auto; right: auto; top: auto; bottom: auto; }
+  .bv-media { top: 32px; left: 10px; }
+  .bv-pip { width: 84px; }
+  .bv-mask { width: 62px; }
+  .bv-caption p { font-size: 12.5px; }
+  .bv-kicker { left: 10px; max-width: calc(100% - 20px); }
+  .bv-policy { justify-content: flex-start; }
+  .bv-push { text-align: left; }
+  .bv-play { left: 10px; bottom: 10px; }
+  .bv-hint { display: none; }
+  .bv-chip { padding: 7px 8px; }
+  .bv-l { font-size: 12.5px; }
+}
+@media (prefers-reduced-motion: reduce) { .bv-chip.working .bv-s::before { animation: none; } }
+
+/* the key moment just passed, over the floor */
+.bv-moment { position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px;
+  pointer-events: none; text-align: center; animation: bv-pop 0.9s ease-out both; }
+.bv-moment span { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8fd0f5; }
+.bv-moment strong { font-size: 17px; font-weight: 600; color: var(--text); text-shadow: 0 1px 12px #000; }
+@keyframes bv-pop { 0% { opacity: 0; transform: translate(-50%, 6px); } 15% { opacity: 1; transform: translate(-50%, 0); } 80% { opacity: 1; } 100% { opacity: 0; } }
+@media (max-width: 640px) { .bv-moment { bottom: 54px; } .bv-moment strong { font-size: 14px; } }
+@media (prefers-reduced-motion: reduce) { .bv-moment { animation: none; } }

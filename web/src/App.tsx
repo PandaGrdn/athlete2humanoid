@@ -12,8 +12,9 @@ import LivePage, { LiveReplayPage } from "./pages/LivePage";
 import RunPage from "./pages/RunPage";
 import { UiCtx, useUi } from "./theme";
 
-// three.js only loads with the showcase
+// three.js only loads with the showcase and the 3D build view
 const Showcase = lazy(() => import("./pages/Showcase"));
+const BuildPage = lazy(() => import("./pages/BuildPage"));
 const ShowcaseFallback = <div className="sc-stage-skeleton skeleton" style={{ height: "min(calc(100svh - 68px), 900px)" }} />;
 
 /** The old /examples/:id links: the examples now live under /research. */
@@ -91,6 +92,7 @@ export default function App() {
           <Route path="/live/demo/:demoId" element={<LiveReplayPage />} />
           <Route path="/live/:id?" element={<LivePage />} />
           <Route path="/jobs/:id" element={<JobPage />} />
+          <Route path="/build/:rid" element={<Suspense fallback={<div className="container section"><div className="skeleton" style={{ height: 520 }} /></div>}><BuildPage /></Suspense>} />
           <Route path="/runs/:id" element={<RunPage />} />
           <Route path="/showcase/:clip?" element={<Suspense fallback={ShowcaseFallback}><Showcase /></Suspense>} />
           <Route path="/research" element={<ExamplesIndex />} />

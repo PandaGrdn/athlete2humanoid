@@ -146,11 +146,14 @@ def _clips(folder, rid, target):
             "name": c.name, "is_target": c.name == target,
             "fps": _num(meta.get("fps")), "frames": _num(meta.get("frames")),
             "view_azimuth": _num(meta.get("view_azimuth")), "sam": meta.get("sam"),
+            "frontend": _text(meta.get("frontend"), 40),
             "retarget_error_cm": errs,
             "retarget_error_mean_cm": round(sum(errs.values()) / len(errs), 2) if errs else None,
             "side_by_side": _file(folder, rid, f"{rel}/side_by_side.mp4"),
             "silhouette": _file(folder, rid, f"{rel}/silhouette.mp4"),
             "motion_csv": _file(folder, rid, f"{rel}/motion.csv", f"{c.name}_motion.csv", "motion"),
+            # the 3D pose the retarget read (T, 33, 3), for the build view's skeleton
+            "skeleton": _file(folder, rid, f"{rel}/human.npy", f"{c.name}_human.npy", "skeleton"),
         })
     out.sort(key=lambda c: (not c["is_target"], c["name"]))
     return out
@@ -212,7 +215,7 @@ def summarize(runs_dir, rid, folder, detail=False):
     st = read_json(folder / "status.json") or {}
     cmd = " ".join(st.get("cmd") or []) if isinstance(st.get("cmd"), list) else str(st.get("cmd") or "")
     web = read_json(folder / "web.json") or {}  # optional hand-written title/description
-    target = web.get("target") or _cmd_flag(cmd, "--target")
+    target = web.get("target") or _cmd_flag(cmd, "--target") or _spec_clip(folder)
     policies = _policies(folder, rid, ev)
     current = [p for p in policies if not p["previous"]]
     best = max(current, key=lambda p: p["metrics"]["aligned"] or -1, default=None)
@@ -260,8 +263,16 @@ def summarize(runs_dir, rid, folder, detail=False):
         "robust": _robust_view(rob),
         "clips": _clips(folder, rid, target),
         "downloads": downloads,
+        "variants": _file(folder, rid, "variants.json", kind="variants"),  # scripts/build_variants_view.py
     })
     return s
+
+
+def _spec_clip(folder):
+    """The clip a run's task spec was compiled from (keypose specs are named after it), when the run has it."""
+    view = task_spec(folder)
+    name = view and view.get("name")
+    return name if name and re.fullmatch(r"[\w.-]+", name) and (folder / "clips" / name).is_dir() else None
 
 
 def safe_path(folder, rel):
@@ -341,7 +352,8 @@ def _spec_stage(st, features, keypose, fps):
     kind = st.get("kind") if isinstance(st.get("kind"), str) else ""
     if keypose:
         k = kind if kind in ("pose", "flight", "settle") else "pose"
-        name = _text(st.get("name"), 120) or k
+        # Muse's label (skill/spec_schema.py stage_label: muse_label, then name, then kind)
+        name = _text(st.get("muse_label"), 120) or _text(st.get("name"), 120) or k
         parts = _body_parts(st.get("relevance"), features) if k == "pose" else []
         feet = _feet(st.get("feet_down"))
     else:  # stand / squat / jump / land

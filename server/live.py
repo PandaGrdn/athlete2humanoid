@@ -24,7 +24,7 @@ from .config import REPO
 
 log = logging.getLogger("a2h.live")
 LIVE_DIR = "live"
-MAX_LIVE_BYTES = 8 * 1048576  # live.json is ~100 kB for a 6 s clip, ~400 kB at the 20 s cap
+MAX_LIVE_BYTES = 8 * 1048576  # live.json is ~250 kB for a 6 s clip, ~1 MB at the 20 s cap
 _IMPORTS = "import mediapipe, mink, mujoco, torch, cv2, scipy, mediapy, imageio_ffmpeg"
 
 
@@ -107,7 +107,8 @@ class LiveRunner:
     def _work(self, job, src, out):
         store, s = self.store, self.settings
         cancel = store.cancel[job.id]
-        cmd = [s.live_python, "-m", "server.live_worker", str(src), str(out), "--max-seconds", str(s.live_max_seconds)]
+        cmd = [s.live_python, "-m", "server.live_worker", str(src), str(out), "--max-seconds", str(s.live_max_seconds),
+               "--timeout-s", str(s.live_timeout_s)]
         store.set_stage(job, "video", 0.0)
         t0 = time.monotonic()
         proc = subprocess.Popen(cmd, cwd=REPO, env=_env(out), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -128,6 +129,8 @@ class LiveRunner:
                     continue
                 if "error" in msg:
                     user_error.append(str(msg["error"])[:300])
+                elif msg.get("stage") in ("video", "pose", "retarget", "environment") and msg.get("note"):
+                    store.log(job, msg["stage"], str(msg["note"])[:600])  # a line for the log, no status change
                 elif msg.get("stage") in ("video", "pose", "retarget", "environment"):
                     if msg.get("done"):
                         store.log(job, msg["stage"], str(msg.get("log", ""))[:600])

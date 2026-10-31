@@ -28,10 +28,10 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 from server import runs as R  # noqa: E402
 
-RUN_FILES = ["eval.json", "status.json", "task_spec.json", "distill_report.json", "comparison.mp4", "reward.pt", "web.json",
+RUN_FILES = ["eval.json", "status.json", "task_spec.json", "distill_report.json", "comparison.mp4", "reward.pt", "web.json", "variants.json",
              "poster.jpg"]
 POLICY_FILES = ["policy.mp4", "policy_metrics.json", "policy.onnx"]
-CLIP_FILES = ["meta.json", "retarget_report.json", "motion.csv", "side_by_side.mp4", "silhouette.mp4"]
+CLIP_FILES = ["meta.json", "retarget_report.json", "motion.csv", "side_by_side.mp4", "silhouette.mp4", "human.npy"]
 
 # The gallery: the runs trained on the SAM 3D Body references (docs/PIPELINE_ACCURACY.md, fix 3): single-clip
 # tracking on the squat jump, front kick and squat, the keypose task on jumping jacks, lunge and punches.
@@ -40,7 +40,7 @@ DEFAULT_DEMO_RUN = "latent_s3_kick"  # featured on the home page: a front kick l
 
 # What server/live_worker.py imports from the repo (no latent/, no SAM: MediaPipe on CPU), and its assets.
 LIVE_MODULES = ["config.py", "pose.py", "track.py", "retarget.py", "render.py",
-                "skill/__init__.py", "skill/task.py", "skill/keypose.py"]
+                "skill/__init__.py", "skill/task.py", "skill/keypose.py", "skill/variations.py"]
 POSE_MODEL = "assets/pose_landmarker_heavy.task"
 G1_SCENE = "assets/mujoco_menagerie/unitree_g1/scene.xml"
 TORCH_CPU_INDEX = "https://download.pytorch.org/whl/cpu"
