@@ -44,6 +44,7 @@ REMOTE = "/content/a2h"  # on FarmShare: <fs-root>/runs/<session>, set in main()
 OUT = SESSION = None  # set in main()
 CLIPS_DIR = REPO / "clips"  # --clips-dir
 BRANCH = "main"  # --branch: the code the GPU job runs
+COLAB_GPU = os.environ.get("A2H_COLAB_GPU", "A100")  # when A100s are unavailable: L4
 
 
 def latent_out(a):
@@ -220,8 +221,8 @@ def pack_weights(src):
 
 
 def launch(found, setup, cmd, inputs=None):
-    colab("new", "-s", SESSION, "--gpu", "A100", timeout=900)
-    log("A100 ready; uploading inputs")
+    colab("new", "-s", SESSION, "--gpu", COLAB_GPU, timeout=900)
+    log(f"{COLAB_GPU} ready; uploading inputs")
     _exec(f"import os; [os.makedirs(d, exist_ok=True) for d in ('{REMOTE}/clips', '{REMOTE}/env')]")
     for p in found:
         colab("upload", "-s", SESSION, str(p), f"{REMOTE}/clips/{p.name}", timeout=900)
