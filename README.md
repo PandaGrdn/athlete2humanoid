@@ -1,10 +1,46 @@
 # athlete2humanoid
 
-**Any video of a person moving becomes a physics RL policy for the Unitree G1 humanoid that learns the action, not the clip.** From one phone video of a squat jump, the robot learns to squat, jump, land and stand, and it still does it when shoved, started from odd poses, or when the reference clip is frozen.
+**A phone video of a person becomes a robust reinforcement-learning policy for the Unitree G1 humanoid, with no mocap and no motion library.** Meta's SAM 3.1 and SAM 3D Body turn the video into a 3D motion, the motion is rebuilt on the robot's own skeleton, Muse Spark names its key moments, and PPO in mjlab trains thousands of simulated G1s on it, with V-JEPA 2 as input, style term and judge.
 
-Meta Global AI Developer Hackathon · track: *Push the Frontier* (robotics).
+Meta Global AI Developer Hackathon · track: *Push the Frontier* (robotics). Submission text: [`docs/SUBMISSION.md`](docs/SUBMISSION.md).
 
-> **Demo:** the `/examples` page of the web app ([`web/`](web), static, no backend needed) and the demo video ([`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md)).
+**Try it:** https://athlete2humanoid.pages.dev
+- [`/build/latent_s3_kick`](https://athlete2humanoid.pages.dev/build/latent_s3_kick): the pipeline in 3D, one stage at a time, each stage labelled with the model that did it; push the trained policy at the end.
+- [`/live`](https://athlete2humanoid.pages.dev/live): upload a clip and watch it build on the server (CPU, about 15–40 s; the API may take a moment to wake).
+- [`/showcase`](https://athlete2humanoid.pages.dev/showcase): the trained policies in 3D. Click the robot to push it.
+
+**Headline results** (each from the doc linked):
+- **18 minutes, one GPU:** an unseen clip (the 1900 Olympic discus) became a policy that completes the throw on 100% of clean rollouts and 88% under 1 m/s pushes, warm-started from a 5-clip generalist. Two other unseen clips weren't learned in 30 minutes ([`FRONTIER_ADAPTATION`](docs/FRONTIER_ADAPTATION.md)).
+- **Held-out variants:** squat jump 82% and front kick 100%, 0% falls ([`PIPELINE_ACCURACY`](docs/PIPELINE_ACCURACY.md), Fix 3).
+- **Moves that travel:** the shot put glide from 0–8% to 100% task success ([`FRONTIER_TRAVEL`](docs/FRONTIER_TRAVEL.md)).
+- **Muse Spark as a reward agent:** likeness to the video 0.410 vs 0.388 for an untouched control, for $0.10 of API, with its caveats ([`MUSE_AGENT`](docs/MUSE_AGENT.md)).
+- **Honest negatives:** no zero-shot generalist at 328 motions (at most 7% on unseen variants), and V-JEPA 2's predictor is no world model for this ([`FRONTIER_GENERALIST`](docs/FRONTIER_GENERALIST.md), [`FRONTIER_WORLD_MODEL`](docs/FRONTIER_WORLD_MODEL.md)).
+
+## Docs
+
+**Results**, newest first:
+
+| Doc | One line |
+|---|---|
+| [`FRONTIER_ADAPTATION.md`](docs/FRONTIER_ADAPTATION.md) | Minutes from a new clip to a robust policy, from scratch, a specialist and the generalist: 18 min for discus; punches and jumping jacks not reached. |
+| [`FRONTIER_TRAVEL.md`](docs/FRONTIER_TRAVEL.md) | Why tracking policies stayed in place on travelling moves, and the reward and termination changes that make the shot put glide (0–8% → 100%). |
+| [`FRONTIER_GENERALIST.md`](docs/FRONTIER_GENERALIST.md) | One tracker on 5 → 328 motions: zero-shot falls halve, zero-shot success stays at ≤7%. |
+| [`FRONTIER_WORLD_MODEL.md`](docs/FRONTIER_WORLD_MODEL.md) | V-JEPA 2's predictor as a world model for the policy: worse than copying the present, and no help to the policy. |
+| [`MUSE_AGENT.md`](docs/MUSE_AGENT.md) | Muse Spark live: naming key moments (10 clips, $0.086) and a tool-calling reward agent over training rounds, against a control. |
+| [`PIPELINE_ACCURACY.md`](docs/PIPELINE_ACCURACY.md) | Stage-by-stage audit of where the athlete's motion is lost, and the seven fixes, including SAM 3D Body vs MediaPipe. |
+| [`VJEPA_CONDITIONING.md`](docs/VJEPA_CONDITIONING.md) | The video's V-JEPA 2 latent as a policy input over five clips: 44% → 75% success with no future leakage. |
+| [`PRO_CLIPS.md`](docs/PRO_CLIPS.md) | The stack on 1900 Olympic films (shot put, discus, hurdles): what transfers and what breaks. |
+| [`GENERALIZATION.md`](docs/GENERALIZATION.md) | Tracking vs task policies, and training on automatic variants so a policy learns the action rather than the recording. |
+| [`KEYPOSE_SPEC.md`](docs/KEYPOSE_SPEC.md) | Any clip as an RL task of ordered key moments, and the tuck-hop loophole Muse's critic caught. |
+| [`GOAL_RELEVANCE.md`](docs/GOAL_RELEVANCE.md) | Physics attribution of which moments and body parts serve the goal; V-JEPA 2 masking tested as a second signal. |
+| [`SEMANTIC_REWARD.md`](docs/SEMANTIC_REWARD.md) | Why a video-similarity reward alone was gamed, and the task-first reward that replaced it. |
+| [`RETARGET.md`](docs/RETARGET.md) | Proportion-aware retargeting onto the G1: joint-angle error and foot sliding before and after. |
+| [`PIPELINE_IMPROVEMENTS.md`](docs/PIPELINE_IMPROVEMENTS.md) | Commanded targets (one policy for a range of depths and heights) and further improvements by value and effort. |
+| [`results/`](docs/results) | The raw tables behind the docs: squat-jump eval and robustness, adaptation curves, travel, generalist, pipeline audit. |
+
+**Project:** [`SUBMISSION.md`](docs/SUBMISSION.md) (the submission text, by rubric criterion) · [`DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) (the 3-minute video and the live demo) · [`META_INTEGRATION.md`](docs/META_INTEGRATION.md) (Meta Model API: plan and what was verified live).
+
+**Running it:** [`SYSTEM_DESIGN.md`](docs/SYSTEM_DESIGN.md) · [`DEPLOY.md`](docs/DEPLOY.md) · [`SECURITY.md`](docs/SECURITY.md) · [`MODAL.md`](docs/MODAL.md) · [`FARMSHARE.md`](docs/FARMSHARE.md) · [`USER_TODO.md`](docs/USER_TODO.md).
 
 ## Why
 
@@ -20,7 +56,7 @@ flowchart LR
     SAM --> POSE[SAM 3D Body 3D pose]
     POSE --> IK[Proportion-aware retarget<br/>G1 bone lengths, planted feet]
     SAM --> SIL[Silhouette video] --> VJ[V-JEPA 2<br/>video latent]
-    MUSE[Muse<br/>skill reader]:::wip -.-> SPEC
+    MUSE[Muse Spark<br/>names key moments] -.-> SPEC
     IK --> SPEC[Task spec<br/>stand / squat / jump / land<br/>G1-scaled goals]
     IK --> IMP[Goal relevance<br/>which moments matter]
     VJ --> NET[Distilled V-JEPA<br/>style reward]
@@ -28,7 +64,6 @@ flowchart LR
     NET --> RL
     IMP --> RL
     RL --> EVAL[Task success under<br/>pushes, odd starts,<br/>frozen reference]
-    classDef wip stroke-dasharray: 5 5
 ```
 
 1. **Track.** SAM 3.1 segments the person from a text prompt and keeps the main track ([`track.py`](track.py), [`sam_track.py`](sam_track.py)).
@@ -47,11 +82,12 @@ Policies on the same clip:
 
 ## Meta models
 
-| Model | Role | Why this model |
+| Model | Role | Measured |
 |---|---|---|
-| **SAM 3.1** (`facebook/sam3.1`, open weights) | Text-prompted video tracking of the person | One consistent identity across the clip with no clicks. The masks feed both pose and the silhouette latent. |
-| **V-JEPA 2** (`facebook/vjepa2-vitl-fpc64-256`) | Style reward target (distilled), evaluation metric, and a predictor-masking diagnostic for goal relevance | Self-supervised video world model; on silhouettes it compares motion rather than appearance. |
-| **Muse Spark** (Meta Model API) | **Skill reader:** video to a strict-JSON spec that names the task stages and success criteria. **Reward-design agent:** reads a finished run and proposes the next reward config. | Takes video natively, supports strict schemas. *Integrated and tested against recorded fixtures; the live run is pending an API key.* |
+| **SAM 3.1** (`facebook/sam3.1`, open weights) | Text-prompted video tracking of the person; its masks crop the frame for pose and become the silhouette V-JEPA 2 embeds | Finds the 1900 hurdler that whole-frame pose misses in every frame ([`PIPELINE_ACCURACY`](docs/PIPELINE_ACCURACY.md), Stage 1) |
+| **SAM 3D Body** (`facebook/sam-3d-body-dinov3`, open weights) | 3D pose of the masked athlete (MediaPipe is the CPU fallback) | Bone-length variation 3–6x lower on phone clips ([`PIPELINE_ACCURACY`](docs/PIPELINE_ACCURACY.md), Fix 3) |
+| **V-JEPA 2** (`facebook/vjepa2-vitl-fpc64-256`, open weights) | The video's latent as a policy input, a weak style reward, and the likeness judge | 44% → 75% success over five clips as a past-only input ([`VJEPA_CONDITIONING`](docs/VJEPA_CONDITIONING.md)) |
+| **Muse Spark** (`muse-spark-1.3`, Meta Model API) | Names each key moment from the video (`muse_label`); a tool-calling reward agent between training rounds; a blind rollout critic | 10/10 clips named for $0.086; agent likeness 0.410 vs 0.388 for the control ([`MUSE_AGENT`](docs/MUSE_AGENT.md)) |
 
 ## Results
 
@@ -148,17 +184,18 @@ python3 scripts/remote_run.py robust --reuse outputs/remote_latent_final --targe
 | [`latent/`](latent) | Silhouettes, V-JEPA 2 wrapper and predictor diagnostic, motion bank, distillation, reward net |
 | [`mjlab_tasks.py`](mjlab_tasks.py) | A2H tasks: Hybrid, Latent, LatentPhase, Task, TaskPhase, TaskCmd; stability terms |
 | [`train_motion.py`](train_motion.py), [`mjlab_rollout.py`](mjlab_rollout.py), [`policy_weights.py`](policy_weights.py) | CSV to PPO policy (resume / warm start), headless rollout |
-| [`muse/`](muse) | Muse Spark client, skill reader, reward-design agent (fixture-backed until a key exists) |
+| [`muse/`](muse) | Muse Spark client, moment namer, reward agent loop, rollout critic ([`docs/MUSE_AGENT.md`](docs/MUSE_AGENT.md)) |
 | [`experiments/`](experiments) | End-to-end run, robustness eval, goal relevance, command eval, V-JEPA probes |
 | [`scripts/`](scripts) | Colab / FarmShare runners, weights registry, demo assets, examples, Space build |
 | [`server/`](server), [`web/`](web) | FastAPI backend and React frontend ([`docs/DEPLOY.md`](docs/DEPLOY.md), [`docs/SECURITY.md`](docs/SECURITY.md), [`docs/SYSTEM_DESIGN.md`](docs/SYSTEM_DESIGN.md)) |
 
 ## Limitations
 
-- **One action so far.** The final results are one squat-jump video (plus the squat). Six more clips are processed but haven't been trained on.
+- **Not every move is learned yet.** Policies have been trained on all ten clips, but the lunge fails for every policy at a 0.32 m forward weight shift ([`docs/FRONTIER_TRAVEL.md`](docs/FRONTIER_TRAVEL.md)), punches and jumping jacks weren't learned in 30 minutes of adaptation ([`docs/FRONTIER_ADAPTATION.md`](docs/FRONTIER_ADAPTATION.md)), and with no per-clip training a generalist reaches at most 7% on unseen variants ([`docs/FRONTIER_GENERALIST.md`](docs/FRONTIER_GENERALIST.md)).
+- **The squat-jump tables below are the first final run.** Its task policies were later found to be tuck-hopping and were retrained on a stricter spec ([`docs/KEYPOSE_SPEC.md`](docs/KEYPOSE_SPEC.md)), so their robustness numbers flatter them.
 - **Success vs style.** The task policies look less like the video (V-JEPA 0.43 / 0.31 vs 0.70 for tracking). Style is deliberately weak; stronger, goal-weighted style is the next lever.
 - **The final run trained before the landing fix** (fall refund, 883c6b7) and the grounded start states; its jump quality has room to improve.
-- **Muse runs on recorded fixtures** until a Meta Model API key exists; the skill reader and reward agent are wired in and tested.
+- **The Muse reward agent is one run per arm** on one clip; its likeness gain is from upweighting the likeness terms, and seed variance is unmeasured ([`docs/MUSE_AGENT.md`](docs/MUSE_AGENT.md)).
 - **Goal relevance is physics-based.** V-JEPA 2 predictor masking was tested as a second signal and didn't pick out goal-relevant motion, so it's kept as a diagnostic.
 - **Simulation only**, no sim-to-real transfer yet; a single camera viewpoint and monocular depth ambiguity remain.
 

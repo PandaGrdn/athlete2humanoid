@@ -1,6 +1,9 @@
-# Keeps the free Hugging Face Space awake: it sleeps after 48 h without traffic. Every 12 h it GETs the
-# Space's /readyz (a sleeping Space wakes on the request). Skipped when the API_BASE variable isn't set;
+# Keeps a free Hugging Face Space awake: it sleeps after 48 h without traffic. Every 12 h it GETs
+# $API_BASE/readyz (a sleeping Space wakes on the request). Skipped when the API_BASE variable isn't set;
 # needs no secrets. GitHub turns scheduled workflows off after 60 days without repo activity.
+# On Cloud Run (the current API) this does not keep it warm: an instance scales to zero about 15 min after
+# its last request, so a 12 h ping only proves the service still answers. Warming it all day would need a
+# ping every few minutes or --min-instances 1, both outside the free tier (docs/DEPLOY.md).
 name: keepalive
 
 on:
