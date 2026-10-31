@@ -1,4 +1,4 @@
-# Real athletes: free-licence video through the pipeline; no tracker passes its spec yet (2026-10-30)
+# Real athletes: free-licence video through the pipeline; the lakeside jog's tracker passes once its feet are tracked (2026-10-31)
 
 **Question:** the stack was built on our own phone clips. Does it also work on video of other people, filmed by
 someone else, that the submission may legally show? And can a move that travels (a run) be trained for when the G1 has
@@ -7,9 +7,15 @@ to do it on the spot?
 **Short answer:**
 - The front end, retarget, spec and variants work on all four clips.
 - A run-in-place mode keeps the planted feet still (0.3–0.5 cm/s of slip) at the cost of knee fidelity.
-- After 1,250 training iterations, none of the three trackers completes its clip's key moments at full speed; the
-  kick doesn't fit the G1 as filmed.
-- Nothing was added to the hosted demo.
+- The first trackers (1,250 iterations) completed none of their clips: the jogs shuffled their feet. The video's pose
+  and the reference lift each foot 15–25 cm; the loss was in training, plus 9–40% of each swing that the in-place
+  contacts held on the floor ("Where the foot lift goes").
+- With the contacts trimmed, a foot-height tracking term, and one continuous 1,000-iteration run:
+  - **the lakeside jog passes**: 100% clean, 98% under 1 m/s pushes, 7/7 held-out variants, no falls;
+  - the bridge jog now lifts its feet too, but completes 53% of its key moments, not all; it fails on where a foot
+    lands, fore and aft.
+- The kick doesn't fit the G1 as filmed; the boxer wasn't retrained.
+- The lakeside run is wired into the demo (`remote_latent_ra_jog`, credited); not deployed.
 
 Every number below is in `docs/results/real_athletes/`:
 
@@ -17,7 +23,9 @@ Every number below is in `docs/results/real_athletes/`:
 |---|---|
 | `audit.json` | the pipeline audit |
 | `in_place_*.json` | the in-place measurements |
-| `policies.json` | training and evaluations |
+| `policies.json` | the first trackers' training and evaluations (ra5 and before) |
+| `policy_ra6.json`, `policy_ra7.json` | the retrained lakeside and bridge jogs: training and evaluation (`real_athletes.py summarize`) |
+| `foot_lift_ra5/6/7.json` | ankle heights and swings: pose, reference, travelling retarget, policy (`real_athletes.py feet`) |
 | `facts.json` | the rest: coverage, the intake's warnings, the kick, foot heights, job times. Written by `experiments/real_athletes.py facts` from the run logs and rollouts. |
 
 ## The clips
@@ -175,6 +183,25 @@ feet now follow the reference's.
     half re-rendered.
   - Not deployed.
 
+### The bridge jog with the same recipe (job `athletes_ra7`): it lifts its feet, but doesn't pass
+
+The lakeside passed, so the bridge got the same recipe. Its variants were built locally (36/36, 5/7 held out), and it
+trained on one Colab T4: 1,000 iterations in 56.7 minutes, 66 minutes with the eval (`policy_ra7.json`).
+
+![Bridge jog after the retrain: the policy's ankles (green) follow the reference's (orange) through every swing](img/real_athletes_foot_lift_ra7.png)
+
+- **The feet lift now.** Each foot makes all 6 of its reference's swings. They peak at 16.8 / 18.3 cm against the
+  reference's 19.9 / 20.7 cm, against 0 and 1 swings for ra5 (`foot_lift_ra7.json`).
+- **It still doesn't pass.**
+  - Clean: 0% success, 53% of key moments done (ra5: 18%), no falls, joint error 0.112 rad.
+  - 1 m/s pushes: 0%, no falls.
+  - Held out: 0–2% on each of the 5 variants.
+- **Where it stops:** at stage 11 of 16, "right foot down, left foot up" (4.4–5.0 s), in 73% of clean rollouts, and at
+  stage 10 in the rest. The check that fails is the foot's fore-aft position (`left ankle x`), not its height. The
+  in-place reference keeps each planted foot under a still hip; the policy puts it elsewhere.
+- **Not tried:** more iterations, a foot-position term, or the Muse reward agent. The agent trains its rounds on Modal,
+  which has no budget, and tunes the task-first tasks' settings, not the tracking task's. It is not in the demo.
+
 ## The first trackers (job `athletes_ra5`): they stay up but complete none of the clips
 
 **Result: none of the three trackers passes its spec.**
@@ -268,9 +295,13 @@ doesn't complete those steps.
 **Compute** (`facts.json` "job_times"):
 - Modal: the processing job (22:37–22:50), and one training job from 23:00 until the spend limit stopped it.
 - Colab: one L4 from 02:52 to 04:26.
-- No other GPU.
+- The retrain (2026-10-31, PDT): Colab refused the A100 and the L4 for lack of quota, so it ran on a T4, one session
+  at a time. Lakeside (`athletes_ra6`): 11:34–12:37. Bridge (`athletes_ra7`): 12:37–13:44. Each session stopped itself
+  when its job ended.
+- No other GPU; nothing on Modal.
 
-**What the deploy needs, once a clip passes:**
+**What the deploy needs, once a clip passes** (steps 1–4 are done for the lakeside jog, `remote_latent_ra_jog`; step 5 is
+the deploy):
 1. `python3 experiments/real_athletes.py assemble outputs/remote_athletes_<tag>`. Only clips whose policy completes
    the clip become `outputs/remote_latent_ra_*` runs, with a `web.json` credit.
 2. `python3 scripts/build_variants_view.py outputs/remote_latent_ra_*`
