@@ -612,20 +612,21 @@ def _bridge(x):
     return flat.reshape(x.shape)
 
 
-def trim_lift_off(stance, z, fps=30.0, lift=None, keep_frames=2):
+def trim_lift_off(stance, z, fps=30.0, lift=None, keep_frames=2, max_frames=4):
     """stance: (T, 2) bool; z: (T, 2) the pose's ankle heights. Each contact's first and last frames whose ankle is more
     than `lift` (IN_PLACE_LIFT_M) above the contact's low level (its lower quartile: one low frame of pose noise is not
-    the floor) are not stance: the foot is still coming down, or already lifting. A contact keeps at least keep_frames
-    (at 30 fps). -> (T, 2) bool."""
+    the floor) are not stance: the foot is still coming down, or already lifting. At most max_frames go from each end
+    (a swing's start or end, ~0.13 s; a long standing contact whose ankle drifts up stays planted), and a contact keeps
+    at least keep_frames (both at 30 fps). -> (T, 2) bool."""
     lift = IN_PLACE_LIFT_M if lift is None else lift
-    keep = _frames(keep_frames, fps)
+    keep, cap = _frames(keep_frames, fps), _frames(max_frames, fps)
     stance = stance.copy()
     for f in range(2):
         for a, b in _runs(stance[:, f]):
             low, i, j = np.percentile(z[a:b, f], 25), a, b
-            while j - i > keep and z[i, f] - low > lift:
+            while i - a < cap and j - i > keep and z[i, f] - low > lift:
                 i += 1
-            while j - i > keep and z[j - 1, f] - low > lift:
+            while b - j < cap and j - i > keep and z[j - 1, f] - low > lift:
                 j -= 1
             stance[a:i, f] = stance[j:b, f] = False
     return stance
@@ -1004,7 +1005,7 @@ def stride_drift(root, stride_s, fps=30.0):
 
 
 # Bump with any change to what the retarget produces; code_version() records it with the commit.
-RETARGET_VERSION = "2026-10-31 contacts (touch-downs, per-take-off flights) + leg-plane knees and feet + arm reseeding; in place: lift-off trim"
+RETARGET_VERSION = "2026-10-31 contacts (touch-downs, per-take-off flights) + leg-plane knees and feet + arm reseeding; in place: lift-off trim (at most 4 frames an end)"
 
 
 def code_version():

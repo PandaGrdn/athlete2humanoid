@@ -72,11 +72,11 @@
    "facts": [
     {
      "v": "100%",
-     "l": "of clean runs complete the clip's key moments"
+     "l": "of clean runs pass the clip's spec (3 of 13 key moments required)"
     },
     {
      "v": "100%",
-     "l": "of held-out variants completed"
+     "l": "of runs on held-out variants pass their own spec"
     }
    ],
    "credit": {

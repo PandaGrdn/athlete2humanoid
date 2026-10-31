@@ -1,4 +1,4 @@
-# Real athletes: free-licence video through the pipeline; the lakeside jog's tracker passes once its feet are tracked (2026-10-31)
+# Real athletes: free-licence video through the pipeline; the lakeside jog's tracker passes its spec after the lift-off trim, a foot-height term and a continuous run (2026-10-31)
 
 **Question:** the stack was built on our own phone clips. Does it also work on video of other people, filmed by
 someone else, that the submission may legally show? And can a move that travels (a run) be trained for when the G1 has
@@ -6,14 +6,18 @@ to do it on the spot?
 
 **Short answer:**
 - The front end, retarget, spec and variants work on all four clips.
-- A run-in-place mode keeps the planted feet still (0.3–0.5 cm/s of slip) at the cost of knee fidelity.
+- A run-in-place mode keeps the planted feet still (0.2–0.5 cm/s of slip: 0.4 and 0.2 on the jogs, 0.5 on the hurdles
+  film) at the cost of knee fidelity.
 - The first trackers (1,250 iterations) completed none of their clips: the jogs shuffled their feet. The video's pose
   and the reference lift each foot 15–25 cm; the loss was in training, plus 9–40% of each swing that the in-place
   contacts held on the floor ("Where the foot lift goes").
-- With the contacts trimmed, a foot-height tracking term, and one continuous 1,000-iteration run:
-  - **the lakeside jog passes**: 100% clean, 98% under 1 m/s pushes, 7/7 held-out variants, no falls;
-  - the bridge jog now lifts its feet too, but completes 53% of its key moments, not all; it fails on where a foot
-    lands, fore and aft.
+- With the contacts trimmed, a foot-height tracking term, and one continuous 1,000-iteration run (not ablated: which
+  of the three made the difference isn't known):
+  - **the lakeside jog passes its spec**: 100% clean, 98% under 1 m/s pushes, 7/7 held-out variants, no falls. Its
+    spec requires 3 of its 13 key moments; the other 10 are optional details that may be skipped (the reference
+    itself skips 6 of them);
+  - the bridge jog now lifts its feet too, but passes none of its runs: it does 53% of its 15 key moments, and fails
+    a required one on where a foot lands, fore and aft.
 - The kick doesn't fit the G1 as filmed; the boxer wasn't retrained.
 - The lakeside run is wired into the demo (`remote_latent_ra_jog`, credited); not deployed.
 
@@ -60,7 +64,7 @@ intake, and the retarget. The two jogs then had their retargets redone locally w
 (`experiments/real_athletes.py reretarget`), last with the lift-off trim ("Where the foot lift goes"). The jog rows
 below are that retarget. Before the trim they were: knee / hip error 19.9 / 12.9° (lakeside) and 11.0 / 13.3° (bridge),
 11 and 10 key moments, and the bridge at its ankle-pitch limit in 16% of frames, keeping 35/36 variants. With the trim the
-bridge's ankle is at its pitch limit more often (where in the stride is not yet measured).
+bridge's ankle is at its pitch limit in 44% of frames, against 16% before; where in the stride isn't measured.
 
 Columns: coverage comes from `facts.json` "processing"; the rest from `audit.json`
 (`experiments/real_athletes.py audit`).
@@ -101,7 +105,7 @@ plots each ankle's height per frame for three traces: SAM 3D Body's pose on the 
 used), the in-place G1 reference the policy trained on (its qpos through forward kinematics), and the policy's two
 saved clean rollouts. Its numbers are in `foot_lift_ra5.json`.
 
-![Ankle height per frame on the two jogs: the video's pose (blue) and the G1 reference (orange) lift each foot 15–25 cm every stride; the ra5 policy (green) stays at 3.5–8 cm](img/real_athletes_foot_lift_ra5.png)
+![Ankle height per frame on the two jogs: the video's pose (blue) and the G1 reference (orange) lift each foot 15–25 cm every stride; the ra5 policy's ankles (green) sit at a median of 3.5–3.7 cm and mostly peak at 4–7 cm](img/real_athletes_foot_lift_ra5.png)
 
 A swing is a run of frames with the ankle more than 3 cm above that trace's own floor (its 5th percentile). Duration
 and peak are medians over the clip, left / right:
@@ -115,21 +119,23 @@ and peak are medians over the clip, left / right:
 | ra5 policy, clean | 0.12 / 0.16 (7 and 1 swings) | 4.4 / 4.8 | none / 0.18 (0 and 1 swings) | – / 6.8 |
 
 - **Most of the loss is in training.** The reference lifts each ankle to 15–25 cm every stride. The policy's ankles sit
-  at a median of 3.5–3.7 cm and rarely clear 3 cm above that.
+  at a median of 3.5–3.7 cm, and their swings, where there are any, peak 4.4–6.8 cm above the floor. The highest single
+  points are 17.6 cm (lakeside, left, at the clip's start) and 10.6 cm (bridge, right).
 - **The in-place retarget also cut each swing short**, by 9–40%: 0.37–0.53 s and 15–17 cm, against 0.50–0.83 s and
   21–25 cm travelling. The cause was contact detection. Once the travel is restored (step 2 of "Run in place"), a
   planted foot stands still. `stance_mask`'s test (within 10 cm of the floor and slow) then also took in the first and
   last ~0.1 s of each swing, and `plant_feet` held those frames on the floor. Stance went to 39–51% per foot, against
   28–33% of frames with the pose's ankle within 3 cm of its floor.
 - **The fix** (`retarget.trim_lift_off`, in place only): a contact starts once the pose's ankle is within 3 cm of the
-  contact's low level (its lower quartile) and ends when it rises past it. The swings come back to 0.43–0.63 s and
-  18–21 cm, stance to 30–37%. Slip stays at 0.2–0.4 cm/s (`in_place_jogs.json`). Both specs still compile and their
-  references complete them: 14 key moments on the lakeside, 16 on the bridge.
+  contact's low level (its lower quartile) and ends when it rises past it, trimming at most 4 frames (0.13 s) from
+  each end, so a long standing contact whose ankle drifts up stays planted. The swings come back to 0.43–0.63 s and
+  18–21 cm, stance to 30–37%. Slip stays at 0.4 and 0.2 cm/s (`in_place_jogs.json`). Both specs still compile and their
+  references complete them: 13 key moments on the lakeside, 15 on the bridge.
 - **What the pose itself shows:** clean, regular lifts on both clips. On the lakeside clip the pose's lower ankle rarely
   reaches its floor (troughs at 8–10 cm), so its absolute heights read high. The swing peaks are measured above each
   trace's own floor.
 
-## Retrained with the foot lift: the lakeside jog passes (job `athletes_ra6`)
+## Retrained after the lift-off trim, with a foot-height term and a continuous run: the lakeside jog passes (job `athletes_ra6`)
 
 **Result: the lakeside jog's tracker completes its spec in all 64 clean rollouts.** It also does so in 98% of rollouts
 under 1 m/s pushes, and in all 64 rollouts of each of its 7 held-out variants. None of the 576 rollouts fell
@@ -167,8 +173,9 @@ feet now follow the reference's.
 | Held-out, each of the 7 (half and double speed, 0.7x and 1.25x amplitude, a time warp, two mirrored) | 100% | 0% | 0.086–0.291 | 0.118–0.143 |
 
 - A run passes when it completes every required key moment in order without falling (`skill/keypose.py`).
-  - The spec marks some moments optional, details of how this person ran, and those may be skipped. The reference
-    itself skips 6 of its 14 stages and passes.
+  - The lakeside spec marks 10 of its 13 key moments optional, details of how this person ran, and those may be
+    skipped. 3 are required. The reference itself skips 6 and passes. The showcase tab says "3 of 13 key moments
+    required" next to its 100%.
   - So the eval's "stages" share, which counts only completed ones, reads 65% on a passing run.
 - The torso error is higher than ra5's 0.053 m. Our reading, not tested: a policy that swings its legs moves its
   trunk more than one that shuffled under a still trunk.
@@ -193,7 +200,9 @@ trained on one Colab T4: 1,000 iterations in 56.7 minutes, 66 minutes with the e
 - **The feet lift now.** Each foot makes all 6 of its reference's swings. They peak at 16.8 / 18.3 cm against the
   reference's 19.9 / 20.7 cm, against 0 and 1 swings for ra5 (`foot_lift_ra7.json`).
 - **It still doesn't pass.**
-  - Clean: 0% success, 53% of key moments done (ra5: 18%), no falls, joint error 0.112 rad.
+  - Clean: 0% success, 53% of key moments done, no falls, joint error 0.112 rad. The spec is stricter than the
+    lakeside's: 3 of its 15 key moments are required, and its reference skips only 1. (ra5's 18% was on a different
+    spec, the pre-trim reference's 10 key moments, so the two shares don't compare directly.)
   - 1 m/s pushes: 0%, no falls.
   - Held out: 0–2% on each of the 5 variants.
 - **Where it stops:** at stage 11 of 16, "right foot down, left foot up" (4.4–5.0 s), in 73% of clean rollouts, and at
@@ -349,7 +358,7 @@ records it, for example the bridge jog:
    - **Hurdles:** 3.21 → 2.24 m.
    - Only with `--in-place`: the default retarget is unchanged.
 3. **Find the contacts** on that travelling motion, where a planted foot stands still, then trim each one where the
-   pose's ankle is more than 3 cm above the contact's lower quartile (`trim_lift_off`, `IN_PLACE_LIFT_M`). Without the
+   pose's ankle is more than 3 cm above the contact's lower quartile, at most 4 frames from each end (`trim_lift_off`, `IN_PLACE_LIFT_M`). Without the
    trim, the still-standing feet passed the detector's 10 cm test into the start and end of each swing, and the swings
    came out 9–40% short ("Where the foot lift goes").
 4. **Remove the travel**, by one of three methods:
@@ -401,5 +410,6 @@ without them.
 - the soft hold stays within its band;
 - a dolly-shot version (hips held still in the image) gets its travel and contacts back;
 - a rising floor is levelled, and a flight at the clip's end isn't;
+- the lift-off trim takes a contact's lifted ends, at most 4 frames from each, and runs only in place;
 - the keypose spec compiles, and its own retarget completes it;
 - the variant filter keeps the original and a mirrored and a re-timed variant.

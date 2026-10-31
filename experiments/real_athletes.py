@@ -163,9 +163,12 @@ def showcase(a):
                         "--policy", "tracking_var", "--pushes", f"remote_pushes_{TAG}_{c['short']}",
                         "--video", str(run / "clips" / name / "side_by_side.mp4"), "--video-label", f"{c['licence']} video",
                         "--task-spec", str(run / "task_spec.json")], check=True)
-        facts = [{"v": f"{ev['task_success_rate']:.0%}", "l": "of clean runs complete the clip's key moments"}]
+        moments = [st for st in json.loads((run / "task_spec.json").read_text())["stages"] if st["kind"] != "settle"]
+        required = sum(not st.get("optional") for st in moments)  # the optional ones may be skipped (skill/keypose.py)
+        facts = [{"v": f"{ev['task_success_rate']:.0%}",
+                  "l": f"of clean runs pass the clip's spec ({required} of {len(moments)} key moments required)"}]
         if ev.get("held_out_success") is not None:
-            facts.append({"v": f"{ev['held_out_success']:.0%}", "l": "of held-out variants completed"})
+            facts.append({"v": f"{ev['held_out_success']:.0%}", "l": "of runs on held-out variants pass their own spec"})
         entry = {"id": sid, "tab": c["tab"], "title": c["showcase_title"], "kicker": "Free-licence video → one policy",
                  "lede": c["description"] + (" The clip travels; the G1 runs it in place." if c.get("in_place") else ""),
                  "video": f"{c['author']}'s clip ({c['licence']}). SAM 3.1 segments the person, SAM 3D Body lifts the pose "
@@ -459,6 +462,15 @@ def summarize(a):
         last = t[t.rfind("Learning iteration"):]
         num = lambda pat: float(re.findall(pat, last)[-1]) if re.findall(pat, last) else None
         r = json.loads((run / c / "robust" / "robust.json").read_text())
+        rc_f = run / c / "run" / "policy_tracking_var" / "reward_config.json"
+        rc_arg = re.search(r"--reward-config (\S+)", " ".join((res["status"] or {}).get("cmd") or []))
+        if rc_f.exists():  # what train_motion.py trained with (variant_policy.py packs it from 2026-10-31 on)
+            rc = {"source": str(rc_f.relative_to(ROOT)), **json.loads(rc_f.read_text())}
+        elif rc_arg:  # older archives left it out: the file the job's command named, from this checkout
+            rc = {"source": f"{rc_arg.group(1)} (the --reward-config in the job's command, status.json; its copy in the "
+                            "policy folder wasn't in the results archive)", **json.loads((ROOT / rc_arg.group(1)).read_text())}
+        else:
+            rc = None
         ev = {}
         for cond in r["conditions"]:
             name = f"{cond['suite']}:{cond['level']}"
@@ -470,8 +482,7 @@ def summarize(a):
                                "iteration_time_s": num(r"Iteration time: ([\d.]+)s"),
                                "time_elapsed": (re.findall(r"Time elapsed: ([\d:]+)", last) or [None])[-1],
                                "episode_rewards": {k: float(v) for k, v in re.findall(r"Episode_Reward/(\w+): (-?[\d.]+)", last)},
-                               "reward_config": json.loads((run / c / "run" / "policy_tracking_var" / "reward_config.json").read_text())
-                               if (run / c / "run" / "policy_tracking_var" / "reward_config.json").exists() else None},
+                               "reward_config": rc},
                   "eval": ev, "summary": r["summary"]["tracking_var"]}
     out = ROOT / "docs" / "results" / "real_athletes" / f"policy{a.tag}.json"
     out.write_text(json.dumps(res, indent=1))

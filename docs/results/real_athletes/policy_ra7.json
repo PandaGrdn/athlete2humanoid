@@ -29,7 +29,15 @@
     "self_collisions": -0.0063,
     "action_rate_l2": -0.5159
    },
-   "reward_config": null
+   "reward_config": {
+    "source": "docs/real_athletes/reward_feet_height.json (the --reward-config in the job's command, status.json; its copy in the policy folder wasn't in the results archive)",
+    "feet_height": {
+     "weight": 2.0,
+     "std": 0.1,
+     "clearance": 0.03,
+     "swing_only": true
+    }
+   }
   },
   "eval": {
    "clean:nominal": {

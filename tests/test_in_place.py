@@ -161,6 +161,23 @@ class InPlaceMotion(unittest.TestCase):
         high[5:7, 0] = 0.0  # down for two of its eight frames: those two
         np.testing.assert_array_equal(np.flatnonzero(retarget.trim_lift_off(stance, high, FPS)[:, 0]), [5, 6])
 
+    def test_lift_off_trim_is_capped(self):
+        # a 2 s standing contact (a squat) whose ankle drifts 5 cm up over its last 0.8 s: at most 4 frames go
+        z = np.zeros((70, 2))
+        z[36:66, 0] = np.linspace(0.0, 0.05, 30)
+        stance = np.zeros((70, 2), bool)
+        stance[5:66, 0] = True
+        got = retarget.trim_lift_off(stance, z, FPS)
+        np.testing.assert_array_equal(np.flatnonzero(stance[:, 0] & ~got[:, 0]), [62, 63, 64, 65])
+
+    def test_lift_off_trim_only_in_place(self):
+        from unittest import mock
+        with mock.patch.object(retarget, "trim_lift_off", wraps=retarget.trim_lift_off) as trim:
+            self.motion(None)
+            trim.assert_not_called()
+            self.motion("world")
+            trim.assert_called_once()
+
     def test_rejects_unknown_method(self):
         with self.assertRaises(ValueError):
             self.motion("treadmill")

@@ -202,10 +202,10 @@
     "feet": {
      "penetration_max_cm": 0.13,
      "penetration_frames_gt1cm": 0.0,
-     "stance_float_mean_cm": 0.5,
-     "stance_float_p95_cm": 1.61,
+     "stance_float_mean_cm": 0.3,
+     "stance_float_p95_cm": 1.03,
      "lowest_sole_gt2cm_frac": 0.584,
-     "slide_cm_per_s": 5.69
+     "slide_cm_per_s": 0.52
     },
     "angle_err_deg": {
      "mean": {
@@ -321,10 +321,10 @@
     "feet": {
      "penetration_max_cm": 0.01,
      "penetration_frames_gt1cm": 0.0,
-     "stance_float_mean_cm": 0.15,
-     "stance_float_p95_cm": 0.39,
+     "stance_float_mean_cm": 0.01,
+     "stance_float_p95_cm": 0.01,
      "lowest_sole_gt2cm_frac": 0.584,
-     "slide_cm_per_s": 80.34
+     "slide_cm_per_s": 80.13
     },
     "angle_err_deg": {
      "mean": {
@@ -440,10 +440,10 @@
     "feet": {
      "penetration_max_cm": 0.11,
      "penetration_frames_gt1cm": 0.0,
-     "stance_float_mean_cm": 0.51,
-     "stance_float_p95_cm": 1.72,
+     "stance_float_mean_cm": 0.31,
+     "stance_float_p95_cm": 0.98,
      "lowest_sole_gt2cm_frac": 0.584,
-     "slide_cm_per_s": 5.68
+     "slide_cm_per_s": 0.52
     },
     "angle_err_deg": {
      "mean": {

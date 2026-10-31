@@ -202,10 +202,10 @@
     "feet": {
      "penetration_max_cm": 0.0,
      "penetration_frames_gt1cm": 0.0,
-     "stance_float_mean_cm": null,
-     "stance_float_p95_cm": null,
+     "stance_float_mean_cm": 0.32,
+     "stance_float_p95_cm": 0.77,
      "lowest_sole_gt2cm_frac": 0.25,
-     "slide_cm_per_s": 0.0
+     "slide_cm_per_s": 0.36
     },
     "angle_err_deg": {
      "mean": {
@@ -321,10 +321,10 @@
     "feet": {
      "penetration_max_cm": 0.01,
      "penetration_frames_gt1cm": 0.0,
-     "stance_float_mean_cm": null,
-     "stance_float_p95_cm": null,
+     "stance_float_mean_cm": 0.01,
+     "stance_float_p95_cm": 0.01,
      "lowest_sole_gt2cm_frac": 0.183,
-     "slide_cm_per_s": 0.0
+     "slide_cm_per_s": 102.59
     },
     "angle_err_deg": {
      "mean": {
@@ -440,10 +440,10 @@
     "feet": {
      "penetration_max_cm": 0.0,
      "penetration_frames_gt1cm": 0.0,
-     "stance_float_mean_cm": null,
-     "stance_float_p95_cm": null,
+     "stance_float_mean_cm": 0.33,
+     "stance_float_p95_cm": 0.78,
      "lowest_sole_gt2cm_frac": 0.256,
-     "slide_cm_per_s": 0.0
+     "slide_cm_per_s": 0.44
     },
     "angle_err_deg": {
      "mean": {
@@ -665,10 +665,10 @@
     "feet": {
      "penetration_max_cm": 0.22,
      "penetration_frames_gt1cm": 0.0,
-     "stance_float_mean_cm": 0.43,
-     "stance_float_p95_cm": 2.88,
+     "stance_float_mean_cm": 0.08,
+     "stance_float_p95_cm": 0.19,
      "lowest_sole_gt2cm_frac": 0.022,
-     "slide_cm_per_s": 18.57
+     "slide_cm_per_s": 0.24
     },
     "angle_err_deg": {
      "mean": {
@@ -784,10 +784,10 @@
     "feet": {
      "penetration_max_cm": 0.03,
      "penetration_frames_gt1cm": 0.0,
-     "stance_float_mean_cm": 0.42,
-     "stance_float_p95_cm": 3.54,
+     "stance_float_mean_cm": 0.01,
+     "stance_float_p95_cm": 0.02,
      "lowest_sole_gt2cm_frac": 0.004,
-     "slide_cm_per_s": 68.37
+     "slide_cm_per_s": 76.77
     },
     "angle_err_deg": {
      "mean": {
@@ -903,10 +903,10 @@
     "feet": {
      "penetration_max_cm": 0.2,
      "penetration_frames_gt1cm": 0.0,
-     "stance_float_mean_cm": 0.43,
-     "stance_float_p95_cm": 2.88,
+     "stance_float_mean_cm": 0.08,
+     "stance_float_p95_cm": 0.18,
      "lowest_sole_gt2cm_frac": 0.022,
-     "slide_cm_per_s": 23.6
+     "slide_cm_per_s": 0.24
     },
     "angle_err_deg": {
      "mean": {

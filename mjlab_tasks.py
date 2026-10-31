@@ -225,12 +225,20 @@ FEET_HEIGHT = {"weight": 0.0,     # 0: no term, the tracking task as mjlab's
 
 
 def feet_height_config():
-    """FEET_HEIGHT, overridden by A2H_REWARD_CONFIG's "feet_height"."""
+    """FEET_HEIGHT, overridden by A2H_REWARD_CONFIG's "feet_height". An unknown key, a swing_only that isn't a JSON
+    boolean, or std <= 0 is an error (a typo would otherwise train without the term, or on NaN)."""
     fh = dict(FEET_HEIGHT)
     path = os.environ.get(REWARD_CONFIG_ENV)
     if path:
         user = json.loads(Path(path).read_text()).get("feet_height", {})
-        fh |= {k: bool(v) if k == "swing_only" else float(v) for k, v in user.items() if k in fh}
+        unknown = set(user) - set(fh)
+        if unknown:
+            raise ValueError(f"{path}: feet_height has unknown keys {sorted(unknown)}; known: {sorted(fh)}")
+        if "swing_only" in user and not isinstance(user["swing_only"], bool):
+            raise ValueError(f"{path}: feet_height.swing_only must be true or false, not {user['swing_only']!r}")
+        fh |= {k: v if k == "swing_only" else float(v) for k, v in user.items()}
+        if not fh["std"] > 0:
+            raise ValueError(f"{path}: feet_height.std must be > 0, not {fh['std']}")
     return fh
 
 

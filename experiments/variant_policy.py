@@ -141,7 +141,8 @@ def pack(out, clip):
         for f in clip.iterdir():  # the clip, so this folder can be --reuse'd like a latent run's
             tar.add(f, f"clips/{clip.name}/{f.name}")
         for d in out.glob("policy_*"):
-            for f in ["policy.mp4", "policy_metrics.json", "policy_qpos.npy", "train.log", "motion.npz", "weights.json"]:
+            for f in ["policy.mp4", "policy_metrics.json", "policy_qpos.npy", "train.log", "motion.npz", "weights.json",
+                      "reward_config.json"]:
                 if (d / f).exists():
                     tar.add(d / f, f"{d.name}/{f}")
             ckpts = sorted(d.glob("logs/*/*/model_*.pt"), key=lambda p: int(p.stem.split("_")[1]))

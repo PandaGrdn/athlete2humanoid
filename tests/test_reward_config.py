@@ -264,12 +264,16 @@ class RewardConfigTest(unittest.TestCase):
         for task in (tracking, tracking + "/play", HYBRID):
             self.assertNotIn("feet_height", tasks[task].rewards, task)
         rc = self.tmp / "rc.json"
-        rc.write_text(json.dumps({"feet_height": {"weight": 2.0, "std": 0.05, "swing_only": 0}}))
+        rc.write_text(json.dumps({"feet_height": {"weight": 2.0, "std": 0.05, "swing_only": False}}))
         mt, tasks = import_mjlab_tasks(rc)
         t = tasks[tracking].rewards["feet_height"]
         self.assertIs(t.func, mt.FeetHeight)
         self.assertEqual((t.weight, t.params), (2.0, {"std": 0.05, "clearance": 0.03, "swing_only": False}))
         self.assertNotIn("feet_height", tasks[HYBRID].rewards)  # the tracking task only
+        for bad in ({"weight": 2.0, "sdt": 0.1}, {"weight": 2.0, "swing_only": "false"}, {"weight": 2.0, "std": 0}):
+            rc.write_text(json.dumps({"feet_height": bad}))
+            with self.assertRaises(ValueError, msg=bad):
+                import_mjlab_tasks(rc)
 
     @unittest.skipUnless(importlib.util.find_spec("torch"), "needs torch")
     def test_feet_height_reward(self):
