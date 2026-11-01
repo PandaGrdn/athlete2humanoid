@@ -324,12 +324,19 @@ def env_bundle(folder, rid, cache_dir):
     still matches the run's spec and retarget, else one built on demand into cache_dir and rebuilt when the run's
     inputs change. None when the run has no task spec naming a clip with a retarget, or the build fails."""
     folder = Path(folder)
-    clip, _ = env_export.target_clip(folder)
+    clip, spec = env_export.target_clip(folder)
+    shipped = folder / ENV_ZIP
+    if shipped.is_file():
+        if clip is not None and env_export.is_current(shipped, folder):
+            return shipped
+        if clip is None and isinstance(spec, dict):
+            # a run folder with the spec but no retarget (a deploy bundle that shipped the zip and not qpos.npy):
+            # nothing can be rebuilt here, so the shipped bundle is served while it matches the spec
+            m = env_export.manifest_of(shipped)
+            if m is not None and m.get("spec_sha256") == env_export.sha256(env_export.canonical(spec)):
+                return shipped
     if clip is None:
         return None
-    shipped = folder / ENV_ZIP
-    if shipped.is_file() and env_export.is_current(shipped, folder):
-        return shipped
     # the cache name: the id cleaned for a file name, plus a hash of the id and folder so two runs can't share one
     tag = hashlib.sha256(f"{rid}\n{folder.resolve()}".encode()).hexdigest()[:10]
     safe = re.sub(r"[^\w.-]", "_", rid)[:64]
