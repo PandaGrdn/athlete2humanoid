@@ -240,6 +240,7 @@ export type Health = {
   train?: { backend: string; code_required: boolean; code_accepted: boolean; per_day: number; left_today: number;
     iterations: number; attempt_every: number; minutes: number; busy: boolean } | null;
   stages: { key: string; label: string; description: string }[];
+  store?: { kind: string } | null; // where finished builds and trainings are kept (server/store.py): "local" or "gcs"
 };
 
 /** A live job's data (GET /api/jobs/{id}/live), growing as its stages finish. Times are seconds of the
@@ -284,8 +285,34 @@ export type VariantsView = {
 /** A path the API serves (/api/...) on the API's origin; the site's own static files (/examples, /live-demo, ...) stay here. */
 export const url = (path: string) => (path.startsWith("/api/") ? API_BASE + path : path);
 
+// The visitor's own key (server/store.py OWNER_HEADER): made once per browser, kept in localStorage, sent with every API
+// call so the server can record who made a job, and restored on another device from a /my?key= link.
+export const OWNER_KEY_RE = /^[a-f0-9]{32}$/;
+const OWNER_STORAGE = "a2h_owner";
+let ownerCache: string | null = null;
+export function ownerKey(): string {
+  if (ownerCache) return ownerCache;
+  let k: string | null = null;
+  try { k = localStorage.getItem(OWNER_STORAGE); } catch { /* storage off: a key for this page load only */ }
+  if (!k || !OWNER_KEY_RE.test(k)) {
+    const b = new Uint8Array(16);
+    crypto.getRandomValues(b);
+    k = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+    try { localStorage.setItem(OWNER_STORAGE, k); } catch { /* as above */ }
+  }
+  ownerCache = k;
+  return k;
+}
+export function setOwnerKey(k: string) {
+  if (!OWNER_KEY_RE.test(k)) return;
+  ownerCache = k;
+  try { localStorage.setItem(OWNER_STORAGE, k); } catch { /* as above */ }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(url(path), init);
+  const headers = new Headers(init?.headers);
+  headers.set("X-A2H-Owner", ownerKey());
+  const r = await fetch(url(path), { ...init, headers });
   // A static host without the API answers /api/* with the SPA's index.html: treat that as "no API".
   if (r.ok && !(r.headers.get("content-type") ?? "").includes("json")) throw new Error("API not reachable");
   if (!r.ok) {
@@ -301,7 +328,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return r.json() as Promise<T>;
 }
 
+/** One of this visitor's jobs as /api/my/jobs lists it (server/main.py my_jobs). */
+export type MyJob = {
+  id: string;
+  runner: string;
+  status: Job["status"];
+  created_at: number;
+  updated_at: number;
+  filename: string | null;
+  summary: string | null; // the task spec's one line
+  duration_s: number | null;
+  error: string | null;
+  kept: boolean; // its files are in the durable store
+  env: { url: string; filename: string; size: number | null } | null;
+  training: Pick<Training, "state" | "iterations" | "attempt_every" | "attempts" | "iteration" | "reward" | "checkpoint"> | null;
+};
+
 export const api = {
+  mine: () => request<{ owner: string; jobs: MyJob[] }>("/api/my/jobs"),
   // A sleeping Space can take a while to answer; give up after 10 s and retry later.
   health: () => request<Health>("/api/health", typeof AbortSignal.timeout === "function" ? { signal: AbortSignal.timeout(10_000) } : {}),
   runs: () => request<RunSummary[]>("/api/runs"),

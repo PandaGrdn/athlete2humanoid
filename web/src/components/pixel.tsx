@@ -58,6 +58,7 @@ const LINKS = [
   { to: "/live", label: "Live" },
   { to: "/showcase", label: "Showcase" },
   { to: "/research", label: "Research" },
+  { to: "/my", label: "Mine" },
 ];
 
 function Brand() {
