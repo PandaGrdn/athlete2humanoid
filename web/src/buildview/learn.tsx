@@ -46,6 +46,7 @@ export function useLearnPlayer(scene: BuildScene | null, view: AttemptsView | nu
   // a training that is still going: follow its newest attempt
   useEffect(() => { if (mode === "follow" && n) setSelRaw(n - 1); }, [mode, n]);
   useEffect(() => { if (!live && mode === "follow") setMode("play"); }, [live, mode]);
+  useEffect(() => { if (live) setMode("follow"); }, [live]); // a training that starts on this page: follow it
 
   const row = rows[Math.min(sel, n - 1)] ?? null;
   const get = (r: AttemptMeta) => {
