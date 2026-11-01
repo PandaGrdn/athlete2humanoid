@@ -97,6 +97,7 @@
 [data-ui="pixel"] .bv-tag { border-radius: 0; }
 [data-ui="pixel"] .bv-tag.meta { background: var(--px-signal); border-color: var(--px-signal); color: var(--px-ink); }
 [data-ui="pixel"] .bv-chip.on .bv-tag.meta { border-color: var(--px-signal); }
+[data-ui="pixel"] .bv-tag.meta.off { background: transparent; border-color: currentColor; color: inherit; } /* skipped: outlined, struck */
 
 @media (max-width: 900px) {
   .bv-below { grid-template-columns: 1fr; }

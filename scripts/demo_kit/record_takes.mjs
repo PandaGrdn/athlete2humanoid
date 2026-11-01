@@ -2,7 +2,7 @@
 //
 //   npm install --prefix /tmp/a2h-rec playwright-core@1.48.2
 //   NODE_PATH=/tmp/a2h-rec/node_modules FF=$(python -c "import imageio_ffmpeg as f; print(f.get_ffmpeg_exe())") \
-//     BASE=http://localhost:5173 node scripts/demo_kit/record_takes.mjs build_sj|build_kick|showcase|live clips/punches.mov
+//     BASE=http://localhost:5173 node scripts/demo_kit/record_takes.mjs build_sj|build_kick|build_jog|env_jog|showcase|live <clip> [take name]
 //
 // Headless system Chrome on the real GPU (ANGLE Metal on a Mac), a 1280x720 page at 1.5x = 1920x1080. Frames come from
 // CDP's screencast with their timestamps and are re-timed to constant 30 fps, so the take plays at wall-clock speed.
@@ -66,7 +66,8 @@ fs.mkdirSync(OUT, { recursive: true });
 async function open() {
   const browser = await chromium.launch({ channel: "chrome", headless: true,
     args: ["--use-angle=metal", "--hide-scrollbars", "--autoplay-policy=no-user-gesture-required", "--disable-background-timer-throttling", "--disable-renderer-backgrounding"] });
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1.5, colorScheme: "dark" });
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1.5, colorScheme: "dark",
+    bypassCSP: true });  // the deployed site's CSP forbids the eval that waitForFunction uses
   const page = await ctx.newPage();
   page.on("response", (r) => r.status() >= 400 && console.log("http", r.status(), r.url()));
   page.on("console", (m) => m.type() === "error" && console.log("console:", m.text()));
@@ -116,6 +117,35 @@ async function build(rid, name) {
   const below = await top(page, ".bv-below");
   mark("scroll_timeline"); await smoothScroll(page, below - 80, 1600);
   mark("timeline"); await sleep(7000);
+  mark("end");
+  const info = await rec.stop(`${OUT}/${name}.mp4`);
+  fs.writeFileSync(`${OUT}/${name}.marks.json`, JSON.stringify({ marks, ...info }, null, 1));
+  await browser.close();
+}
+
+// The training-environment download: stage 05 of a stored run's build view, then its download button, clicked.
+async function env(rid, name) {
+  const { browser, page } = await open();
+  await page.goto(`${BASE}/build/${rid}`);
+  await page.waitForFunction(() => document.querySelectorAll(".bv-chip.ready").length === 6, null, { timeout: 60000 });
+  await sleep(1500);
+  const rail = await top(page, ".bv-rail");
+  await page.evaluate((y) => scrollTo(0, y), rail - 59);
+  await sleep(800);
+  const rec = await startRec(page, path.join(FRAMES, name));
+  const { marks, mark } = marker(rec);
+  await sleep(800);
+  mark("chip05"); await click(page, ".bv-chip", 4); await sleep(3500);
+  const btn = await page.evaluateHandle(() => [...document.querySelectorAll("a, button")].find((e) => e.textContent.includes("Download training environment")));
+  const y = await page.evaluate((e) => e.getBoundingClientRect().top + scrollY, btn);
+  mark("scroll_button"); await smoothScroll(page, Math.max(0, y - 360), 1400); await sleep(800);
+  const box = await btn.asElement().boundingBox();
+  mark("hover"); await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 25 }); await sleep(1200);
+  const dl = page.waitForEvent("download", { timeout: 30000 }).catch(() => null);
+  mark("click"); await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  const d = await dl;
+  if (d) { mark("downloaded"); await d.saveAs(`${OUT}/${rid}.a2h-env.zip`); }
+  await sleep(2500);
   mark("end");
   const info = await rec.stop(`${OUT}/${name}.mp4`);
   fs.writeFileSync(`${OUT}/${name}.marks.json`, JSON.stringify({ marks, ...info }, null, 1));
@@ -174,11 +204,13 @@ async function showcase(name) {
   await browser.close();
 }
 
-const [which, clip] = process.argv.slice(2);
+const [which, clip, takeName] = process.argv.slice(2);
 const TAKES = {
   build_sj: () => build("latent_s3_sj", "build_sj"),
   build_kick: () => build("latent_s3_kick", "build_kick"),
-  live: () => (clip && fs.existsSync(clip) ? live(clip, "live_upload") : Promise.reject(new Error("live needs a video file: live <clip>"))),
+  build_jog: () => build("latent_ra_jog", "build_jog"),
+  env_jog: () => env("latent_ra_jog", "env_jog"),
+  live: () => (clip && fs.existsSync(clip) ? live(clip, takeName ?? "live_upload") : Promise.reject(new Error("live needs a video file: live <clip>"))),
   showcase: () => showcase("showcase"),
 };
 if (!TAKES[which]) {
