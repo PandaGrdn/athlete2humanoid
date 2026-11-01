@@ -82,6 +82,24 @@ def test_run_env_zip_shipped_and_bad_ids(client, runs_dir):
     assert client.get("/api/runs/latent/files/env.zip").status_code == 200  # the shipped file is a run artifact like any
 
 
+def test_run_env_zip_shipped_without_retarget(client, runs_dir):
+    """A run folder that ships env.zip but no clips/<clip>/qpos.npy (a deploy bundle) serves the shipped file while
+    its manifest matches the folder's task spec, and nothing once the spec changes: there is no retarget to rebuild from."""
+    give_spec_and_retarget(runs_dir)
+    run = runs_dir / "remote_latent"
+    shipped = run / "env.zip"
+    assert env_export.export_run(run, shipped, generate=False)
+    for q in run.glob("clips/*/qpos.npy"):
+        q.unlink()
+    r = client.get("/api/runs/latent/env.zip")
+    assert r.status_code == 200 and r.content == shipped.read_bytes()
+    assert client.get("/api/runs/latent").json()["env"]["size"] == shipped.stat().st_size
+    assert not list((client.app.state.settings.data_dir / "env").glob("*.zip"))
+    (run / "task_spec.json").write_text(json.dumps({**keypose_spec(), "name": "squat", "summary": "changed"}))
+    assert client.get("/api/runs/latent/env.zip").status_code == 404
+    assert client.get("/api/runs/latent").json()["env"] is None
+
+
 def test_concurrent_requests_build_once(runs_dir, tmp_path):
     """Eight threads asking for an uncached run's bundle at once all get it, from one build, with no temp files left."""
     give_spec_and_retarget(runs_dir)

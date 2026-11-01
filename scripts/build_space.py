@@ -31,7 +31,8 @@ from server import runs as R  # noqa: E402
 RUN_FILES = ["eval.json", "status.json", "task_spec.json", "distill_report.json", "comparison.mp4", "reward.pt", "web.json", "variants.json",
              "poster.jpg", "robust.json", "env.zip"]
 POLICY_FILES = ["policy.mp4", "policy_metrics.json", "policy.onnx"]
-CLIP_FILES = ["meta.json", "retarget_report.json", "motion.csv", "side_by_side.mp4", "silhouette.mp4", "human.npy"]
+CLIP_FILES = ["meta.json", "retarget_report.json", "motion.csv", "side_by_side.mp4", "silhouette.mp4", "human.npy",
+              "qpos.npy"]  # qpos.npy: the retarget the run API checks its shipped env.zip against (runs.env_bundle)
 
 # The gallery: the runs trained on the SAM 3D Body references (docs/PIPELINE_ACCURACY.md, fix 3): single-clip
 # tracking on the squat jump, front kick and squat, the keypose task on jumping jacks, lunge and punches; and the
