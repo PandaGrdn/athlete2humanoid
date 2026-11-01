@@ -178,6 +178,7 @@ def run(video, out, max_seconds, name="clip", sam3d=None, timeout_s=240.0, job_i
                            "timings_s": {str(k)[:20]: round(float(v), 2) for k, v in (r.get("timings_s") or {}).items()
                                          if isinstance(v, (int, float))}}
             mediapy.write_video(str(out / MASK_VIDEO), track.overlay(frames, masks), fps=FPS)  # the build view's mask
+            save()  # the page shows the mask and credits SAM 3.1 now, not only when the pose stage is done
             emit(stage="pose", note=f"SAM 3.1: person visible in {seen:.0%} of frames", progress=0.8)
     if sam3d:
         from frontends import sam3d_body  # not in the Space image: imported only when asked for

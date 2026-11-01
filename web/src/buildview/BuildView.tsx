@@ -299,7 +299,8 @@ function stageModels(k: StageKey, input: BuildInput, st: StageStatus): StageMode
   const done = st === "ready" || st === "offer";
   switch (k) {
     case "video":
-      return [input.segmenter || !done
+      // whether SAM 3.1 ran is known with the pose (a live build on a GPU writes both when its pose stage is in)
+      return [input.segmenter || !input.poseModel
         ? { name: "SAM 3.1", meta: true, why: "Meta's SAM 3.1 segments and tracks the person from a text prompt" }
         : { name: "SAM 3.1", meta: true, off: true, why: "Not run on this CPU build: the pose model reads the whole frame" }];
     case "skeleton":
@@ -330,7 +331,9 @@ function Caption({ k, input, status, pick, accepted, note }: { k: StageKey | nul
   const text: Record<StageKey, ReactNode> = {
     video: input.segmenter
       ? <>{input.segmenter} segments and tracks the athlete; the pose model sees only the masked person.</>
-      : <>This CPU build skips {"SAM 3.1"}: the pose model reads the whole frame, so film one person.</>,
+      : !input.poseModel && (status.skeleton === "waiting" || status.skeleton === "working")
+        ? <>The pose stage is still running. SAM 3.1's mask shows here once it is in; a CPU-only build skips it.</>
+        : <>This CPU build skips {"SAM 3.1"}: the pose model reads the whole frame, so film one person.</>,
     skeleton: <>{input.poseModel ?? "The pose model"} lifts the athlete to 3D: {input.skeleton?.j ?? 17} joints in metres, feet on the floor, in step with the video.</>,
     retarget: <>mink IK puts the motion on the G1's 29 joints and bone lengths. The lines join each wrist, elbow, knee and ankle to the body it drives{input.retargetCm != null ? <>; mean end-effector error {input.retargetCm.toFixed(1)} cm</> : null}.</>,
     moments: spec ? <>{spec.counts.moments} key moments{spec.counts.flights ? ` and ${spec.counts.flights} flight${spec.counts.flights > 1 ? "s" : ""}` : ""}, found in the motion itself{spec.named_by ? <>, named by {spec.named_by}</> : null}. The reward pays for reaching them in order; a ring pulses as each passes.</> : null,
