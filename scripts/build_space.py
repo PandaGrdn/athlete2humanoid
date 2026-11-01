@@ -29,13 +29,15 @@ sys.path.insert(0, str(REPO))
 from server import runs as R  # noqa: E402
 
 RUN_FILES = ["eval.json", "status.json", "task_spec.json", "distill_report.json", "comparison.mp4", "reward.pt", "web.json", "variants.json",
-             "poster.jpg"]
+             "poster.jpg", "robust.json"]
 POLICY_FILES = ["policy.mp4", "policy_metrics.json", "policy.onnx"]
 CLIP_FILES = ["meta.json", "retarget_report.json", "motion.csv", "side_by_side.mp4", "silhouette.mp4", "human.npy"]
 
 # The gallery: the runs trained on the SAM 3D Body references (docs/PIPELINE_ACCURACY.md, fix 3): single-clip
-# tracking on the squat jump, front kick and squat, the keypose task on jumping jacks, lunge and punches.
-DEFAULT_RUNS = ["remote_latent_s3_*"]
+# tracking on the squat jump, front kick and squat, the keypose task on jumping jacks, lunge and punches; and the
+# real athletes' clips (docs/REAL_ATHLETES.md, experiments/real_athletes.py assemble), each with its source's credit,
+# only those whose policy completes its clip (passes()). None does yet.
+DEFAULT_RUNS = ["remote_latent_s3_*", "remote_latent_ra_*"]
 DEFAULT_DEMO_RUN = "latent_s3_kick"  # featured on the home page: a front kick learned from its video
 
 # What server/live_worker.py imports from the repo (no latent/, no SAM: MediaPipe on CPU), and its assets.
@@ -204,9 +206,18 @@ def server_has_live():
     return all((REPO / "server" / f).is_file() for f in ("live.py", "live_worker.py"))
 
 
+def passes(run):
+    """A real-athlete run (remote_latent_ra_*) ships only when its policy completes its clip; an `assemble --all` copy kept
+    to inspect a failing one must not reach the site. Other runs aren't gated."""
+    if not fnmatch.fnmatch(run.name, "remote_latent_ra_*"):
+        return True
+    ev = R.read_json(run / "eval.json") or {}
+    return isinstance(ev.get("tracking_var"), dict) and ev["tracking_var"].get("task_success") is True
+
+
 def default_runs(src_root):
     found = R.find_runs(src_root, ["*smoke*", "_*"])
-    return [d for d in found.values() if any(fnmatch.fnmatch(d.name, p) for p in DEFAULT_RUNS)]
+    return [d for d in found.values() if any(fnmatch.fnmatch(d.name, p) for p in DEFAULT_RUNS) and passes(d)]
 
 
 def check_origins(cors):

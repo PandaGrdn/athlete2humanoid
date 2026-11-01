@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { url } from "../api";
+import { url, type Credit } from "../api";
 import { useUiMode } from "../theme";
 
 export type IconName = "upload" | "play" | "pause" | "download" | "arrow" | "cube" | "chart" | "file" | "film" | "x" | "check" | "github";
@@ -101,5 +101,16 @@ export function StatusPill({ status }: { status: string }) {
       {live && <span className="dot live" />}
       {status}
     </span>
+  );
+}
+
+/** The source video's attribution (a run's web.json "credit"): required on the page for CC BY clips. */
+export function CreditLine({ credit }: { credit?: Credit | null }) {
+  if (!credit) return null;
+  return (
+    <p className="muted credit" style={{ fontSize: 13, marginTop: 8, maxWidth: 820 }}>
+      Source video: {credit.url ? <a href={credit.url} target="_blank" rel="noopener noreferrer">{credit.text}</a> : credit.text}
+      {credit.licence && <> ({credit.licence})</>}
+    </p>
   );
 }

@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { api, fmt, policyColor, url, type FileRef, type Policy, type Robust, type RunDetail, type TaskSpec } from "../api";
 import { BarChart, LineChart } from "../components/charts";
 import { EnvironmentPanel } from "../components/environment";
-import { Icon, LoopVideo } from "../components/ui";
+import { CreditLine, Icon, LoopVideo } from "../components/ui";
 import { Typed } from "../components/pixel";
 
 const NEUTRAL = "#4a5562";
@@ -59,6 +59,7 @@ export default function RunPage() {
             <span className="pill">{fmt.date(run.finished)}</span>
           </div>
           {run.description && <p className="muted" style={{ marginTop: 12, maxWidth: 720 }}>{run.description}</p>}
+          <CreditLine credit={run.credit} />
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <Link className="btn primary" to={`/build/${run.id}`}><Icon name="cube" size={16} />Build in 3D</Link>

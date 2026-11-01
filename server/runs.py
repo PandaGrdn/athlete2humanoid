@@ -226,6 +226,7 @@ def summarize(runs_dir, rid, folder, detail=False):
         "id": rid,
         "title": web.get("title") or f"{(target or rid).replace('_', ' ').title()}" + (f" · {tag}" if tag else ""),
         "description": web.get("description") or "",
+        "credit": _credit(web.get("credit")),
         "target": target, "tag": tag or None,
         "iterations": int(iters) if iters and iters.isdigit() else None,
         "started": st.get("started"), "finished": st.get("finished"), "state": st.get("state") or "done",
@@ -304,6 +305,15 @@ def _text(v, n=160):
     if not isinstance(v, str):
         return None
     return redact(re.sub(r"[\x00-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2066-\u2069]", " ", v)).strip()[:n] or None
+
+
+def _credit(v):
+    """web.json "credit": the source video's attribution, {text, url, licence}, shown wherever the run is (CC BY
+    clips must carry it). The url only when it is https."""
+    if not isinstance(v, dict) or not _text(v.get("text"), 300):
+        return None
+    url = v.get("url") if isinstance(v.get("url"), str) and re.fullmatch(r"https://[^\s\"'<>]{1,400}", v["url"]) else None
+    return {"text": _text(v.get("text"), 300), "url": url, "licence": _text(v.get("licence"), 60)}
 
 
 def _sec(v):

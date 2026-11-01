@@ -7,6 +7,10 @@
         # an earlier run's processed clips (no SAM) and its policies' rollouts (DAgger data)
     python3 scripts/remote_run.py robust --reuse outputs/remote_latent   # that run's policies under
         # perturbation (experiments/robustness_eval.py) -> outputs/remote_robust/robust.json
+    python3 scripts/remote_run.py pro --iters 0 --backend modal --clips-dir clips_athletes --min-clips 1 --in-place sprint
+        # new videos processed on Modal (SAM 3.1 + SAM 3D Body installed at job start), nothing trained
+    python3 scripts/remote_run.py athletes --backend modal --reuse outputs/athletes_inputs --with-weights --iters 1000
+        # each processed clip -> a variants tracker + its held-out variants (scripts/real_athletes.sh)
     python3 scripts/remote_run.py relevance --reuse outputs/remote_latent_v2 --target squat_jump --iters 1000
         # goal relevance (experiments/goal_relevance.py): V-JEPA importance + with/without --importance
 
@@ -40,6 +44,7 @@ REMOTE = "/content/a2h"  # on FarmShare: <fs-root>/runs/<session>, set in main()
 OUT = SESSION = None  # set in main()
 CLIPS_DIR = REPO / "clips"  # --clips-dir
 BRANCH = "main"  # --branch: the code the GPU job runs
+COLAB_GPU = os.environ.get("A2H_COLAB_GPU", "A100")  # when A100s are unavailable: L4
 
 
 def latent_out(a):
@@ -50,11 +55,18 @@ def latent_out(a):
 def job_spec(a):
     """(setup flag, command run in the repo after setup, {local name: remote path} to fetch)."""
     if a.job == "pro":  # scripts/pro_clips.sh: new videos -> SAM (installed at job start) -> trained, tested policies
-        if not a.reuse:
+        if not a.reuse and a.iters:  # --iters 0: process only (the way to process new videos on Modal)
             raise SystemExit("pro needs --reuse <a folder with policy_*/model_*.pt and vjl_pca.npz>")
         pols = " ".join(x for x in a.args.split() if x.isidentifier()) or "tracking_var multi multi_vjc"
-        return ("--with-main", f"POLICIES='{pols}' bash scripts/pro_clips.sh {a.iters} {{clips}}",
+        if not re.fullmatch(r"[A-Za-z0-9_,.-]*", a.in_place):
+            raise SystemExit(f"odd --in-place: {a.in_place}")
+        return ("--with-main", f"POLICIES='{pols}' IN_PLACE='{a.in_place}' bash scripts/pro_clips.sh {a.iters} {{clips}}",
                 {"results.tar.gz": f"{REMOTE}/outputs/pro/results.tar.gz"})
+    if a.job == "athletes":  # scripts/real_athletes.sh: processed clips -> a variants tracker each, in parallel, + short eval
+        if not a.reuse:
+            raise SystemExit("athletes needs --reuse <a folder with clips/<name>/ and policy_tracking_var/model_*.pt> --with-weights")
+        return ("--with-main", f"bash scripts/real_athletes.sh {a.iters} {a.args}",
+                {"results.tar.gz": f"{REMOTE}/outputs/athletes/results.tar.gz"})
     if a.job == "process":  # experiments/process_clips.py: new videos -> clip folders (SAM, retarget, V-JEPA), no training
         out = f"{REMOTE}/outputs/process" + (f"_{a.tag}" if a.tag else "")
         return ("--with-sam", f"python3 experiments/process_clips.py {{clips}} --out {out}",
@@ -175,6 +187,8 @@ def pack_reuse(src, policies=False, checkpoints=None, script=None):
                 tar.add(src / name, name)
         if script:
             tar.add(script, script.name)
+        if (src / "from").is_dir():  # athletes --args "--from <inputs>/from": an interrupted run's variants + checkpoints
+            tar.add(src / "from", "from")
         if (src / "transfer").is_dir():  # robust job: clips the policies never trained on (--transfer)
             tar.add(src / "transfer", "transfer")
         if policies:  # the robust job: the trained policies themselves, and their eval
@@ -207,8 +221,8 @@ def pack_weights(src):
 
 
 def launch(found, setup, cmd, inputs=None):
-    colab("new", "-s", SESSION, "--gpu", "A100", timeout=900)
-    log("A100 ready; uploading inputs")
+    colab("new", "-s", SESSION, "--gpu", COLAB_GPU, timeout=900)
+    log(f"{COLAB_GPU} ready; uploading inputs")
     _exec(f"import os; [os.makedirs(d, exist_ok=True) for d in ('{REMOTE}/clips', '{REMOTE}/env')]")
     for p in found:
         colab("upload", "-s", SESSION, str(p), f"{REMOTE}/clips/{p.name}", timeout=900)
@@ -339,7 +353,11 @@ def run_modal(a, mr, found, setup, cmd, fetch, inputs):
         raise SystemExit("the Modal image has no SAM 3.1 (new videos): run this job on Colab, or --reuse processed clips")
     mr.deploy()
     mr.upload(found, inputs, REPO / ".env")
-    mr.submit(cmd.format(clips=" ".join(f"'{REMOTE}/clips/{p.name}'" for p in found)), a.branch)
+    try:
+        mr.submit(cmd.format(clips=" ".join(f"'{REMOTE}/clips/{p.name}'" for p in found)), a.branch)
+    except BaseException:  # refused (e.g. the workspace's spend limit): the uploaded token must not stay on the Volume
+        mr.cleanup()
+        raise
     try:
         state = wait(mr, lambda: sync_checkpoints(a, mr.download))
     except KeyboardInterrupt:
@@ -461,7 +479,7 @@ def main(a):
 def parser():
     ap = argparse.ArgumentParser()
     ap.add_argument("job", choices=["probe", "latent", "robust", "relevance", "variants", "multiclip", "process", "pro", "pushes",
-                                        "agentround"])
+                                        "agentround", "athletes"])
     ap.add_argument("--min-clips", type=int, default=6)
     ap.add_argument("--clips-dir", default=str(REPO / "clips"), help="where the videos to upload are (default clips/)")
     ap.add_argument("--max-wait-h", type=float, default=8)
@@ -475,6 +493,8 @@ def parser():
                     help="with --reuse: upload its trained policies too (for --args '--init/--resume-from /content/a2h/inputs')")
     ap.add_argument("--init-weights", help="an earlier run's results folder whose policies this run's start from "
                                            "(a new video: its weights only; with --reuse use --with-weights)")
+    ap.add_argument("--in-place", default="", help="pro job: comma-separated video stems to run in place "
+                    "(pipeline.py --in-place: a sprint as a gait on the spot)")
     ap.add_argument("--args", default="", help="extra flags for the job's script (latent_policy.py, robustness_eval.py)")
     fs = ap.add_argument_group("FarmShare (--backend farmshare; docs/FARMSHARE.md)")
     ap.add_argument("--backend", choices=["colab", "farmshare", "modal"], default="colab")

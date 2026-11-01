@@ -65,10 +65,13 @@ export type Robust = {
   step_hz: number | null;
 };
 
+export type Credit = { text: string; url: string | null; licence: string | null };
+
 export type RunSummary = {
   id: string;
   title: string;
   description: string;
+  credit?: Credit | null; // the source video's attribution (web.json), for clips under a licence that asks for one
   target: string | null;
   tag: string | null;
   iterations: number | null;

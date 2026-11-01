@@ -1,0 +1,123 @@
+{
+ "swing_rule": "ankle more than 0.03 m above its 5th percentile, >= 2 frames",
+ "policy_run": "outputs/remote_athletes_ra6",
+ "sources": {
+  "human, reference": "outputs/athletes_inputs/clips/<clip>/human.npy, qpos.npy (what the policy trained on)",
+  "travelling, in_place_now": "the same human.npy retargeted by this checkout, without and with --in-place",
+  "policy": "outputs/remote_athletes_ra6/<clip>/robust/rollouts.npz, the clean condition"
+ },
+ "jog_lakeside": {
+  "in_place": "world",
+  "stance_in_place": {
+   "frac": [
+    0.333,
+    0.3
+   ],
+   "air_runs": [
+    8,
+    8
+   ]
+  },
+  "stance_travelling": {
+   "frac": [
+    0.0,
+    0.0
+   ],
+   "air_runs": [
+    0,
+    0
+   ]
+  },
+  "human": {
+   "left": {
+    "max_m": 0.329,
+    "median_m": 0.142,
+    "swing_count": 8,
+    "swing_duration_s": 0.567,
+    "swing_peak_m": 0.226,
+    "swing_air_frac": 0.7
+   },
+   "right": {
+    "max_m": 0.328,
+    "median_m": 0.168,
+    "swing_count": 8,
+    "swing_duration_s": 0.533,
+    "swing_peak_m": 0.208,
+    "swing_air_frac": 0.689
+   }
+  },
+  "in_place_now": {
+   "left": {
+    "max_m": 0.262,
+    "median_m": 0.076,
+    "swing_count": 8,
+    "swing_duration_s": 0.433,
+    "swing_peak_m": 0.197,
+    "swing_air_frac": 0.528
+   },
+   "right": {
+    "max_m": 0.247,
+    "median_m": 0.089,
+    "swing_count": 8,
+    "swing_duration_s": 0.433,
+    "swing_peak_m": 0.182,
+    "swing_air_frac": 0.589
+   }
+  },
+  "reference": {
+   "left": {
+    "max_m": 0.262,
+    "median_m": 0.076,
+    "swing_count": 8,
+    "swing_duration_s": 0.433,
+    "swing_peak_m": 0.197,
+    "swing_air_frac": 0.528
+   },
+   "right": {
+    "max_m": 0.247,
+    "median_m": 0.089,
+    "swing_count": 8,
+    "swing_duration_s": 0.433,
+    "swing_peak_m": 0.182,
+    "swing_air_frac": 0.589
+   }
+  },
+  "travelling": {
+   "left": {
+    "max_m": 0.273,
+    "median_m": 0.091,
+    "swing_count": 8,
+    "swing_duration_s": 0.5,
+    "swing_peak_m": 0.216,
+    "swing_air_frac": 0.617
+   },
+   "right": {
+    "max_m": 0.277,
+    "median_m": 0.119,
+    "swing_count": 8,
+    "swing_duration_s": 0.567,
+    "swing_peak_m": 0.221,
+    "swing_air_frac": 0.722
+   }
+  },
+  "policy": {
+   "left": {
+    "max_m": 0.266,
+    "median_m": 0.042,
+    "swing_count": 8,
+    "swing_duration_s": 0.36,
+    "swing_peak_m": 0.216,
+    "swing_air_frac": 0.451
+   },
+   "right": {
+    "max_m": 0.244,
+    "median_m": 0.057,
+    "swing_count": 8,
+    "swing_duration_s": 0.38,
+    "swing_peak_m": 0.199,
+    "swing_air_frac": 0.495
+   }
+  },
+  "policy_rollouts": 2
+ }
+}

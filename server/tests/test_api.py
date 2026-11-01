@@ -133,6 +133,18 @@ def test_run_detail(client):
     assert {"checkpoint", "motion", "metrics"} <= kinds
 
 
+def test_run_credit(client, runs_dir):
+    assert client.get("/api/runs/latent").json()["credit"] is None
+    (runs_dir / "remote_latent_sparse" / "web.json").write_text(json.dumps({"credit": {
+        "text": "A. Runner, \"Sprint\" via Wikimedia Commons", "url": "https://commons.wikimedia.org/wiki/File:Sprint.webm",
+        "licence": "CC BY 4.0"}}))
+    c = client.get("/api/runs/latent_sparse").json()["credit"]
+    assert c == {"text": 'A. Runner, "Sprint" via Wikimedia Commons', "url": "https://commons.wikimedia.org/wiki/File:Sprint.webm",
+                 "licence": "CC BY 4.0"}
+    (runs_dir / "remote_latent_sparse" / "web.json").write_text(json.dumps({"credit": {"text": "x", "url": "javascript:alert(1)"}}))
+    assert client.get("/api/runs/latent_sparse").json()["credit"] == {"text": "x", "url": None, "licence": None}
+
+
 def test_build_view_files(client, runs_dir):
     """What the 3D build view reads from a stored run: the clip named after its task spec (no --target in its
     command), the pose model that ran, its 3D skeleton (human.npy) and the variants preview (variants.json)."""

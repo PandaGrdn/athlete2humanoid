@@ -57,6 +57,33 @@
      "l": "mean joint error to the reference"
     }
    ]
+  },
+  {
+   "id": "jog-lakeside",
+   "tab": "Lakeside run",
+   "title": [
+    "The lakeside run,",
+    "on the spot."
+   ],
+   "kicker": "Free-licence video → one policy",
+   "lede": "A runner filmed side-on in a tracking shot along a lakeside road. The G1 trains on the gait from this video. The clip travels; the G1 runs it in place.",
+   "video": "Pavel Danilyuk's clip (Pexels License). SAM 3.1 segments the person, SAM 3D Body lifts the pose to 3D, and the run's forward travel is taken out.",
+   "policy": "PPO in mjlab on 36 automatic variants of the clip, warm-started from the squat-jump tracker, 1000 iterations. The network's own run in MuJoCo, recorded.",
+   "facts": [
+    {
+     "v": "100%",
+     "l": "of clean runs pass the clip's spec (3 of 13 key moments required)"
+    },
+    {
+     "v": "100%",
+     "l": "of runs on held-out variants pass their own spec"
+    }
+   ],
+   "credit": {
+    "text": "Pavel Danilyuk, \"A Man Wearing Sunglasses Running in the Street\", Pexels",
+    "url": "https://www.pexels.com/video/a-man-wearing-sunglasses-running-in-the-street-4065467/",
+    "licence": "Pexels License"
+   }
   }
  ]
 }

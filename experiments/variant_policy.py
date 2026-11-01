@@ -97,7 +97,11 @@ def main(a):
     out.mkdir(parents=True, exist_ok=True)
     py = Path(os.environ.get("A2H_MJLAB_PYTHON", "/content/mjlab_env/bin/python"))
     env = dict(os.environ, MUJOCO_GL=os.environ.get("MUJOCO_GL", "egl"), WANDB_MODE="disabled")
-    csv, fps = build(clip, out, py, env, a.seed)
+    if a.reuse_build and (out / "variants" / "variants.json").exists() and (out / "motion_variants.npz").exists():
+        csv, fps = out / "variants" / ORIGINAL / "motion.csv", float(json.loads((clip / "meta.json").read_text())["fps"])
+        log(f"reusing the variants already built in {out}")
+    else:
+        csv, fps = build(clip, out, py, env, a.seed)
     if a.build_only:
         return
     procs = {}
@@ -109,6 +113,8 @@ def main(a):
         init = init_checkpoint(name, a.init)
         if init:
             cmd += ["--init", init]
+        if a.reward_config:  # e.g. the tracking task's foot-height term (mjlab_tasks.FEET_HEIGHT)
+            cmd += ["--reward-config", Path(a.reward_config).resolve()]
         if name in TASK_FIRST:
             cmd += ["--task-spec", out / "task_spec.json", "--importance", out / "importance_variants.json",
                     "--rollout-importance", out / "importance.json"]
@@ -135,7 +141,8 @@ def pack(out, clip):
         for f in clip.iterdir():  # the clip, so this folder can be --reuse'd like a latent run's
             tar.add(f, f"clips/{clip.name}/{f.name}")
         for d in out.glob("policy_*"):
-            for f in ["policy.mp4", "policy_metrics.json", "policy_qpos.npy", "train.log", "motion.npz", "weights.json"]:
+            for f in ["policy.mp4", "policy_metrics.json", "policy_qpos.npy", "train.log", "motion.npz", "weights.json",
+                      "reward_config.json"]:
                 if (d / f).exists():
                     tar.add(d / f, f"{d.name}/{f}")
             ckpts = sorted(d.glob("logs/*/*/model_*.pt"), key=lambda p: int(p.stem.split("_")[1]))
@@ -153,5 +160,8 @@ if __name__ == "__main__":
     ap.add_argument("--iters", type=int, default=1500)
     ap.add_argument("--num-envs", type=int, default=4096)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--reward-config", help="reward settings (JSON, train_motion.py --reward-config), for every policy")
     ap.add_argument("--build-only", action="store_true", help="make the variants and motion files, train nothing")
+    ap.add_argument("--reuse-build", action="store_true", help="--out already has the variants and motion files (an "
+                    "interrupted run's): train on them instead of building them again")
     main(ap.parse_args())

@@ -2,6 +2,8 @@
 silhouette latent. The archive is what variant_policy.py / multiclip_policy.py read as clips/<name>/.
 
     python experiments/process_clips.py clips_pro/*.mp4 --out outputs/process_pro
+    python experiments/process_clips.py clips_pro/*.mp4 --out outputs/process_pro --in-place sprint,hurdles
+        # those clips (by file stem) run in place (pipeline.py --in-place)
 
 Needs the SAM env (scripts/setup_colab.sh --with-sam), so it runs on Colab (scripts/remote_run.py process).
 """
@@ -36,10 +38,12 @@ def main(a):
     from latent.vjepa import VJepa
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
+    import retarget
     vj, done = VJepa(), {}
+    in_place = {s.strip().lower() for s in a.in_place.split(",") if s.strip()}
     for v in a.videos:
         try:
-            d = _processed(v)
+            d = _processed(v, retarget.IN_PLACE_DEFAULT if Path(v).stem.lower() in in_place else None)
             if Path(v).suffix.lower() in (".mp4", ".mov", ".avi", ".mkv"):
                 record_source(v, d)
             video_latent(d, vj)
@@ -61,4 +65,5 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("videos", nargs="+")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--in-place", default="", help="comma-separated video stems to run in place (pipeline.py --in-place)")
     main(ap.parse_args())
