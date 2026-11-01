@@ -1,32 +1,33 @@
 """The training environment the API hands out: GET /api/runs/{id}/env.zip (built on demand from the run folder and
 cached), its entry in the run detail, and a live job's /api/jobs/{id}/env.zip (server/live_worker.py writes it)."""
 
+import io
 import json
+import os
+import shutil
 import zipfile
 
-import numpy as np
-import pytest
+from a2h_env.export import npy_header
 
 from .test_api import REPO, wait_done
 from .test_live import live_client, upload  # noqa: F401
 from .test_task_spec import keypose_spec
 
-np = pytest.importorskip("numpy") if False else np  # numpy is a test convenience only (the server itself needs none)
+QPOS = REPO / "tests" / "data" / "qpos_front_kick.npy"  # copied as bytes: the server (and CI's server job) has no numpy
 
 
 def give_spec_and_retarget(runs_dir, run="remote_latent"):
-    """The fixture run gets what a bundle needs: a task spec naming its clip, and the clip's retarget."""
+    """The fixture run gets what a bundle needs: a task spec naming its clip, and the clip's retarget. -> frames"""
     d = runs_dir / run
     (d / "task_spec.json").write_text(json.dumps({**keypose_spec(), "name": "squat"}))
-    qpos = np.load(REPO / "tests" / "data" / "qpos_front_kick.npy")
-    np.save(d / "clips" / "squat" / "qpos.npy", qpos)
-    return qpos
+    shutil.copy(QPOS, d / "clips" / "squat" / "qpos.npy")
+    return npy_header(QPOS.read_bytes())[0][0]
 
 
 def test_run_env_zip(client, runs_dir):
     assert client.get("/api/runs/latent").json()["env"] is None  # no task spec yet
     assert client.get("/api/runs/latent/env.zip").status_code == 404
-    qpos = give_spec_and_retarget(runs_dir)
+    frames = give_spec_and_retarget(runs_dir)
     d = client.get("/api/runs/latent").json()
     env = d["env"]
     assert env["url"] == "/api/runs/latent/env.zip" and env["filename"] == "latent.a2h-env.zip" and env["size"] > 1000
@@ -36,11 +37,10 @@ def test_run_env_zip(client, runs_dir):
     assert r.status_code == 200 and r.headers["content-type"] == "application/zip"
     assert r.headers["content-disposition"] == 'attachment; filename="latent.a2h-env.zip"'
     assert r.headers["x-content-type-options"] == "nosniff" and len(r.content) == env["size"]
-    import io
     with zipfile.ZipFile(io.BytesIO(r.content)) as z:
         m = json.loads(z.read("manifest.json"))
-        assert m["id"] == "latent" and m["clip"] == "squat" and m["reference"]["frames"] == len(qpos)
-        assert np.array_equal(np.load(io.BytesIO(z.read("reference/qpos.npy"))), qpos)
+        assert m["id"] == "latent" and m["clip"] == "squat" and m["reference"]["frames"] == frames
+        assert z.read("reference/qpos.npy") == QPOS.read_bytes()
         assert "a2h_env/env.py" in z.namelist() and "README.md" in z.namelist()
     # cached: the same bytes until the run changes; a changed spec rebuilds it
     cache = client.app.state.settings.data_dir / "env"
@@ -50,7 +50,6 @@ def test_run_env_zip(client, runs_dir):
     assert (cache / "latent.a2h-env.zip").stat().st_mtime_ns == first
     spec = {**keypose_spec(), "name": "squat", "summary": "changed"}
     (runs_dir / "remote_latent" / "task_spec.json").write_text(json.dumps(spec))
-    import os
     os.utime(runs_dir / "remote_latent" / "task_spec.json", ns=(first + 10 ** 9, first + 10 ** 9))
     r = client.get("/api/runs/latent/env.zip")
     with zipfile.ZipFile(io.BytesIO(r.content)) as z:

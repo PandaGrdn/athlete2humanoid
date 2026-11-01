@@ -11,10 +11,29 @@ clean mjlab install with nothing else of the athlete2humanoid repository on the 
 Dependencies: numpy for reading; mjlab (which brings torch, mujoco, mujoco-warp and rsl-rl) for environments.
 """
 
-from .bundle import Bundle, Variant, describe, load_bundle  # noqa: F401
-
 VERSION = "1"  # bundle format version (manifest.json "format_version")
 LOADER_FILES = ("__init__.py", "__main__.py", "bundle.py", "env.py", "train.py")  # vendored into every bundle
+
+# Everything is imported on first use: the API server imports a2h_env.export with nothing but the standard library.
+
+
+def load_bundle(path):
+    """A Bundle from a .a2h-env.zip or its unzipped folder (numpy only). See a2h_env.bundle."""
+    from .bundle import load_bundle as _load
+    return _load(path)
+
+
+def describe(bundle):
+    """What a bundle holds, as `python -m a2h_env info` prints it."""
+    from .bundle import describe as _describe
+    return _describe(bundle)
+
+
+def __getattr__(name):
+    if name in ("Bundle", "Variant"):
+        from . import bundle
+        return getattr(bundle, name)
+    raise AttributeError(name)
 
 
 def make_env(bundle, variant=None, num_envs=4096, device=None, play=False, work_dir=None):
