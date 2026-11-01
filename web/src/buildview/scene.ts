@@ -143,6 +143,90 @@ class StickFigure {
 
 type Ghost = { g1: G1; frames: Frames; fps: number; slot: THREE.Vector3; root0: THREE.Vector2; label: THREE.Mesh; mat: THREE.MeshBasicMaterial };
 
+const HOLD_S = 0.9; // an attempt that ended (a fall) stays on its last frame this long before the next
+
+export type LearnState = { t: number; duration: number; playing: boolean; ended: boolean };
+
+/** One attempt of the policy while it trained, played on its own clock in the policy slot, with the clip's
+ *  reference as a ghost on the same clock: where the robot drifts from the ghost is what it has yet to learn. */
+export class LearnActor {
+  readonly group = new THREE.Group();
+  readonly robot: G1;
+  readonly ghost: G1;
+  state: LearnState = { t: 0, duration: 0, playing: true, ended: false };
+  loop = true;
+  onEnd: (() => void) | null = null;
+  private frames: Frames | null = null;
+  private fps = 50;
+  private ref: Frames | null = null;
+  private refFps = 30;
+  private root0 = new THREE.Vector2();
+  private refRoot0 = new THREE.Vector2();
+  private held = 0;
+  private q = newQpos();
+  private listeners = new Set<() => void>();
+
+  constructor(robot: Robot, geoms: THREE.BufferGeometry[]) {
+    const ghostMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.14, depthWrite: false });
+    this.robot = new G1(robot, geoms, solidMaterials(), true);
+    this.ghost = new G1(robot, geoms, { light: ghostMat, dark: ghostMat }, false);
+    this.group.add(this.robot.group, this.ghost.group);
+  }
+
+  subscribe = (fn: () => void) => { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; };
+  getState = () => this.state;
+  private emit(patch: Partial<LearnState>) {
+    this.state = { ...this.state, ...patch };
+    this.listeners.forEach((fn) => fn());
+  }
+
+  /** The attempt to play (from its first frame) and the reference it tried to follow. */
+  set(frames: Frames | null, fps: number, ref: Frames | null, refFps: number) {
+    this.frames = frames && frames.n ? frames : null;
+    this.fps = fps || 50;
+    this.ref = ref && ref.n ? ref : null;
+    this.refFps = refFps || 30;
+    this.held = 0;
+    if (this.frames) { sample(this.frames, 0, this.q); this.root0.set(this.q[0], this.q[1]); this.robot.set(this.q); }
+    if (this.ref) { sample(this.ref, 0, this.q); this.refRoot0.set(this.q[0], this.q[1]); this.ghost.set(this.q); }
+    this.robot.group.visible = !!this.frames;
+    this.ghost.group.visible = !!this.ref;
+    this.emit({ t: 0, duration: this.frames ? (this.frames.n - 1) / this.fps : 0, ended: false });
+  }
+
+  setPlaying(playing: boolean) { this.emit({ playing }); }
+  seek(t: number) { this.held = 0; this.emit({ t: Math.max(0, Math.min(this.state.duration, t)), ended: false }); }
+
+  update(dt: number, slotY: number) {
+    const fr = this.frames;
+    if (!fr) return;
+    let { t } = this.state;
+    const dur = this.state.duration;
+    let ended = this.state.ended;
+    if (this.state.playing && !ended) {
+      t += dt;
+      if (t >= dur) {
+        t = dur;
+        this.held += dt;
+        if (this.held >= HOLD_S) {
+          this.held = 0;
+          if (this.loop) t = 0;
+          else { ended = true; this.onEnd?.(); }
+        }
+      }
+    }
+    if (t !== this.state.t || ended !== this.state.ended) this.emit({ t, ended });
+    sample(fr, t * this.fps, this.q);
+    this.robot.set(this.q);
+    this.robot.group.position.set(-this.root0.x, slotY - this.root0.y, 0);
+    if (this.ref) {
+      sample(this.ref, t * this.refFps, this.q);
+      this.ghost.set(this.q);
+      this.ghost.group.position.set(-this.refRoot0.x, slotY - this.refRoot0.y, 0);
+    }
+  }
+}
+
 export class BuildScene extends Stage {
   private geoms: THREE.BufferGeometry[];
   private shared: ReadonlySet<THREE.BufferGeometry>;
@@ -158,6 +242,8 @@ export class BuildScene extends Stage {
   private ghostsAt = 0;
   private actor: PolicyActor | null = null;
   private actorAt = 0;
+  private learn: LearnActor | null = null;
+  private learnAt = 0;
   private unclick: () => void;
   private labels: Partial<Record<"skeleton" | "retarget" | "policy" | "variants", THREE.Mesh>> = {};
   private pulse: THREE.Mesh;
@@ -275,11 +361,30 @@ export class BuildScene extends Stage {
 
   setMoments(times: number[]) { this.moments = [...times].sort((a, b) => a - b); }
 
+  /** The policy slot shows the policy learning: its attempt `frames` at `fps` against the reference `ref` (the retarget
+   *  at `refFps`). Replaces a pushable policy there; null takes it out again. */
+  setAttempt(frames: Frames | null, fps: number, ref: Frames | null, refFps: number, text: string) {
+    if (!frames) {
+      if (this.learn) { release(this.learn.group, this.shared); this.learn = null; release(this.labels.policy, this.shared); }
+      return null;
+    }
+    if (this.actor) this.setPolicy(null, 0, "");
+    if (!this.learn) {
+      this.learn = new LearnActor(this.robot, this.geoms);
+      this.world.add(this.learn.group);
+      this.learnAt = performance.now();
+    }
+    this.learn.set(frames, fps, ref, refFps);
+    this.floorLabel("policy", text.toUpperCase(), 0.55, SLOT.policy);
+    return this.learn;
+  }
+
   setPolicy(data: Loaded | null, mps: number, text: string) {
     if (this.actor) { release(this.actor.group, this.shared); release(this.actor.ripple, this.shared); }
     this.actor = null;
     release(this.labels.policy, this.shared);
     if (!data) return null;
+    if (this.learn) this.setAttempt(null, 50, null, 30, "");
     const a = (this.actor = new PolicyActor(data, mps, this.geoms));
     const r = a.robot.root();
     a.group.position.set(-r.x, SLOT.policy - r.y, 0);
@@ -349,6 +454,11 @@ export class BuildScene extends Stage {
       this.actor.update(dt, now, this.camera);
       const u = ease((now - this.actorAt) / 700);
       this.actor.group.scale.setScalar(0.6 + 0.4 * u);
+    }
+    if (this.learn) {
+      this.learn.update(dt, SLOT.policy);
+      const u = ease((now - this.learnAt) / 700);
+      this.learn.group.scale.setScalar(0.6 + 0.4 * u);
     }
 
     // a key moment passing: a ring pulses under the retarget

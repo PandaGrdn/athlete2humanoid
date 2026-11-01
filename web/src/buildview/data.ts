@@ -1,4 +1,4 @@
-import { api, url, type EnvBundle, type LiveData, type RunDetail, type TaskSpec, type VariantsView } from "../api";
+import { api, url, type AttemptsView, type EnvBundle, type LiveData, type RunDetail, type TaskSpec, type Training, type VariantsView } from "../api";
 import { NQ, type ClipEntry, type Frames } from "../showcase/data";
 
 // What the build view draws, from whichever source has it: a live job (GET /api/jobs/{id}/live), or a stored
@@ -35,10 +35,12 @@ export type BuildInput = {
   variants: Variants | null;
   env: EnvBundle | null; // the training environment zip (stage 05's output), once there is one
   clip: string | null; // the clip's name (front_kick), to find its policy
+  attempts: AttemptsView | null; // the policy's attempts while it trained (stage 06's "watch it learn")
+  training: Training | null; // a live job's GPU training, while it runs and after
 };
 export const emptyInput = (): BuildInput => ({
   fps: 30, video: null, mask: null, landmarks: null, segmenter: null, poseModel: null, skeleton: null, qpos: null,
-  retargetCm: null, spec: null, variants: null, env: null, clip: null,
+  retargetCm: null, spec: null, variants: null, env: null, clip: null, attempts: null, training: null,
 });
 
 // MediaPipe's 33 landmarks -> the body's 17 (server/live_worker.py LANDMARKS), and its bones
@@ -105,6 +107,9 @@ export function parseNpy(buf: ArrayBuffer): { shape: number[]; data: Float32Arra
   const body = buf.slice(start);
   if (descr === "<f8") return { shape, data: Float32Array.from(new Float64Array(body)) };
   if (descr === "<f4") return { shape, data: new Float32Array(body) };
+  if (descr === "<i4") return { shape, data: Float32Array.from(new Int32Array(body)) };
+  if (descr === "<i8") return { shape, data: Float32Array.from(new BigInt64Array(body), (x) => Number(x)) };
+  if (descr === "|b1" || descr === "|u1") return { shape, data: Float32Array.from(new Uint8Array(body)) };
   throw new Error(`unsupported .npy dtype ${descr}`);
 }
 
@@ -152,7 +157,7 @@ export async function loadRun(run: RunDetail, set: (patch: Partial<BuildInput>) 
   const spec = run.has_task_spec ? await api.runTaskSpec(run.id).catch(() => null) : null;
   const c = runClip(run, spec?.name);
   set({
-    fps: c?.fps ?? 30, clip: c?.name ?? run.target, spec, env: run.env ?? null,
+    fps: c?.fps ?? 30, clip: c?.name ?? run.target, spec, env: run.env ?? null, attempts: run.attempts?.attempts.length ? run.attempts : null,
     video: c?.side_by_side ? { src: url(c.side_by_side.url), sideBySide: true, label: "Phone video" } : null,
     mask: c?.silhouette ? { src: url(c.silhouette.url) } : null,
     segmenter: c?.sam ? "SAM 3.1" : null,

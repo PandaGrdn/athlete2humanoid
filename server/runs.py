@@ -280,8 +280,14 @@ def summarize(runs_dir, rid, folder, detail=False, env_cache=None):
         "downloads": downloads,
         "variants": _file(folder, rid, "variants.json", kind="variants"),  # scripts/build_variants_view.py
         "env": env_info(folder, rid, env_cache) if env_cache is not None else None,
+        "attempts": _attempts(folder, rid),  # the policy's attempts while it trained (a2h_env/attempts.py)
     })
     return s
+
+
+def _attempts(folder, rid):
+    from .train import ATTEMPTS, attempts_view
+    return attempts_view(folder, lambda name: file_url(rid, f"{ATTEMPTS}/{name}"))
 
 
 # --- the training environment (a2h_env/export.py, docs/TRAINING_ENV.md) ---------------------------------------------

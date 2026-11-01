@@ -6,6 +6,9 @@ live   builds the uploaded video's real task environment on the host's CPU (serv
        stops before training, which needs a GPU. Works on the free Space.
 colab  shells out to scripts/remote_run.py (a real A100 job, hours long) and follows its
        runner.log / job.log / status.json. Local only, off unless A2H_ENABLE_COLAB=1.
+modal  trains a finished live build's environment on a Modal GPU (server/train.py), started by a visitor
+       on the job's page (POST /api/jobs/{id}/train, gated by an invite code or a daily allowance), and
+       mirrors the policy's attempts back so the page shows the robot learn. Works hosted.
 """
 
 import json
@@ -24,6 +27,7 @@ from . import runs
 from .config import REPO
 from .live import LIVE_DIR, LiveRunner
 from .stages import LIVE_STAGES, STAGES, classify, redact
+from .train import TrainRunner
 
 log = logging.getLogger("a2h.jobs")
 TERMINAL = {"succeeded", "failed", "cancelled"}
@@ -60,6 +64,7 @@ class Job:
     input: dict | None = None  # {filename, size, url} of an upload
     source_run: str | None = None  # the run a demo job replays
     result_run: str | None = None  # the run to show when it's done
+    training: dict | None = None  # a live job's GPU training (server/train.py): state, iterations, attempts so far
     error: str | None = None
     created_at: float = field(default_factory=_now)
     updated_at: float = field(default_factory=_now)
@@ -86,7 +91,7 @@ class JobStore:
     expires uploads (A2H_UPLOAD_TTL_H after their job ends) and jobs (A2H_JOB_TTL_H).
     """
 
-    def __init__(self, settings, journal=None):
+    def __init__(self, settings, journal=None, train_backend=None):
         self.settings = settings
         self.jobs = {}
         self.owner = {}  # job id -> client pseudonym (never sent to clients)
@@ -96,11 +101,17 @@ class JobStore:
         self.dirty = set()
         self.stop = threading.Event()
         (settings.data_dir / "uploads").mkdir(parents=True, exist_ok=True)
+        self._stop_training = []  # recovered mid-training jobs; their GPU jobs are cancelled once the runner exists
         if journal:
             self._recover()
         self._sweep_incoming(max_age=0)  # half-written uploads from before a restart
         self._flusher = None
         self.live = LiveRunner(self)
+        self.train = TrainRunner(self, backend=train_backend or settings.train_backend)
+        for job in self._stop_training:
+            self.train.recover(job)
+            self.dirty.add(job.id)
+        self._stop_training = []
 
     def start_background(self, interval=1.0):
         """The flush + expiry thread. Separate from __init__ so tests can drive sweep() themselves."""
@@ -130,6 +141,9 @@ class JobStore:
                 msg = "the server restarted while this job was running; start it again"
                 if job.runner == "colab":
                     msg += " (the remote GPU job may still be running: see its runner.log under outputs/)"
+                if job.training and job.training.get("state") in ("starting", "running"):
+                    msg = "the server restarted while the policy was training; the GPU job was stopped"
+                    self._stop_training.append(job)
                 self.finish(job, "failed", error=msg)
                 n += 1
         if self.jobs:

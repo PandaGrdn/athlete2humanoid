@@ -5,6 +5,7 @@ import { EnvDownload, Icon } from "../components/ui";
 import { loadIndex, loadRobot, loadShowcase, type ClipEntry, type Robot } from "../showcase/data";
 import type { PolicyActor, PushState } from "../showcase/scene";
 import { pickPolicy, STAGES, type BuildInput, type PolicyPick, type StageKey, type StageStatus } from "./data";
+import { LearnControls, LearnCurve, useLearnPlayer } from "./learn";
 import { BuildScene } from "./scene";
 import "./build.css";
 
@@ -23,6 +24,8 @@ export type BuildViewProps = {
   notes?: Partial<Record<StageKey, ReactNode>>;
   /** The clip's video element (the clock), for the page's own synced panels. */
   onVideo?: (v: HTMLVideoElement | null) => void;
+  /** What the page offers in place of a policy when this host trains none (a "Train on a GPU" button). */
+  offer?: ReactNode;
 };
 
 const STRENGTHS = [{ mps: 0.5, label: "Nudge" }, { mps: 1, label: "Shove" }];
@@ -62,7 +65,7 @@ function useRobot() {
   return { clips, robot, err };
 }
 
-export default function BuildView({ input, status, kicker, follow = false, notes = {}, onVideo }: BuildViewProps) {
+export default function BuildView({ input, status, kicker, follow = false, notes = {}, onVideo, offer }: BuildViewProps) {
   const { clips, robot, err } = useRobot();
   const canvas = useRef<HTMLCanvasElement>(null);
   const [video, setVideo] = useState<HTMLVideoElement | null>(null);
@@ -111,7 +114,14 @@ export default function BuildView({ input, status, kicker, follow = false, notes
   }, [scene, spec]);
 
   const pick: PolicyPick | null = useMemo(() => (clips ? pickPolicy(clips, input.clip, input.spec) : null), [clips, input.clip, input.spec]);
-  const wantPolicy = status.policy === "ready" || (status.policy === "offer" && accepted);
+  // stage 06 as "watch it learn": the policy's attempts, when there are any (a live training, or a run that recorded them)
+  const liveTraining = !!input.training && (input.training.state === "starting" || input.training.state === "running");
+  const hasAttempts = (input.attempts?.attempts.length ?? 0) > 0;
+  const learning = (hasAttempts || liveTraining) && (status.policy === "working" || status.policy === "ready");
+  const [pushMode, setPushMode] = useState(false); // the visitor asked for the pushable recording instead
+  const learnOn = learning && !pushMode;
+  const learn = useLearnPlayer(scene, input.attempts, liveTraining, input.qpos, input.fps, learnOn && hasAttempts);
+  const wantPolicy = !learnOn && (status.policy === "ready" || (status.policy === "offer" && accepted));
   useEffect(() => {
     if (!scene || !pick || !wantPolicy) return;
     let live = true;
@@ -137,12 +147,12 @@ export default function BuildView({ input, status, kicker, follow = false, notes
   }, [hint]);
 
   // the camera follows the newest stage until the visitor picks one
-  const newest = [...STAGES].reverse().find((s) => status[s.key] === "ready" || status[s.key] === "offer")?.key ?? null;
+  const newest = [...STAGES].reverse().find((s) => status[s.key] === "ready" || status[s.key] === "offer" || (s.key === "policy" && learning))?.key ?? null;
   const shown: StageKey | null = picked ? focus : newest;
   useEffect(() => {
     if (!scene || !follow || picked || !newest) return;
-    scene.focus(newest === "video" ? "all" : newest === "policy" && !actor ? "all" : newest);
-  }, [scene, follow, picked, newest, actor]);
+    scene.focus(newest === "video" ? "all" : newest === "policy" && !actor && !learn.actor ? "all" : newest);
+  }, [scene, follow, picked, newest, actor, learn.actor]);
   const choose = (k: StageKey) => {
     setPicked(true);
     setFocus(k);
@@ -169,7 +179,7 @@ export default function BuildView({ input, status, kicker, follow = false, notes
               onClick={() => choose(s.key)} disabled={status[s.key] === "waiting"} aria-pressed={shown === s.key}>
               <span className="bv-n mono">{String(i + 1).padStart(2, "0")}</span>
               <span className="bv-l">{s.short}</span>
-              <span className="bv-s mono">{s.key === "policy" && status.policy === "offer" ? "pre-trained" : STATUS_WORD[status[s.key]]}</span>
+              <span className="bv-s mono">{s.key === "policy" && status.policy === "offer" ? "pre-trained" : s.key === "policy" && learning && status.policy === "working" ? "learning" : STATUS_WORD[status[s.key]]}</span>
               <span className="bv-tags">
                 {stageModels(s.key, input, status[s.key]).map((m) => (
                   <span key={m.name} className={`bv-tag mono ${m.meta ? "meta" : ""} ${m.off ? "off" : ""}`} title={m.why}>{m.name}</span>
@@ -226,25 +236,35 @@ export default function BuildView({ input, status, kicker, follow = false, notes
 
         {/* over the view on a wide screen, under it on a phone */}
         <div className="bv-hud">
-        <Caption k={shown} input={input} status={status} pick={pick} accepted={accepted} note={shown ? notes[shown] : null} />
+        <Caption k={shown} input={input} status={status} pick={pick} accepted={accepted} note={shown ? notes[shown] : null} learning={learnOn} />
 
-        {status.policy === "offer" && !accepted && pick && (
+        {status.policy === "offer" && !accepted && (offer || pick) && (
           <div className="bv-offer">
-            <p><strong>No GPU on this host:</strong> the build stops at the environment.</p>
-            <button className="btn sm primary" onClick={() => { setAccepted(true); choose("policy"); }}>
-              <Icon name="play" size={14} />Play a pre-trained policy ({pick.tab.toLowerCase()})
-            </button>
+            {offer ?? <p><strong>No GPU on this host:</strong> the build stops at the environment.</p>}
+            {pick && (
+              <button className="btn sm" onClick={() => { setAccepted(true); choose("policy"); }}>
+                <Icon name="play" size={14} />Play a pre-trained policy ({pick.tab.toLowerCase()})
+              </button>
+            )}
           </div>
         )}
         {policyErr && <div className="bv-offer"><div className="error-box">Couldn't load the policy: {policyErr}</div></div>}
-        {actor && <PolicyControls actor={actor} mps={mps} setMps={setMps} onPush={() => scene?.pushFromView()} pick={pick} hint={hint} />}
+        {learnOn && (hasAttempts || liveTraining) && (
+          <div className="bv-policy">
+            <LearnControls p={learn} live={liveTraining} training={input.training} total={input.attempts?.iterations ?? input.training?.iterations ?? null} />
+            {pick?.own && status.policy === "ready" && <button className="btn sm" onClick={() => setPushMode(true)}>Push the trained policy</button>}
+          </div>
+        )}
+        {actor && !learnOn && <PolicyControls actor={actor} mps={mps} setMps={setMps} onPush={() => scene?.pushFromView()} pick={pick} hint={hint}
+          back={learning ? () => setPushMode(false) : null} />}
         </div>
       </div>
 
-      {(spec || variants) && (
+      {(spec || variants || (learnOn && input.attempts)) && (
         <div className="bv-below">
           {spec && <EnvironmentPanel spec={spec} t={t} onSeek={seek} />}
           {variants && <VariantList v={variants} env={input.env} />}
+          {learnOn && input.attempts && <LearnCurve view={input.attempts} current={learn.current} training={input.training} />}
         </div>
       )}
     </section>
@@ -322,7 +342,7 @@ function stageModels(k: StageKey, input: BuildInput, st: StageStatus): StageMode
   }
 }
 
-function Caption({ k, input, status, pick, accepted, note }: { k: StageKey | null; input: BuildInput; status: BuildViewProps["status"]; pick: PolicyPick | null; accepted: boolean; note: ReactNode }) {
+function Caption({ k, input, status, pick, accepted, note, learning }: { k: StageKey | null; input: BuildInput; status: BuildViewProps["status"]; pick: PolicyPick | null; accepted: boolean; note: ReactNode; learning: boolean }) {
   if (!k) return <div className="bv-caption"><span className="bv-cap-k mono">Build</span><p>Waiting for the clip.</p></div>;
   const n = STAGES.findIndex((s) => s.key === k) + 1;
   const st = status[k];
@@ -338,7 +358,10 @@ function Caption({ k, input, status, pick, accepted, note }: { k: StageKey | nul
     retarget: <>mink IK puts the motion on the G1's 29 joints and bone lengths. The lines join each wrist, elbow, knee and ankle to the body it drives{input.retargetCm != null ? <>; mean end-effector error {input.retargetCm.toFixed(1)} cm</> : null}.</>,
     moments: spec ? <>{spec.counts.moments} key moments{spec.counts.flights ? ` and ${spec.counts.flights} flight${spec.counts.flights > 1 ? "s" : ""}` : ""}, found in the motion itself{spec.named_by ? <>, named by {spec.named_by}</> : null}. The reward pays for reaching them in order; a ring pulses as each passes.</> : null,
     variants: v ? <>{v.kept} of {v.total} variants kept: mirrored, re-timed and rescaled copies, each passing its own key-moment check and the physics filter{v.trained_on ? "; the stored policies trained on these" : v.trained_on === false ? " (generated from this retarget; its stored policy trained on the clip alone)" : ""}. Ghosts: {v.ghosts.map((g) => g.label).join(", ") || "none"}.</> : null,
-    policy: pick ? (status.policy === "offer" && !accepted
+    policy: learning ? (input.training && (input.training.state === "starting" || input.training.state === "running")
+      ? <>The policy is training on a GPU now: PPO in mjlab, {input.training.iterations.toLocaleString()} iterations. Every {input.training.attempt_every} iterations the robot tries the clip once and the attempt lands here; the ghost is the retarget it is paid to follow.</>
+      : <>The policy's attempts while it trained, one every {input.attempts?.attempt_every ?? 50} iterations: the robot tries the clip once with the policy as it was then, next to the retarget as a ghost. Early attempts fall at once; later ones follow the ghost. Slide through them, or let them play.</>)
+      : pick ? (status.policy === "offer" && !accepted
       ? <>Training a policy on this clip takes PPO in mjlab 1–2 h on a GPU, and this host has none. You can play the nearest stored policy instead ({pick.tab.toLowerCase()}: {pick.why.replace("the nearest stored policy: ", "")}), labelled pre-trained.</>
       : pick.own
       ? <>The policy trained on this clip, rolled out in MuJoCo and recorded. Click it, or press Push, to shove it: you see its recorded recovery.</>
@@ -368,13 +391,15 @@ function pushText(p: PushState) {
   return back ? `Recovered: back on its run ${back} s after the push` : "Recovered";
 }
 
-function PolicyControls({ actor, mps, setMps, onPush, pick, hint }: {
+function PolicyControls({ actor, mps, setMps, onPush, pick, hint, back }: {
   actor: PolicyActor; mps: number; setMps: (m: number) => void; onPush: () => void; pick: PolicyPick | null; hint: string | null;
+  back?: (() => void) | null;
 }) {
   const s = useSyncExternalStore(actor.subscribe, actor.getState);
   const msg = hint ?? s.note ?? (s.push ? pushText(s.push) : null);
   return (
     <div className="bv-policy">
+      {back && <button className="btn sm" onClick={back}>Watch it learn</button>}
       {pick && <span className={`bv-badge mono ${pick.own ? "" : "pre"}`}>{pick.own ? "trained on this clip" : "pre-trained"}</span>}
       <span className="bv-seg" role="group" aria-label="Push strength">
         {STRENGTHS.map((x) => (

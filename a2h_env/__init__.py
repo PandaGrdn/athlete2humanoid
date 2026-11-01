@@ -12,7 +12,7 @@ Dependencies: numpy for reading; mjlab (which brings torch, mujoco, mujoco-warp 
 """
 
 VERSION = "1"  # bundle format version (manifest.json "format_version")
-LOADER_FILES = ("__init__.py", "__main__.py", "bundle.py", "env.py", "train.py")  # vendored into every bundle
+LOADER_FILES = ("__init__.py", "__main__.py", "bundle.py", "env.py", "train.py", "attempts.py")  # vendored into every bundle
 
 # Everything is imported on first use: the API server imports a2h_env.export with nothing but the standard library.
 
@@ -44,8 +44,10 @@ def make_env(bundle, variant="train", num_envs=4096, device=None, play=False, wo
     return _make(bundle, variant=variant, num_envs=num_envs, device=device, play=play, work_dir=work_dir)
 
 
-def train(bundle, out, iters=1500, num_envs=4096, variant="train", device=None, seed=0, save_interval=250):
-    """PPO on the bundle, as train_motion.py / experiments/variant_policy.py train the stored runs. See a2h_env.train."""
+def train(bundle, out, iters=1500, num_envs=4096, variant="train", device=None, seed=0, save_interval=250,
+          work_dir=None, attempt_every=0):
+    """PPO on the bundle, as train_motion.py / experiments/variant_policy.py train the stored runs; attempt_every > 0 also
+    records the policy's attempts on the reference (a2h_env.attempts). See a2h_env.train."""
     from .train import train as _train
     return _train(bundle, out, iters=iters, num_envs=num_envs, variant=variant, device=device, seed=seed,
-                  save_interval=save_interval)
+                  save_interval=save_interval, work_dir=work_dir, attempt_every=attempt_every)

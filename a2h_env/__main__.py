@@ -20,6 +20,9 @@ def main(argv=None):
     t.add_argument("--device", help="cuda:0 (default when available) or cpu")
     t.add_argument("--seed", type=int, default=0)
     t.add_argument("--save-interval", type=int, default=250)
+    t.add_argument("--attempt-every", type=int, default=0, help="roll the policy out on the reference every N iterations "
+                   "into <out>/attempts/ (a2h_env/attempts.py), for the 'watch it learn' view")
+    t.add_argument("--work-dir", help="where the 50 Hz motion files go (default: <bundle>.motions/ next to the bundle)")
     e = sub.add_parser("export", help="a run folder of the athlete2humanoid repository -> its bundle")
     e.add_argument("runs", nargs="+")
     e.add_argument("--out-dir")
@@ -38,7 +41,7 @@ def main(argv=None):
         b = load_bundle(a.bundle)
         out = a.out or str(Path(a.bundle).with_name(Path(a.bundle).name.removesuffix(".zip") + ".train"))
         train(b, out, iters=a.iters, num_envs=a.num_envs, variant=a.variant, device=a.device, seed=a.seed,
-              save_interval=a.save_interval)
+              save_interval=a.save_interval, work_dir=a.work_dir, attempt_every=a.attempt_every)
     else:
         from .export import main as export_main
         export_main(a.runs, out_dir=a.out_dir, generate=not a.no_generate, force=a.force)
