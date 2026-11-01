@@ -229,6 +229,10 @@ table.data tr.group td { background: var(--surface-2); color: var(--text-3); fon
 .clip .media { aspect-ratio: 751 / 480; background: #000; }
 .clip .media video { height: 100%; object-fit: cover; }
 .clip .body { padding: 10px 12px 12px; display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; }
+.env-dl { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.env-dl .env-dl-inside { font-size: 13px; margin: 0; max-width: 720px; }
+.env-dl.compact { gap: 6px; margin-top: 10px; }
+.env-dl.compact .env-dl-inside { font-size: 12px; }
 .downloads { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .dl { display: flex; align-items: center; gap: 12px; padding: 14px 16px; transition: border-color 0.15s; }
 .dl:hover { border-color: var(--accent); }

@@ -1,4 +1,4 @@
-import { api, url, type LiveData, type RunDetail, type TaskSpec, type VariantsView } from "../api";
+import { api, url, type EnvBundle, type LiveData, type RunDetail, type TaskSpec, type VariantsView } from "../api";
 import { NQ, type ClipEntry, type Frames } from "../showcase/data";
 
 // What the build view draws, from whichever source has it: a live job (GET /api/jobs/{id}/live), or a stored
@@ -33,11 +33,12 @@ export type BuildInput = {
   retargetCm: number | null; // mean end-effector error
   spec: TaskSpec | null;
   variants: Variants | null;
+  env: EnvBundle | null; // the training environment zip (stage 05's output), once there is one
   clip: string | null; // the clip's name (front_kick), to find its policy
 };
 export const emptyInput = (): BuildInput => ({
   fps: 30, video: null, mask: null, landmarks: null, segmenter: null, poseModel: null, skeleton: null, qpos: null,
-  retargetCm: null, spec: null, variants: null, clip: null,
+  retargetCm: null, spec: null, variants: null, env: null, clip: null,
 });
 
 // MediaPipe's 33 landmarks -> the body's 17 (server/live_worker.py LANDMARKS), and its bones
@@ -64,8 +65,8 @@ const meanCm = (e: Record<string, [number, number] | number> | null | undefined)
   return v.length ? v.reduce((a, x) => a + x, 0) / v.length : null;
 };
 
-/** A live job's data, as far as it has got. */
-export function fromLive(d: LiveData, video: string | null): Partial<BuildInput> {
+/** A live job's data, as far as it has got; `envUrl` is where its env.zip is served from (api.liveEnv). */
+export function fromLive(d: LiveData, video: string | null, envUrl?: string | null): Partial<BuildInput> {
   let skeleton: Skeleton | null = null;
   const s = d.skeleton;
   if (s?.frames?.length) {
@@ -84,6 +85,7 @@ export function fromLive(d: LiveData, video: string | null): Partial<BuildInput>
     qpos: d.qpos?.length ? qposFrames(d.qpos) : null,
     retargetCm: meanCm(d.retarget_error_cm),
     variants: variantsFrom(d.variants),
+    env: d.env && envUrl ? { url: envUrl, filename: "live.a2h-env.zip", size: d.env.size, inside: d.env.inside } : null,
   };
 }
 
@@ -149,7 +151,7 @@ export async function loadRun(run: RunDetail, set: (patch: Partial<BuildInput>) 
   const spec = run.has_task_spec ? await api.runTaskSpec(run.id).catch(() => null) : null;
   const c = runClip(run, spec?.name);
   set({
-    fps: c?.fps ?? 30, clip: c?.name ?? run.target, spec,
+    fps: c?.fps ?? 30, clip: c?.name ?? run.target, spec, env: run.env ?? null,
     video: c?.side_by_side ? { src: url(c.side_by_side.url), sideBySide: true, label: "Phone video" } : null,
     mask: c?.silhouette ? { src: url(c.silhouette.url) } : null,
     segmenter: c?.sam ? "SAM 3.1" : null,

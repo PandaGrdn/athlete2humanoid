@@ -5,7 +5,7 @@ import { useHealth } from "../App";
 import { emptyInput, fromLive, loadRun, type BuildInput, type StageKey } from "../buildview/data";
 import { liveJobStatus } from "../buildview/hooks";
 import { RewardBox, TaskBreakdown } from "../components/live";
-import { Icon, StatusPill } from "../components/ui";
+import { EnvDownload, Icon, StatusPill } from "../components/ui";
 import { Typed } from "../components/pixel";
 
 // three.js loads with the build view, after the page
@@ -285,7 +285,7 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
   // scene doesn't replay its arrival (a skeleton growing in, the G1 snapping on) on every refetch
   const prev = useRef<Partial<BuildInput>>({});
   const input = useMemo<BuildInput>(() => {
-    const base = { ...emptyInput(), ...(live ? fromLive(live, null) : {}) };
+    const base = { ...emptyInput(), ...(live ? fromLive(live, null, source ? null : api.liveEnv(id)) : {}) };
     for (const k of ["skeleton", "qpos", "variants"] as const) {
       const was = prev.current[k];
       if (was && base[k] && signature(was) === signature(base[k])) (base as Record<string, unknown>)[k] = was;
@@ -306,7 +306,7 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
       spec,
       clip: source?.clip ?? null,
     };
-  }, [live, extra, src, aligned, source?.title, source?.clip, file, spec, blob, job?.input]);
+  }, [live, extra, src, aligned, source?.title, source?.clip, file, spec, blob, job?.input, id, !!source]);
   const status = liveJobStatus(job, input, (k: StageKey) => fresh && (!source?.extra || extraRun !== undefined || k === "video"));
   const fromRun = extraRun ? <>3D from the stored run <Link to={`/build/${extraRun}`}>{extraRun}</Link> of the same clip (same SAM 3D Body front end); this recording kept the 2D landmarks only.</> : null;
 
@@ -386,6 +386,15 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
             <div className="fade-in live-env">
               <TaskBreakdown spec={spec} t={t} onSeek={seek} />
               <RewardBox spec={spec} />
+              {input.env && (
+                <div className="card card-pad">
+                  <EnvDownload env={input.env} />
+                  <p className="faint" style={{ fontSize: 12.5, marginTop: 10 }}>
+                    Your upload as a training environment: the G1 reference, its key moments, the variants made here and a loader.
+                    Train it anywhere mjlab runs; the file is kept with the upload for a short while.
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             <div className="card card-pad faint" style={{ fontSize: 13.5 }}>

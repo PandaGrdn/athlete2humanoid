@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { url, type Credit } from "../api";
+import { fmt, url, type Credit, type EnvBundle } from "../api";
 import { useUiMode } from "../theme";
 
 export type IconName = "upload" | "play" | "pause" | "download" | "arrow" | "cube" | "chart" | "file" | "film" | "x" | "check" | "github";
@@ -112,5 +112,24 @@ export function CreditLine({ credit }: { credit?: Credit | null }) {
       Source video: {credit.url ? <a href={credit.url} target="_blank" rel="noopener noreferrer">{credit.text}</a> : credit.text}
       {credit.licence && <> ({credit.licence})</>}
     </p>
+  );
+}
+
+/** "Download training environment": the run's (or a live build's) environment zip, with its size and one line on
+ *  what is inside. `compact` drops the heading, for a caption or a card footer. */
+export function EnvDownload({ env, compact = false }: { env?: EnvBundle | null; compact?: boolean }) {
+  if (!env) return null;
+  return (
+    <div className={`env-dl ${compact ? "compact" : ""}`}>
+      {!compact && <div className="eyebrow">Training environment</div>}
+      <a className={`btn primary ${compact ? "sm" : ""}`} href={url(env.url)} download={env.filename}>
+        <Icon name="download" size={compact ? 14 : 16} />Download training environment
+      </a>
+      <p className="muted env-dl-inside">
+        {env.size != null && <span className="mono">{fmt.bytes(env.size)} zip</span>}
+        {env.size != null && env.inside ? " · " : ""}
+        {env.inside ?? "the G1 reference, the task spec, the variants, the reward config and a loader for mjlab"}
+      </p>
+    </div>
   );
 }

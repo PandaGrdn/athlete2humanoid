@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { api, fmt, policyColor, url, type FileRef, type Policy, type Robust, type RunDetail, type TaskSpec } from "../api";
 import { BarChart, LineChart } from "../components/charts";
 import { EnvironmentPanel } from "../components/environment";
-import { CreditLine, Icon, LoopVideo } from "../components/ui";
+import { CreditLine, EnvDownload, Icon, LoopVideo } from "../components/ui";
 import { Typed } from "../components/pixel";
 
 const NEUTRAL = "#4a5562";
@@ -63,6 +63,7 @@ export default function RunPage() {
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <Link className="btn primary" to={`/build/${run.id}`}><Icon name="cube" size={16} />Build in 3D</Link>
+          {run.env && <a className="btn" href={url(run.env.url)} download={run.env.filename}><Icon name="download" size={16} />Download training environment</a>}
           <button className="btn" onClick={replay} disabled={busy}><Icon name="play" size={16} />Replay pipeline</button>
         </div>
       </div>
@@ -177,6 +178,16 @@ export default function RunPage() {
             <p>ONNX policies run anywhere (observation in, 29 joint actions out). Checkpoints are rsl_rl format for mjlab. The motion CSV is the G1 root pose and joint angles per frame.</p>
           </div>
         </div>
+        {run.env && (
+          <div className="card card-pad" style={{ marginBottom: 14 }}>
+            <EnvDownload env={run.env} />
+            <p className="faint" style={{ fontSize: 13, marginTop: 10, maxWidth: 820 }}>
+              Everything this run trained on, in one file: the person's motion as a G1 reference, the key-moment spec, every variant
+              with the physics filter's verdict, the reward config, the source credit, and a loader. With mjlab installed,
+              <span className="mono"> python -m a2h_env train {run.env.filename}</span> trains a tracking policy on it; no access to this server needed.
+            </p>
+          </div>
+        )}
         <div className="downloads">{run.downloads.map((d) => <Download key={d.path} d={d} />)}</div>
         {run.distill && (
           <p className="faint" style={{ fontSize: 13, marginTop: 16 }}>

@@ -155,7 +155,17 @@ def create_app(settings=None):
         d = all_runs().get(rid)
         if d is None:
             raise HTTPException(404, "run not found")
-        return runs.summarize(settings.runs_dir, rid, d, detail=True)
+        return runs.summarize(settings.runs_dir, rid, d, detail=True, env_cache=settings.data_dir / "env")
+
+    @app.get("/api/runs/{rid}/env.zip")
+    def run_env(rid: str):
+        """The run's training environment: one zip anyone with mjlab can train on (docs/TRAINING_ENV.md)."""
+        d = all_runs().get(rid)
+        p = runs.env_bundle(d, rid, settings.data_dir / "env") if d else None
+        if p is None:
+            raise HTTPException(404, "no training environment for this run")
+        return FileResponse(p, media_type="application/zip", filename=f"{rid}.a2h-env.zip",
+                            headers={"Cache-Control": "public, max-age=3600", "X-Content-Type-Options": "nosniff"})
 
     @app.get("/api/runs/{rid}/task_spec")
     def run_task_spec(rid: str):
@@ -309,6 +319,15 @@ def create_app(settings=None):
         if p is None:
             raise HTTPException(404, "the video isn't processed yet")
         return FileResponse(p, media_type="video/mp4", headers={"X-Content-Type-Options": "nosniff"})
+
+    @app.get("/api/jobs/{jid}/env.zip")
+    def job_env(jid: str):
+        """A live build's training environment, once its variants stage has written it (server/live_worker.py)."""
+        p = _live_folder(jid) / runs.ENV_ZIP
+        if not p.is_file():
+            raise HTTPException(404, "the training environment isn't built yet")
+        return FileResponse(p, media_type="application/zip", filename=f"live-{jid[:8]}.a2h-env.zip",
+                            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
     @app.get("/api/jobs/{jid}/input")
     def job_input(jid: str):

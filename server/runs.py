@@ -7,10 +7,18 @@ just leave their fields empty. Robustness results (robust.json) live in their ow
 
 import fnmatch
 import json
+import logging
 import re
+import sys
 from pathlib import Path
 
 from .stages import classify, redact
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from a2h_env import export as env_export  # noqa: E402  (standard library only)
+
+log = logging.getLogger("a2h.runs")
+ENV_ZIP = env_export.ZIP_NAME  # a run's training environment, shipped in its folder or built on demand (env_bundle)
 
 POLICY_INFO = {
     "tracking": ("Tracking", "Joint-target imitation (mjlab baseline)"),
@@ -209,7 +217,9 @@ def replay_lines(folder):
     return out
 
 
-def summarize(runs_dir, rid, folder, detail=False):
+def summarize(runs_dir, rid, folder, detail=False, env_cache=None):
+    """The run as the API serves it; detail adds policies, clips, downloads and (with env_cache, a writable folder) the
+    training environment the run exports to (env_info)."""
     ev = read_json(folder / "eval.json")
     ev = ev if isinstance(ev, dict) else {}
     st = read_json(folder / "status.json") or {}
@@ -265,8 +275,71 @@ def summarize(runs_dir, rid, folder, detail=False):
         "clips": _clips(folder, rid, target),
         "downloads": downloads,
         "variants": _file(folder, rid, "variants.json", kind="variants"),  # scripts/build_variants_view.py
+        "env": env_info(folder, rid, env_cache) if env_cache is not None else None,
     })
     return s
+
+
+# --- the training environment (a2h_env/export.py, docs/TRAINING_ENV.md) ---------------------------------------------
+def _env_key(folder, clip):
+    """What the bundle is built from: those files' sizes and mtimes, and the exporter's own."""
+    files = [folder / "task_spec.json", folder / "variants.json", folder / "web.json", folder / "importance.json",
+             folder / "clips" / clip / "qpos.npy", folder / "clips" / clip / "meta.json", Path(env_export.__file__)]
+    vd = env_export.variants_run(folder)
+    if vd is not None:
+        files += [vd / "variants" / "index.json", vd / "held_out" / "index.json"]
+    files += sorted(folder.glob("policy_tracking*/weights.json"))
+    out = []
+    for f in files:
+        try:
+            st = f.stat()
+            out.append([f.name, st.st_size, st.st_mtime_ns])
+        except OSError:
+            pass
+    return json.dumps(out)
+
+
+def env_bundle(folder, rid, cache_dir):
+    """Path to the run's training environment zip: env.zip shipped in the run folder (scripts/export_env.py), else one
+    built on demand into cache_dir and rebuilt when the run's inputs change. None when the run has no task spec
+    naming a clip with a retarget, or the build fails."""
+    folder = Path(folder)
+    shipped = folder / ENV_ZIP
+    if shipped.is_file():
+        return shipped
+    clip, _ = env_export.target_clip(folder)
+    if clip is None:
+        return None
+    safe = re.sub(r"[^\w.-]", "_", rid)[:80]
+    out = Path(cache_dir) / f"{safe}.a2h-env.zip"
+    stamp = out.with_suffix(".key")
+    key = _env_key(folder, clip)
+    try:
+        if out.is_file() and stamp.is_file() and stamp.read_text() == key:
+            return out
+        out.parent.mkdir(parents=True, exist_ok=True)
+        m = env_export.export_run(folder, out, generate=False)
+        if m is None:
+            return None
+        stamp.write_text(key)
+    except Exception:  # noqa: BLE001  (a broken run folder must not take the run page down)
+        log.exception("env bundle failed", extra={"fields": {"run": rid}})
+        return None
+    return out
+
+
+def env_info(folder, rid, cache_dir):
+    """The API's view of a run's training environment: where to get it, its size and what is inside."""
+    p = env_bundle(folder, rid, cache_dir)
+    m = env_export.manifest_of(p) if p else None
+    if m is None:
+        return None
+    v = m.get("variants") or {}
+    counts = {k: {"total": _num((v.get(k) or {}).get("total")), "kept": _num((v.get(k) or {}).get("kept")),
+                  "with_arrays": _num((v.get(k) or {}).get("with_arrays"))} for k in ("train", "held_out")}
+    return {"url": f"/api/runs/{rid}/{ENV_ZIP}", "filename": f"{rid}.a2h-env.zip", "size": m["bytes"],
+            "inside": _text(m.get("inside"), 300), "variants": counts, "source": _text(v.get("source"), 80),
+            "format_version": _num(m.get("format_version")), "spec_sha256": _text(m.get("spec_sha256"), 64)}
 
 
 def _spec_clip(folder):

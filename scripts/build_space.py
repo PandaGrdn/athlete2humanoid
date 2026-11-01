@@ -29,7 +29,7 @@ sys.path.insert(0, str(REPO))
 from server import runs as R  # noqa: E402
 
 RUN_FILES = ["eval.json", "status.json", "task_spec.json", "distill_report.json", "comparison.mp4", "reward.pt", "web.json", "variants.json",
-             "poster.jpg", "robust.json"]
+             "poster.jpg", "robust.json", "env.zip"]
 POLICY_FILES = ["policy.mp4", "policy_metrics.json", "policy.onnx"]
 CLIP_FILES = ["meta.json", "retarget_report.json", "motion.csv", "side_by_side.mp4", "silhouette.mp4", "human.npy"]
 
@@ -75,6 +75,7 @@ COPY server/requirements.lock server/requirements.lock
 RUN pip install --require-hashes --no-deps -r server/requirements.lock \\
  && useradd --create-home --uid 1000 --shell /usr/sbin/nologin user
 {live_deps}COPY server server
+COPY a2h_env a2h_env
 {live_code}COPY data data
 # A2H_HOSTED: the colab runner can't be enabled and the job list is off, whatever Space variables say.
 ENV A2H_HOSTED=1 \\
@@ -157,6 +158,11 @@ def slim_run(src, dst):
     lines = R.replay_lines(src)
     if lines:
         (dst / "job.log").write_text("\n".join(t for _, t in lines) + "\n")
+    if not (dst / "env.zip").is_file():  # the training environment (docs/TRAINING_ENV.md): the run's own, else built here
+        from a2h_env import export as env_export
+        m = env_export.export_run(src, dst / "env.zip", generate=False)
+        if m:
+            size += m["bytes"]
     return size
 
 
@@ -266,6 +272,7 @@ def main(a):
     # code and the dependency lock only: never dotfiles (.env), journals or tests
     shutil.copytree(REPO / "server", out / "server", ignore=shutil.ignore_patterns(
         "__pycache__", "tests", "*.pyc", ".*", "*.sqlite3*", "requirements-dev.txt"))
+    shutil.copytree(REPO / "a2h_env", out / "a2h_env", ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".*"))  # the run API's exporter
     code_size = 0
     if live:
         for p in modules + ([] if a.code_only else assets):

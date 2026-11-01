@@ -43,6 +43,13 @@ emit(stage="retarget", done=True, log="retarget error 1.0 cm")
 (out / "task_spec.json").write_text(Path({spec!r}).read_text())
 emit(stage="environment", done=True, log="task spec: 3 key moments")
 emit(stage="environment", note="variants: 18 of 18 kept")
+import zipfile
+with zipfile.ZipFile(out / "env.zip", "w") as z:  # the variants stage's output: the training environment
+    z.writestr("manifest.json", json.dumps({{"format": "a2h-env", "id": "live", "inside": "G1 reference, task spec, 1 training variants, loader"}}))
+    z.writestr("reference/qpos.npy", b"x")
+live["env"] = {{"file": "env.zip", "size": (out / "env.zip").stat().st_size, "inside": "G1 reference, task spec, 1 training variants, loader", "variants": 1}}
+(out / "live.json").write_text(json.dumps(live))
+emit(stage="environment", note="training environment: 0.0 MB zip (G1 reference, task spec, 1 training variants, loader)")
 """
 
 
