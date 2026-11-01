@@ -25,6 +25,12 @@ from .config import REPO
 log = logging.getLogger("a2h.live")
 LIVE_DIR = "live"
 MAX_LIVE_BYTES = 8 * 1048576  # live.json is ~250 kB for a 6 s clip, ~1 MB at the 20 s cap
+MAX_ENV_BYTES = 32 * 1048576  # env.zip is ~0.5 MB for a 6 s clip with 18 variants; anything bigger isn't ours
+
+
+def env_filename(jid):
+    """The download name of a live build's bundle (the worker writes the same into its manifest)."""
+    return f"live-{jid[:8]}.a2h-env.zip"
 _IMPORTS = "import mediapipe, mink, mujoco, torch, cv2, scipy, mediapy, imageio_ffmpeg"
 
 
@@ -108,7 +114,7 @@ class LiveRunner:
         store, s = self.store, self.settings
         cancel = store.cancel[job.id]
         cmd = [s.live_python, "-m", "server.live_worker", str(src), str(out), "--max-seconds", str(s.live_max_seconds),
-               "--timeout-s", str(s.live_timeout_s)]
+               "--timeout-s", str(s.live_timeout_s), "--job-id", job.id]
         store.set_stage(job, "video", 0.0)
         t0 = time.monotonic()
         proc = subprocess.Popen(cmd, cwd=REPO, env=_env(out), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,

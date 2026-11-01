@@ -19,7 +19,8 @@ stderr, which the server logs and never shows.
 
 live.json grows as stages finish: what the page draws (2D landmarks and the 3D skeleton, the robot's bodies
 and qpos, timings), then a preview of the clip's variants (skill/variations.py, best effort, after the
-environment: the build view's ghosts).
+environment: the build view's ghosts) and the training environment they go into (env.zip, a2h_env/export.py:
+the reference, the spec and the variants made, downloadable from the page).
 """
 
 import argparse
@@ -99,7 +100,7 @@ def _round(a, nd):
     return [[None if np.isnan(p).any() else p.tolist() for p in f] for f in a]
 
 
-def run(video, out, max_seconds, name="clip", sam3d=None, timeout_s=240.0):
+def run(video, out, max_seconds, name="clip", sam3d=None, timeout_s=240.0, job_id=None):
     started = time.monotonic()
     out.mkdir(parents=True, exist_ok=True)
     live = {"fps": FPS, "frames": 0, "duration_s": 0.0, "video": None, "landmarks": None, "pose_found": None,
@@ -195,34 +196,63 @@ def run(video, out, max_seconds, name="clip", sam3d=None, timeout_s=240.0):
                             f"{sc['stages_completed']}/{sc['stages_total']})")
 
     # variants (best effort: the environment is done, and a failure or running out of time never fails the build)
+    vs = []
     used = time.monotonic() - started
     if used > VARIANT_START_BY * timeout_s:
         emit(stage="environment", note=f"variants skipped (the build already took {used:.0f} s)")
-        return
+    else:
+        try:
+            deadline = min(started + VARIANT_STOP_BY * timeout_s, time.monotonic() + VARIANT_BUDGET_S)
+            vs = variant_set(qpos, rt.model, deadline)
+            if not vs:
+                raise TimeoutError("no time left for variants")
+            live["variants"] = variant_view(vs)
+            save()
+            v = live["variants"]
+            emit(stage="environment", note=f"variants: {v['kept']} of {v['total']} kept (mirrored, re-timed, rescaled; "
+                                           f"each passes its own key-moment check and the physics filter)")
+        except Exception as e:  # noqa: BLE001
+            vs = []
+            emit(stage="environment", note=f"variants skipped ({type(e).__name__})")
+    # the training environment: the variants stage's output, a zip anyone with mjlab can train on (a2h_env/export.py);
+    # with no variants it still holds the reference and the spec
     try:
-        deadline = min(started + VARIANT_STOP_BY * timeout_s, time.monotonic() + VARIANT_BUDGET_S)
-        live["variants"] = variant_preview(qpos, rt.model, deadline)
+        from a2h_env import export as env_export
+        m = env_export.export_live(out, qpos=qpos, fps=FPS, spec=spec, variants=vs, pos=pos, name=name, job_id=job_id,
+                                   meta={"frontend": model, "retarget_version": retarget.code_version()})
+        tr = m["variants"].get("train") or {}
+        live["env"] = {"file": env_export.ZIP_NAME, "filename": f"{m['id']}.a2h-env.zip", "size": m["bytes"], "inside": m["inside"],
+                       "variants": tr.get("with_arrays", 0)}
         save()
-        v = live["variants"]
-        emit(stage="environment", note=f"variants: {v['kept']} of {v['total']} kept (mirrored, re-timed, rescaled; "
-                                       f"each passes its own key-moment check and the physics filter)")
+        emit(stage="environment", note=f"training environment: {m['bytes'] / 1e6:.1f} MB zip ({m['inside']})")
     except Exception as e:  # noqa: BLE001
-        emit(stage="environment", note=f"variants skipped ({type(e).__name__})")
+        emit(stage="environment", note=f"training environment skipped ({type(e).__name__})")
 
 
-def variant_preview(qpos, model, deadline=None):
-    """skill/variations.py on this retarget: the four ghost variants first, then the rest of PREVIEW's 18 (none
-    above VARIANT_MAX_S), until the deadline."""
+def variant_set(qpos, model, deadline=None):
+    """skill/variations.py on this retarget: the four ghost variants first, then the rest of PREVIEW's 18 (none above
+    VARIANT_MAX_S), until the deadline -> generate()'s list (those made in time; [] if none)."""
     from skill import variations
     g1 = variations.G1()
     g1.bodies = lambda q: body_positions(model, q)  # this module's copy: latent/ isn't in the Space image
     ghosts = [g[:4] for g in variations.GHOSTS]
     grid = ghosts + ([g for g in variations.PREVIEW if g not in ghosts] if len(qpos) <= VARIANT_MAX_S * FPS else [])
-    vs = variations.generate(qpos, fps=FPS, grid=grid, g1=g1, log=lambda *a: None, deadline=deadline)
-    if not vs:
-        raise TimeoutError("no time left for variants")
+    return variations.generate(qpos, fps=FPS, grid=grid, g1=g1, log=lambda *a: None, deadline=deadline)
+
+
+def variant_view(vs):
+    """generate()'s list -> the build view's preview (every verdict, a few kept ones' qpos as ghosts)."""
+    from skill import variations
     by_name = {v["name"]: v["qpos"] for v in vs}
     return variations.preview(vs, by_name.__getitem__, fps=FPS)
+
+
+def variant_preview(qpos, model, deadline=None):
+    """variant_set + variant_view; TimeoutError when no variant was made before the deadline."""
+    vs = variant_set(qpos, model, deadline)
+    if not vs:
+        raise TimeoutError("no time left for variants")
+    return variant_view(vs)
 
 
 def main(argv=None):
@@ -233,9 +263,10 @@ def main(argv=None):
     ap.add_argument("--name", default="clip")
     ap.add_argument("--sam3d", help="SAM 3D Body's npz for this video's processed frames: the pose instead of MediaPipe")
     ap.add_argument("--timeout-s", type=float, default=240.0, help="the job's wall-clock limit (the variants' budget)")
+    ap.add_argument("--job-id", help="the job's id, named in the training environment's manifest")
     a = ap.parse_args(argv)
     try:
-        run(Path(a.video), Path(a.out), a.max_seconds, a.name, a.sam3d, a.timeout_s)
+        run(Path(a.video), Path(a.out), a.max_seconds, a.name, a.sam3d, a.timeout_s, a.job_id)
     except ClipError as e:
         emit(error=str(e))
         return 2

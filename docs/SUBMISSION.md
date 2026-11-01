@@ -34,6 +34,14 @@ comes from; all docs are in https://github.com/PandaGrdn/athlete2humanoid/tree/m
 - **Researchers without a mocap lab.** The pipeline, the task specs and the evaluation harness are open; a new move costs about $0.8 of GPU per starting policy (`docs/FRONTIER_ADAPTATION.md`, Cost).
 - **Anyone with a phone.** The Live page accepts an upload and builds the robot's version of it in the browser.
 
+**What you get to keep:** each run page, the build view at its variants stage, and a live upload once its variants are
+made offer a "Download training environment" button: one zip (1.3–3.1 MB per run) with the person's motion as a G1
+reference, the key-moment spec with Muse's names, the training and held-out variants the pipeline generates for it
+with the physics filter's verdict, the reward config, the source credit and a loader. It trains with mjlab alone, no
+access to our server: unzip it and run `python -m a2h_env train <zip>`. Tested so far as a smoke test:
+20 PPO iterations on CPU from a clean folder holding only the zip and mjlab, on the front kick's reference and on its 36
+variants end to end; a full GPU training from a bundle was not run (`docs/TRAINING_ENV.md`).
+
 **Why now:**
 - Meta's open models made monocular video good enough to train on. SAM 3D Body cut bone-length variation 3–6x on our phone clips compared with MediaPipe (`docs/PIPELINE_ACCURACY.md`, Fix 3), and that consistency is what lets the retarget keep planted feet planted.
 - GPU physics (MuJoCo Warp through mjlab) trains 4,096 simulated G1s at once, so a new skill is minutes of PPO, not days.

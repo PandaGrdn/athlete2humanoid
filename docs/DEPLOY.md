@@ -216,7 +216,14 @@ The script never prints a token: `hf` and `wrangler` use their own stored logins
 
 ### What the bundle contains
 
-`scripts/build_space.py` (also `make space`) copies only what the app shows:
+`scripts/build_space.py` (also `make space`) copies only what the app shows. Training environments
+(`docs/TRAINING_ENV.md`): a run's `env.zip` is shipped when the run folder has one, else built while bundling; since
+`deploy.sh` runs `build_space.py` without numpy or MuJoCo, a bundle built there has no foot contacts and only the
+variants of a sibling `remote_variants_*` run, so run `python scripts/export_env.py outputs/remote_latent_*` from the
+pipeline's environment first. A `--code-only` redeploy (CI) ships no run data and so no bundles; the API then builds
+them on demand into `A2H_DATA_DIR/env/` from whatever run data the host already has.
+
+It copies:
 
 - videos, metrics and task specs (`task_spec.json`);
 - the latest checkpoint per policy, motion CSVs and the reward net;

@@ -67,6 +67,17 @@ export type Robust = {
 
 export type Credit = { text: string; url: string | null; licence: string | null };
 
+/** The run's training environment (GET /api/runs/{id}/env.zip, docs/TRAINING_ENV.md): one zip anyone with mjlab can
+ *  train on. `inside` is the exporter's one line on its contents. */
+export type EnvBundle = {
+  url: string;
+  filename: string;
+  size: number | null;
+  inside: string | null;
+  variants?: Record<"train" | "held_out", { total: number | null; kept: number | null; with_arrays: number | null }>;
+  source?: string | null;
+};
+
 export type RunSummary = {
   id: string;
   title: string;
@@ -140,6 +151,7 @@ export type RunDetail = RunSummary & {
   clips: Clip[];
   downloads: FileRef[];
   variants?: FileRef | null; // variants.json (scripts/build_variants_view.py)
+  env?: EnvBundle | null; // the training environment zip, built from the run folder on demand
 };
 
 export type StageState = {
@@ -200,6 +212,7 @@ export type LiveData = {
   robot: { names: string[]; edges: [number, number][]; frames: [number, number, number][][] } | null;
   qpos?: number[][] | null; // the retarget: G1 qpos (root xyz, quaternion wxyz, 29 joints) per frame
   variants?: VariantsView | null; // skill/variations.py's preview, after the environment
+  env?: { file: string; filename?: string; size: number; inside: string; variants: number } | null; // env.zip, written with the variants (GET /api/jobs/{id}/env.zip)
   retarget_error_cm: Record<string, [number, number]> | null;
   timings_s: Record<string, number>;
 };
@@ -246,6 +259,7 @@ export const api = {
   job: (id: string) => request<Job>(`/api/jobs/${encodeURIComponent(id)}`),
   live: (id: string) => request<LiveData>(`/api/jobs/${encodeURIComponent(id)}/live`),
   liveVideo: (id: string) => url(`/api/jobs/${encodeURIComponent(id)}/live/video`),
+  liveEnv: (id: string) => `/api/jobs/${encodeURIComponent(id)}/env.zip`,
   jobTaskSpec: (id: string) => request<TaskSpec>(`/api/jobs/${encodeURIComponent(id)}/task_spec`),
   cancel: (id: string) => request<Job>(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
   createJob: (opts: { file?: File; runId?: string; runner?: string }) => {
