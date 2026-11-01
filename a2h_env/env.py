@@ -11,11 +11,14 @@ feet_height term when the bundle's reward_config.json sets one (mjlab_tasks.py F
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 import numpy as np
-import torch
+
+# torch and mjlab are imported where they are used: this module imports with numpy alone (bundle inspection, the
+# interpolation test), and needs mjlab (which brings torch) only to build motion files and environments.
 
 OUTPUT_FPS = 50.0  # mjlab's tracking control rate (200 Hz physics, decimation 4)
 TASK = "A2H-Tracking-Flat-Unitree-G1"
@@ -32,7 +35,20 @@ FEET_HEIGHT = {"weight": 0.0, "std": 0.1, "clearance": 0.03, "swing_only": True}
 
 
 def default_device():
+    import torch
     return "cuda:0" if torch.cuda.is_available() else "cpu"
+
+
+def task_of(variant, feet_height=None):
+    """The mjlab task an environment is: mjlab's own G1 tracking on one motion with no extra term, else this repo's
+    A2H-Tracking (the same task plus VariantMotionCommand and/or FeetHeight, as mjlab_tasks.py registers it)."""
+    extra = variant == "train" or bool(isinstance(feet_height, dict) and feet_height.get("weight"))
+    return TASK if extra else "Mjlab-Tracking-Flat-Unitree-G1"
+
+
+def safe_name(name):
+    """A variant's name as a file name: letters, digits, dot, dash and underscore only."""
+    return re.sub(r"[^\w.-]", "_", str(name))[:80] or "variant"
 
 
 # --- qpos -> mjlab motion file ----------------------------------------------------------------------------------------
@@ -44,25 +60,33 @@ def _qmul(a, b):
 
 
 def _slerp(a, b, t):
-    """Quaternions (N, 4) wxyz, blend t (N,) -> slerp, the shortest way round."""
-    cos = (a * b).sum(1)
-    b = np.where(cos[:, None] < 0, -b, b)
-    cos = np.abs(cos).clip(-1, 1)
-    theta = np.arccos(cos)
-    sin = np.sin(theta)
-    close = sin < 1e-6
-    wa = np.where(close, 1 - t, np.sin((1 - t) * theta) / np.where(close, 1, sin))
-    wb = np.where(close, t, np.sin(t * theta) / np.where(close, 1, sin))
-    q = wa[:, None] * a + wb[:, None] * b
-    return q / np.linalg.norm(q, axis=1, keepdims=True)
+    """Quaternions (N, 4) wxyz, blend t (N,) -> slerp, as mjlab.utils.lab_api.math.quat_slerp: b is flipped onto a's
+    hemisphere (the shortest way round), t == 0 returns a and t == 1 returns b unchanged. One difference: mjlab returns
+    a untouched when the pair is within 4 float32 ulps of identical, a step of up to ~1e-3 rad that reads as up to
+    ~0.06 rad/s of angular velocity at near-still frames, and float32 rounding decides which frames that hits; here such
+    pairs blend linearly (equal to slerp to O(theta^2)), so near-still stretches stay smooth."""
+    d = (a * b).sum(1)
+    b = np.where(d[:, None] < 0, -b, b)
+    theta = np.arccos(np.clip(np.abs(d), -1, 1))
+    small = theta < 1e-5
+    sin = np.where(small, 1.0, np.sin(theta))
+    wa = np.where(small, 1 - t, np.sin((1 - t) * theta) / sin)
+    wb = np.where(small, t, np.sin(t * theta) / sin)
+    out = wa[:, None] * a + wb[:, None] * b
+    out = np.where((t == 0)[:, None], a, out)
+    out = np.where((t == 1)[:, None], b, out)
+    return out
 
 
 def _axis_angle(q, eps=1e-6):
-    """(N, 4) wxyz -> (N, 3) rotation vectors, as mjlab.utils.lab_api.math.axis_angle_from_quat."""
+    """(N, 4) wxyz -> (N, 3) rotation vectors, as mjlab.utils.lab_api.math.axis_angle_from_quat: a quaternion with
+    w < 0 is negated first (the same rotation; without it a sign jump between frames reads as a ~2 pi turn)."""
+    q = q * (1.0 - 2.0 * (q[:, :1] < 0))
     mag = np.linalg.norm(q[:, 1:], axis=1)
     half = np.arctan2(mag, q[:, 0])
     angle = 2 * half
-    k = np.where(np.abs(angle) > eps, np.sin(half) / np.where(np.abs(angle) > eps, angle, 1.0), 0.5 - angle ** 2 / 48)
+    big = np.abs(angle) > eps
+    k = np.where(big, np.sin(half) / np.where(big, angle, 1.0), 0.5 - angle ** 2 / 48)
     return q[:, 1:] / k[:, None]
 
 
@@ -78,7 +102,7 @@ def interpolate(qpos, fps, output_fps=OUTPUT_FPS):
     i1 = np.minimum(i0 + 1, n - 1)
     w = phase * (n - 1) - i0
     pos = qpos[i0, :3] * (1 - w)[:, None] + qpos[i1, :3] * w[:, None]
-    quat = _slerp(qpos[i0, 3:7], qpos[i1, 3:7], w)
+    quat = _slerp(qpos[i0, 3:7], qpos[i1, 3:7], w)  # unit when the input is; not renormalised, as mjlab
     joints = qpos[i0, 7:] * (1 - w)[:, None] + qpos[i1, 7:] * w[:, None]
     lin_vel = np.gradient(pos, dt_out, axis=0) if len(pos) > 1 else np.zeros_like(pos)
     joint_vel = np.gradient(joints, dt_out, axis=0) if len(joints) > 1 else np.zeros_like(joints)
@@ -114,6 +138,7 @@ def _scene(device, output_fps=OUTPUT_FPS):
 def reference_motion(qpos, fps, device="cpu", output_fps=OUTPUT_FPS):
     """qpos (T, 36) at fps -> mjlab's motion arrays at output_fps {fps, joint_pos, joint_vel, body_pos_w, body_quat_w,
     body_lin_vel_w, body_ang_vel_w}, by forward kinematics on mjlab's G1 (as mjlab.scripts.csv_to_npz)."""
+    import torch
     scene, sim = _scene(device, output_fps)
     robot = scene["robot"]
     idx = robot.find_joints(list(G1_JOINTS), preserve_order=True)[0]
@@ -163,7 +188,7 @@ def motion_file(bundle, variant=None, work_dir=None, device="cpu"):
         v = bundle.variant(variant)
         if v.qpos is None:
             raise ValueError(f"variant {variant!r} was dropped ({v.why}) or has no arrays in this bundle")
-        q, name = v.qpos, v.name
+        q, name = v.qpos, safe_name(v.name)
     out = wd / f"{name}-{_digest(q)}.npz"
     if not out.is_file():
         np.savez(out, **reference_motion(q, bundle.fps, device))
@@ -202,6 +227,7 @@ def _mjlab():
 
 
 def _variant_command_cfg():
+    import torch
     _, _, MotionCommand, MotionCommandCfg = _mjlab()
 
     class VariantMotionCommand(MotionCommand):
@@ -247,6 +273,7 @@ def feet_height_exp(robot_z, ref_z, floor, std, clearance, swing_only=True):
     """(B, feet) ankle heights of the robot and the reference, (feet,) the reference's floor per foot -> (B,) the mean
     over feet of exp(-err^2 / std^2), each foot counted only while the reference's is more than `clearance` above its
     floor when swing_only."""
+    import torch
     r = torch.exp(-(robot_z - ref_z).square() / std ** 2)
     if swing_only:
         r = r * (ref_z - floor > clearance)
@@ -258,6 +285,7 @@ class FeetHeight:
     foot is in swing (its floor: the 5th-percentile height over the whole motion file)."""
 
     def __init__(self, cfg, env):
+        import torch
         self.cmd = env.command_manager.get_term("motion")
         self.ids = [list(self.cmd.cfg.body_names).index(n) for n in FEET]
         self.floor = torch.quantile(self.cmd.motion.body_pos_w[:, self.ids, 2].float(), 0.05, dim=0)
@@ -277,13 +305,23 @@ def feet_height_config(bundle):
     return fh
 
 
-def env_cfg(bundle, variant=None, num_envs=4096, play=False, work_dir=None, device="cpu"):
-    """mjlab's G1 flat tracking config on the bundle: variant None (or "reference") tracks the retarget itself,
-    a variant's name tracks that variant, "train" tracks every kept training variant end to end (each env inside its
-    own). play: mjlab's play overrides (start at frame 0, no pushes or noise)."""
+def resolve_variant(bundle, variant):
+    """"train" (the default everywhere) when the bundle carries training variants with arrays, else the reference;
+    "reference" / None the reference; anything else a variant's name."""
+    if variant == "train":
+        return "train" if bundle.kept("train") else "reference"
+    return "reference" if variant is None else variant
+
+
+def env_cfg(bundle, variant="train", num_envs=4096, play=False, work_dir=None, device="cpu"):
+    """mjlab's G1 flat tracking config on the bundle: "train" (the default) tracks every kept training variant end to
+    end, each env inside its own, falling back to the reference when the bundle has none with arrays; "reference"
+    (or None) tracks the retarget itself; a variant's name tracks that variant. play: mjlab's play overrides (start
+    at frame 0, no pushes or noise)."""
     RewardTermCfg, g1_cfg, _, _ = _mjlab()
     cfg = g1_cfg(play=play)
     cfg.scene.num_envs = num_envs
+    variant = resolve_variant(bundle, variant)
     if variant == "train":
         npz, segs = variants_file(bundle, work_dir, device)
         old = cfg.commands["motion"]
@@ -299,8 +337,8 @@ def env_cfg(bundle, variant=None, num_envs=4096, play=False, work_dir=None, devi
     return cfg
 
 
-def make_env(bundle, variant=None, num_envs=4096, device=None, play=False, work_dir=None):
-    """-> mjlab ManagerBasedRlEnv (see env_cfg). device: cuda:0 when available, else cpu."""
+def make_env(bundle, variant="train", num_envs=4096, device=None, play=False, work_dir=None):
+    """-> mjlab ManagerBasedRlEnv (see env_cfg): the training variants by default. device: cuda:0 when available."""
     from mjlab.envs import ManagerBasedRlEnv
     device = device or default_device()
     return ManagerBasedRlEnv(cfg=env_cfg(bundle, variant, num_envs, play, work_dir, device), device=device)

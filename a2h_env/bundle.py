@@ -95,7 +95,7 @@ class _Source:
         self.path = Path(path)
         if self.path.is_dir():
             self.zip = None
-            self.names = {str(p.relative_to(self.path)) for p in self.path.rglob("*") if p.is_file()}
+            self.names = {p.relative_to(self.path).as_posix() for p in self.path.rglob("*") if p.is_file()}
         else:
             self.zip = zipfile.ZipFile(self.path)
             self.names = {n for n in self.zip.namelist() if not n.endswith("/")}
@@ -112,7 +112,7 @@ class _Source:
 
     def bytes(self, name):
         if self.zip is None:
-            return (self.path / name).read_bytes()
+            return self.path.joinpath(*name.split("/")).read_bytes()
         return self.zip.read(self.prefix + name)
 
     def json(self, name, default=None):

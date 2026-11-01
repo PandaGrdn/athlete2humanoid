@@ -14,10 +14,12 @@ credit from web.json, the silhouette and V-JEPA latent when small, the G1's lice
 import hashlib
 import io
 import json
+import os
 import re
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 import zipfile
 from pathlib import Path
@@ -76,12 +78,19 @@ def canonical(obj):
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
-def git_commit(repo=REPO):
-    try:
-        out = subprocess.run(["git", "rev-parse", "--short=12", "HEAD"], cwd=repo, capture_output=True, text=True, timeout=10)
-        return out.stdout.strip() if out.returncode == 0 else None
-    except (OSError, subprocess.SubprocessError):
-        return None
+def git_state(repo=REPO):
+    """(commit, dirty) of the checkout the export runs from; (None, None) outside a git checkout (the Space image)."""
+    def git(*args):
+        try:
+            out = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=10)
+            return out.stdout.strip() if out.returncode == 0 else None
+        except (OSError, subprocess.SubprocessError):
+            return None
+    commit = git("rev-parse", "--short=12", "HEAD")
+    if commit is None:
+        return None, None
+    status = git("status", "--porcelain", "--untracked-files=no")
+    return commit, (bool(status) if status is not None else None)
 
 
 def read_json(path):
@@ -253,28 +262,36 @@ def generate_variants(qpos, fps, log=lambda *a: None):
 
 
 def reward_config_of(run_dir):
-    """What the run's tracking policy trained with: {task, iterations, feet_height, policy, mjlab}."""
+    """What the run's tracking policy trained with: {task, policy, iterations, started_from, trained_on, feet_height,
+    policies: [every policy_* folder's task, iterations, start and data], mjlab}. The bundle's arrays are the
+    reference, its spec and the variants this pipeline makes for it; `policies` says what each stored policy actually
+    trained on (the reference alone, or a variants run) and which checkpoint it was built off."""
     run_dir = Path(run_dir)
-    rc = {"task": TASK, "policy": None, "iterations": None, "feet_height": None, "mjlab": MJLAB_TRACKING,
+    rc = {"task": TASK, "policy": None, "iterations": None, "started_from": None, "trained_on": None, "feet_height": None,
+          "policies": [], "mjlab": MJLAB_TRACKING,
           "note": "mjlab's tracking reward on the reference (or on every training variant, each env inside its own); "
-                  "feet_height adds a foot-height term while the reference's foot is in swing (null: not used)."}
-    for pdir in sorted(run_dir.glob("policy_tracking*")):
+                  "feet_height adds a foot-height term while the reference's foot is in swing (null: not used). "
+                  "`policies` records what each of the run's stored policies trained on, which may differ from this bundle's variants."}
+    for pdir in sorted(run_dir.glob("policy_*")):
         w = read_json(pdir / "weights.json") or {}
-        rc["policy"], rc["task"] = pdir.name.removeprefix("policy_"), w.get("task") or rc["task"]
-        if isinstance(w.get("iterations"), int):
-            rc["iterations"] = w["iterations"]
         user = read_json(pdir / "reward_config.json")
         if user is None and isinstance(w.get("reward_config"), str):  # trained elsewhere: the config by its name in the repo
             for cand in (REPO / "docs" / "real_athletes" / Path(w["reward_config"]).name, run_dir / Path(w["reward_config"]).name):
                 user = read_json(cand)
                 if user is not None:
                     break
-        if isinstance(user, dict):
-            if isinstance(user.get("iterations"), int):
-                rc["iterations"] = user["iterations"]
-            if isinstance(user.get("feet_height"), dict):
-                rc["feet_height"] = user["feet_height"]
-        break
+        user = user if isinstance(user, dict) else {}
+        started = w.get("started_from") if isinstance(w.get("started_from"), dict) else None
+        entry = {"policy": pdir.name.removeprefix("policy_"), "task": w.get("task"),
+                 "iterations": user.get("iterations") if isinstance(user.get("iterations"), int) else w.get("iterations"),
+                 "started_from": {"mode": started.get("mode"), "checkpoint": Path(str(started.get("checkpoint"))).name} if started else None,
+                 "trained_on": ("variants: " + Path(str(w["variants"])).parent.parent.name) if w.get("variants") else
+                               ("the clip's reference" if w.get("motion_csv") else None),
+                 "feet_height": user.get("feet_height") if isinstance(user.get("feet_height"), dict) else None}
+        rc["policies"].append(entry)
+        if entry["policy"].startswith("tracking") and rc["policy"] is None:
+            rc |= {k: entry[k] for k in ("policy", "iterations", "started_from", "trained_on", "feet_height")}
+            rc["task"] = entry["task"] or rc["task"]
     return rc
 
 
@@ -306,21 +323,24 @@ def readme(m):
         "## Train",
         "",
         "```bash",
-        "uv venv -p 3.12 mjlab_env && uv pip install -p mjlab_env/bin/python mjlab==1.6.0 tensorboard   # or pip",
-        f"unzip {m['id']}.a2h-env.zip -d {m['id']}",
-        f"cd {m['id']}",
+        "uv venv -p 3.12 mjlab_env && uv pip install -p mjlab_env/bin/python mjlab==1.6.0 tensorboard   # or pip, in a venv",
+        "source mjlab_env/bin/activate",
+        f"unzip {m['id']}.a2h-env.zip -d {m['id']} && cd {m['id']}",
         f"python -m a2h_env info  ../{m['id']}.a2h-env.zip",
-        f"python -m a2h_env train ../{m['id']}.a2h-env.zip --iters 1500 --num-envs 4096    # one GPU, ~15 min; --device cpu works, slowly",
+        f"python -m a2h_env train ../{m['id']}.a2h-env.zip --iters 1500 --num-envs 4096    # a GPU; --device cpu --num-envs 8 for a smoke test",
         "```",
         "",
-        "Checkpoints (rsl_rl `model_<iteration>.pt`) land in `<bundle>.train/logs/<timestamp>/`; mjlab's `play` script or the",
-        "repository's `mjlab_rollout.py` run them. `python -m a2h_env` works with the zip itself on `PYTHONPATH` too.",
+        "`train` uses every kept training variant (`--variant train`, the default); `--variant reference` trains on the clip's",
+        "retarget alone, `--variant <name>` on one variant. Checkpoints (rsl_rl `model_<iteration>.pt`) land in",
+        "`<bundle>.train/logs/<timestamp>/`; mjlab's `play` script or the repository's `mjlab_rollout.py` run them. The zip itself on",
+        "`PYTHONPATH` works too (`PYTHONPATH=<zip> python -m a2h_env ...`, not with `python -I`). On macOS under a cleared",
+        "environment keep `/usr/sbin` on `PATH` (MuJoCo's warp backend calls `sysctl`).",
         "",
         "```python",
         "import a2h_env",
         f"b = a2h_env.load_bundle('{m['id']}.a2h-env.zip')     # numpy only: b.qpos (T, 36), b.fps, b.spec, b.train, b.held_out",
-        "env = a2h_env.make_env(b, variant='train', num_envs=4096)   # mjlab ManagerBasedRlEnv: every kept training variant",
-        "env = a2h_env.make_env(b, variant=None)                     # ... or the reference alone; or a variant by name",
+        "env = a2h_env.make_env(b, num_envs=4096)                    # mjlab ManagerBasedRlEnv: every kept training variant (the default)",
+        "env = a2h_env.make_env(b, variant='reference')              # ... or the reference alone; or a variant by name",
         "```",
         "",
         "Dependencies: numpy to read; mjlab 1.6.0 (brings torch, mujoco, mujoco-warp, rsl-rl) and tensorboard to train.",
@@ -354,6 +374,9 @@ def readme(m):
         "- The environment is mjlab's G1 motion tracking (BeyondMimic re-implementation), with each env kept inside its own",
         "  variant when training on all of them. The key-moment task reward of the repository's task policies (`skill/`) is",
         "  not vendored here; the spec is, so another reward can be built on it.",
+        "- The arrays are the reference, its spec and the variants this pipeline generates for it. What each of the run's stored",
+        "  policies actually trained on (the reference alone or a variants run, and the checkpoint it was built off) is",
+        "  `reward_config.json` `policies`; `manifest.json` `variants.source` says where these variants came from.",
         "- Every variant was kept only if its own reference completes its spec and passes the physics filter (joint speed cap,",
         "  ballistic flights, no lost flight, no floor penetration). `index.json` says why the others were dropped.",
     ]
@@ -371,17 +394,21 @@ def write_zip(out, parts, manifest):
     manifest = dict(manifest)
     manifest["files"] = [{"path": n, "bytes": parts.size(n)} for n in sorted(parts.files)]
     manifest["inside"] = inside(manifest)
-    tmp = out.with_suffix(out.suffix + ".tmp")
-    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
-        z.writestr("manifest.json", json.dumps(manifest, indent=1, ensure_ascii=False))
-        z.writestr("README.md", readme(manifest))
-        for name in sorted(parts.files):
-            d = parts.files[name]
-            if isinstance(d, Path):
-                z.write(d, name)
-            else:
-                z.writestr(name, d)
-    tmp.replace(out)
+    fd, tmp = tempfile.mkstemp(dir=out.parent, prefix=out.name + ".", suffix=".tmp")  # unique: concurrent builders never share one
+    try:
+        with os.fdopen(fd, "wb") as f, zipfile.ZipFile(f, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+            z.writestr("manifest.json", json.dumps(manifest, indent=1, ensure_ascii=False))
+            z.writestr("README.md", readme(manifest))
+            for name in sorted(parts.files):
+                d = parts.files[name]
+                if isinstance(d, Path):
+                    z.write(d, name)
+                else:
+                    z.writestr(name, d)
+        os.replace(tmp, out)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
     manifest["bytes"] = out.stat().st_size
     return manifest
 
@@ -406,14 +433,18 @@ def spec_summary(spec):
             if isinstance(spec.get("self_check"), dict) else None}
 
 
-def base_manifest(rid, title, clip, qpos_bytes, fps, spec, meta, credit, commit):
+def base_manifest(rid, title, clip, qpos_bytes, fps, spec, meta, credit):
     shape, dtype, _ = npy_header(qpos_bytes)
     rv = meta.get("retarget_version") if isinstance(meta, dict) else None
+    retarget_git = rv.get("git") if isinstance(rv, dict) else None
+    commit, dirty = git_state()
     return {
         "format": FORMAT, "format_version": FORMAT_VERSION, "id": rid, "title": title, "clip": clip,
         "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "pipeline": {"commit": commit, "retarget_version": rv.get("version") if isinstance(rv, dict) else rv,
-                     "retarget_git": rv.get("git") if isinstance(rv, dict) else None,
+        # commit: the pipeline that made the retarget (the clip's meta.json), when recorded; exported_at_commit: the checkout
+        # that wrote this bundle, which may have had uncommitted changes (dirty)
+        "pipeline": {"commit": retarget_git, "retarget_version": rv.get("version") if isinstance(rv, dict) else rv,
+                     "retarget_git": retarget_git, "exported_at_commit": commit, "dirty": dirty,
                      "pose_frontend": (meta or {}).get("frontend"), "loader_version": FORMAT_VERSION},
         "spec_sha256": sha256(canonical(spec)), "qpos_sha256": sha256(qpos_bytes),
         "reference": {"file": "reference/qpos.npy", "frames": shape[0], "fps": float(fps), "duration_s": round(shape[0] / float(fps), 3),
@@ -459,7 +490,7 @@ def export_run(run_dir, out=None, generate=False, variants_dir=None, log=lambda 
     fps = float(meta.get("fps") or spec.get("fps") or 30.0)
     credit = clean_credit(web.get("credit"))
     title = web.get("title") if isinstance(web.get("title"), str) else None
-    m = base_manifest(rid, title, clip, qpos_bytes, fps, spec, meta, credit, git_commit())
+    m = base_manifest(rid, title, clip, qpos_bytes, fps, spec, meta, credit)
     m["run"] = run_dir.name
     parts = Parts()
     parts.add("reference/qpos.npy", qpos_bytes)
@@ -469,7 +500,7 @@ def export_run(run_dir, out=None, generate=False, variants_dir=None, log=lambda 
     parts.add_json("credit.json", credit)
     rc = reward_config_of(run_dir)
     parts.add_json("reward_config.json", rc)
-    m["reward"] |= {"task": rc["task"], "feet_height": rc["feet_height"], "policy": rc["policy"], "iterations": rc["iterations"]}
+    m["reward"] |= {k: rc[k] for k in ("task", "feet_height", "policy", "iterations", "started_from", "trained_on")}
     # contacts (MuJoCo + the G1 model: the repo's environment, or the live image)
     try:
         import numpy as np
@@ -518,10 +549,10 @@ def export_live(out_dir, qpos, fps, spec, variants=None, pos=None, name="clip", 
     contacts. -> the manifest."""
     import numpy as np
     out_dir = Path(out_dir)
-    rid = f"live-{job_id}" if job_id else "live"
+    rid = f"live-{str(job_id)[:8]}" if job_id else "live"  # server/live.py env_filename: the same name on download
     qpos_bytes = npy_bytes(np.asarray(qpos, np.float64))
     meta = dict(meta or {}) | {"fps": float(fps), "frontend": (meta or {}).get("frontend", "mediapipe"), "live": True}
-    m = base_manifest(rid, f"Live build: {name}", name, qpos_bytes, fps, spec, meta, None, git_commit())
+    m = base_manifest(rid, f"Live build: {name}", name, qpos_bytes, fps, spec, meta, None)
     parts = Parts()
     parts.add("reference/qpos.npy", qpos_bytes)
     parts.add_json("reference/meta.json", reference_meta(meta, fps, len(qpos)))
@@ -553,18 +584,35 @@ def manifest_of(zip_path):
         return None
 
 
+def is_current(zip_path, run_dir):
+    """Whether a bundle still matches its run folder: the manifest's spec and retarget hashes equal the folder's
+    task_spec.json and clips/<clip>/qpos.npy. False for a missing or foreign zip, or a run with no spec."""
+    m = manifest_of(zip_path)
+    clip, spec = target_clip(run_dir)
+    if m is None or clip is None:
+        return False
+    try:
+        qpos = (Path(run_dir) / "clips" / clip / "qpos.npy").read_bytes()
+    except OSError:
+        return False
+    return m.get("spec_sha256") == sha256(canonical(spec)) and m.get("qpos_sha256") == sha256(qpos) and m.get("clip") == clip
+
+
 def main(runs, out_dir=None, generate=True, force=False, log=print):
-    """scripts/export_env.py: each run folder -> its env.zip (in the run folder, or out_dir/<run>.a2h-env.zip)."""
+    """scripts/export_env.py: each run folder -> its env.zip (in the run folder, or out_dir/<run>.a2h-env.zip). An
+    existing zip is kept while it matches the run's spec and retarget (is_current), rebuilt otherwise or with force."""
     done = []
     for r in runs:
         r = Path(r)
         out = Path(out_dir) / f"{run_id(r)}.a2h-env.zip" if out_dir else r / ZIP_NAME
         if out.is_file() and not force:
             m = manifest_of(out)
-            if m:
-                log(f"{out}: already there ({m['bytes'] / 1e6:.1f} MB; --force to rebuild)")
+            if m and is_current(out, r):
+                log(f"{out}: already there and current ({m['bytes'] / 1e6:.1f} MB; --force to rebuild)")
                 done.append((r, m))
                 continue
+            if m:
+                log(f"{out}: stale (the spec or the retarget changed); rebuilding")
         m = export_run(r, out, generate=generate, log=log)
         if m is None:
             log(f"{r}: no task spec naming a clip with a retarget; skipped")

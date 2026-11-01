@@ -323,10 +323,10 @@ def create_app(settings=None):
     @app.get("/api/jobs/{jid}/env.zip")
     def job_env(jid: str):
         """A live build's training environment, once its variants stage has written it (server/live_worker.py)."""
-        p = _live_folder(jid) / runs.ENV_ZIP
-        if not p.is_file():
+        p = runs.safe_path(_live_folder(jid), runs.ENV_ZIP)
+        if p is None or p.stat().st_size > live.MAX_ENV_BYTES:
             raise HTTPException(404, "the training environment isn't built yet")
-        return FileResponse(p, media_type="application/zip", filename=f"live-{jid[:8]}.a2h-env.zip",
+        return FileResponse(p, media_type="application/zip", filename=live.env_filename(jid),
                             headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
     @app.get("/api/jobs/{jid}/input")

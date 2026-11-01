@@ -85,7 +85,7 @@ export function fromLive(d: LiveData, video: string | null, envUrl?: string | nu
     qpos: d.qpos?.length ? qposFrames(d.qpos) : null,
     retargetCm: meanCm(d.retarget_error_cm),
     variants: variantsFrom(d.variants),
-    env: d.env && envUrl ? { url: envUrl, filename: "live.a2h-env.zip", size: d.env.size, inside: d.env.inside } : null,
+    env: d.env && envUrl ? { url: envUrl, filename: d.env.filename ?? "live.a2h-env.zip", size: d.env.size, inside: d.env.inside } : null,
   };
 }
 

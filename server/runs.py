@@ -6,10 +6,14 @@ just leave their fields empty. Robustness results (robust.json) live in their ow
 """
 
 import fnmatch
+import hashlib
 import json
 import logging
+import os
 import re
 import sys
+import tempfile
+import threading
 from pathlib import Path
 
 from .stages import classify, redact
@@ -30,7 +34,7 @@ POLICY_INFO = {
 }
 METRIC_KEYS = ["aligned", "dtw", "chamfer", "dtw_rank_vs_bank", "reward_net_aligned", "real_aligned_in_reward_space",
                "steps", "fps", "falls", "mean_joint_error_rad", "mean_torso_position_error_m", "max_torso_position_error_m"]
-SERVABLE = {".mp4", ".webm", ".json", ".csv", ".onnx", ".pt", ".npz", ".npy", ".png", ".jpg"}
+SERVABLE = {".mp4", ".webm", ".json", ".csv", ".onnx", ".pt", ".npz", ".npy", ".png", ".jpg", ".zip"}
 _cache = {}
 
 
@@ -282,49 +286,68 @@ def summarize(runs_dir, rid, folder, detail=False, env_cache=None):
 
 # --- the training environment (a2h_env/export.py, docs/TRAINING_ENV.md) ---------------------------------------------
 def _env_key(folder, clip):
-    """What the bundle is built from: those files' sizes and mtimes, and the exporter's own."""
+    """What the bundle is built from: the run folder, those files' sizes and mtimes, and the exporter's own."""
     files = [folder / "task_spec.json", folder / "variants.json", folder / "web.json", folder / "importance.json",
              folder / "clips" / clip / "qpos.npy", folder / "clips" / clip / "meta.json", Path(env_export.__file__)]
     vd = env_export.variants_run(folder)
     if vd is not None:
         files += [vd / "variants" / "index.json", vd / "held_out" / "index.json"]
-    files += sorted(folder.glob("policy_tracking*/weights.json"))
-    out = []
+    files += sorted(folder.glob("policy_*/weights.json")) + sorted(folder.glob("policy_*/reward_config.json"))
+    out = [str(folder.resolve())]
     for f in files:
         try:
             st = f.stat()
-            out.append([f.name, st.st_size, st.st_mtime_ns])
+            out.append([str(f), st.st_size, st.st_mtime_ns])
         except OSError:
             pass
     return json.dumps(out)
 
 
+_env_locks, _env_locks_guard = {}, threading.Lock()
+
+
+def _env_lock(path):
+    """One lock per cache file: concurrent requests for an uncached run wait for the one build instead of racing."""
+    with _env_locks_guard:
+        return _env_locks.setdefault(str(path), threading.Lock())
+
+
+def _write_text_atomic(path, text):
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+    os.replace(tmp, path)
+
+
 def env_bundle(folder, rid, cache_dir):
-    """Path to the run's training environment zip: env.zip shipped in the run folder (scripts/export_env.py), else one
-    built on demand into cache_dir and rebuilt when the run's inputs change. None when the run has no task spec
-    naming a clip with a retarget, or the build fails."""
+    """Path to the run's training environment zip: env.zip shipped in the run folder (scripts/export_env.py) while it
+    still matches the run's spec and retarget, else one built on demand into cache_dir and rebuilt when the run's
+    inputs change. None when the run has no task spec naming a clip with a retarget, or the build fails."""
     folder = Path(folder)
-    shipped = folder / ENV_ZIP
-    if shipped.is_file():
-        return shipped
     clip, _ = env_export.target_clip(folder)
     if clip is None:
         return None
-    safe = re.sub(r"[^\w.-]", "_", rid)[:80]
-    out = Path(cache_dir) / f"{safe}.a2h-env.zip"
+    shipped = folder / ENV_ZIP
+    if shipped.is_file() and env_export.is_current(shipped, folder):
+        return shipped
+    # the cache name: the id cleaned for a file name, plus a hash of the id and folder so two runs can't share one
+    tag = hashlib.sha256(f"{rid}\n{folder.resolve()}".encode()).hexdigest()[:10]
+    safe = re.sub(r"[^\w.-]", "_", rid)[:64]
+    out = Path(cache_dir) / f"{safe}-{tag}.a2h-env.zip"
     stamp = out.with_suffix(".key")
     key = _env_key(folder, clip)
-    try:
-        if out.is_file() and stamp.is_file() and stamp.read_text() == key:
-            return out
-        out.parent.mkdir(parents=True, exist_ok=True)
-        m = env_export.export_run(folder, out, generate=False)
-        if m is None:
+    with _env_lock(out):
+        try:
+            if out.is_file() and stamp.is_file() and stamp.read_text() == key:
+                return out
+            out.parent.mkdir(parents=True, exist_ok=True)
+            m = env_export.export_run(folder, out, generate=False)
+            if m is None:
+                return None
+            _write_text_atomic(stamp, key)
+        except Exception:  # noqa: BLE001  (a broken run folder must not take the run page down)
+            log.exception("env bundle failed", extra={"fields": {"run": rid}})
             return None
-        stamp.write_text(key)
-    except Exception:  # noqa: BLE001  (a broken run folder must not take the run page down)
-        log.exception("env bundle failed", extra={"fields": {"run": rid}})
-        return None
     return out
 
 

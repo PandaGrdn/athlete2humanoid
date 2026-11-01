@@ -36,9 +36,10 @@ def __getattr__(name):
     raise AttributeError(name)
 
 
-def make_env(bundle, variant=None, num_envs=4096, device=None, play=False, work_dir=None):
-    """mjlab's Unitree G1 motion-tracking environment on this bundle's reference (variant None), one variant
-    by name, or every kept training variant laid end to end ("train"). See a2h_env.env.make_env."""
+def make_env(bundle, variant="train", num_envs=4096, device=None, play=False, work_dir=None):
+    """mjlab's Unitree G1 motion-tracking environment on every kept training variant laid end to end ("train", the
+    default, as `train` and the CLI; the reference when the bundle has none), the reference ("reference" or None), or
+    one variant by name. See a2h_env.env.make_env."""
     from .env import make_env as _make
     return _make(bundle, variant=variant, num_envs=num_envs, device=device, play=play, work_dir=work_dir)
 

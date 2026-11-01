@@ -182,9 +182,10 @@ export default function RunPage() {
           <div className="card card-pad" style={{ marginBottom: 14 }}>
             <EnvDownload env={run.env} />
             <p className="faint" style={{ fontSize: 13, marginTop: 10, maxWidth: 820 }}>
-              Everything this run trained on, in one file: the person's motion as a G1 reference, the key-moment spec, every variant
-              with the physics filter's verdict, the reward config, the source credit, and a loader. With mjlab installed,
-              <span className="mono"> python -m a2h_env train {run.env.filename}</span> trains a tracking policy on it; no access to this server needed.
+              One file: the person's motion as a G1 reference, its key-moment spec, the variants this pipeline generates for it (kept
+              and dropped, with the physics filter's verdict), the reward config, the source credit, and a loader. What each stored
+              policy actually trained on is in the bundle's manifest and reward config. With mjlab installed, unzip it and run
+              <span className="mono"> python -m a2h_env train</span> to train a tracking policy on it; no access to this server needed.
             </p>
           </div>
         )}

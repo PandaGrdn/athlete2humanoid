@@ -212,7 +212,7 @@ export type LiveData = {
   robot: { names: string[]; edges: [number, number][]; frames: [number, number, number][][] } | null;
   qpos?: number[][] | null; // the retarget: G1 qpos (root xyz, quaternion wxyz, 29 joints) per frame
   variants?: VariantsView | null; // skill/variations.py's preview, after the environment
-  env?: { file: string; size: number; inside: string; variants: number } | null; // env.zip, written with the variants (GET /api/jobs/{id}/env.zip)
+  env?: { file: string; filename?: string; size: number; inside: string; variants: number } | null; // env.zip, written with the variants (GET /api/jobs/{id}/env.zip)
   retarget_error_cm: Record<string, [number, number]> | null;
   timings_s: Record<string, number>;
 };

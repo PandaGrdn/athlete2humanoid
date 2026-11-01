@@ -100,7 +100,7 @@ def _round(a, nd):
     return [[None if np.isnan(p).any() else p.tolist() for p in f] for f in a]
 
 
-def run(video, out, max_seconds, name="clip", sam3d=None, timeout_s=240.0):
+def run(video, out, max_seconds, name="clip", sam3d=None, timeout_s=240.0, job_id=None):
     started = time.monotonic()
     out.mkdir(parents=True, exist_ok=True)
     live = {"fps": FPS, "frames": 0, "duration_s": 0.0, "video": None, "landmarks": None, "pose_found": None,
@@ -218,10 +218,11 @@ def run(video, out, max_seconds, name="clip", sam3d=None, timeout_s=240.0):
     # with no variants it still holds the reference and the spec
     try:
         from a2h_env import export as env_export
-        m = env_export.export_live(out, qpos=qpos, fps=FPS, spec=spec, variants=vs, pos=pos, name=name,
+        m = env_export.export_live(out, qpos=qpos, fps=FPS, spec=spec, variants=vs, pos=pos, name=name, job_id=job_id,
                                    meta={"frontend": model, "retarget_version": retarget.code_version()})
         tr = m["variants"].get("train") or {}
-        live["env"] = {"file": env_export.ZIP_NAME, "size": m["bytes"], "inside": m["inside"], "variants": tr.get("with_arrays", 0)}
+        live["env"] = {"file": env_export.ZIP_NAME, "filename": f"{m['id']}.a2h-env.zip", "size": m["bytes"], "inside": m["inside"],
+                       "variants": tr.get("with_arrays", 0)}
         save()
         emit(stage="environment", note=f"training environment: {m['bytes'] / 1e6:.1f} MB zip ({m['inside']})")
     except Exception as e:  # noqa: BLE001
@@ -262,9 +263,10 @@ def main(argv=None):
     ap.add_argument("--name", default="clip")
     ap.add_argument("--sam3d", help="SAM 3D Body's npz for this video's processed frames: the pose instead of MediaPipe")
     ap.add_argument("--timeout-s", type=float, default=240.0, help="the job's wall-clock limit (the variants' budget)")
+    ap.add_argument("--job-id", help="the job's id, named in the training environment's manifest")
     a = ap.parse_args(argv)
     try:
-        run(Path(a.video), Path(a.out), a.max_seconds, a.name, a.sam3d, a.timeout_s)
+        run(Path(a.video), Path(a.out), a.max_seconds, a.name, a.sam3d, a.timeout_s, a.job_id)
     except ClipError as e:
         emit(error=str(e))
         return 2

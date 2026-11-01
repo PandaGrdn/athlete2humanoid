@@ -55,7 +55,9 @@ def run(tmp_path):
                                                                           "url": "https://www.pexels.com/x", "licence": "Pexels License"}}))
     pol = run / "policy_tracking_var"
     pol.mkdir()
-    (pol / "weights.json").write_text(json.dumps({"task": "A2H-Tracking-Flat-Unitree-G1", "iterations": 1000}))
+    (pol / "weights.json").write_text(json.dumps({"task": "A2H-Tracking-Flat-Unitree-G1", "iterations": 1000,
+                                                  "started_from": {"mode": "init", "checkpoint": "/content/a2h/inputs/policy_tracking_var/model_1499.pt"},
+                                                  "variants": "/content/a2h/outputs/athletes_x/variants/variants.json"}))
     (pol / "reward_config.json").write_text(json.dumps({"feet_height": {"weight": 2.0, "std": 0.1, "clearance": 0.03, "swing_only": True}}))
     var = root / "remote_variants_t1"
     train = [fake_variant("o_t1_a1", {"mirror": False, "tempo": 1.0, "amplitude": 1.0, "warp": 0.0, "seed": 0}, qpos),
@@ -97,6 +99,7 @@ def test_export_then_load_round_trips_the_run(run, tmp_path):
     assert [label for kind, label in b.stages() if kind == "pose"][0] == "kick right leg forward"
     assert b.importance["weight"][0] == 0.5 and b.credit["licence"] == "Pexels License"
     assert b.reward_config["feet_height"]["weight"] == 2.0 and b.reward_config["iterations"] == 1000
+    assert [p["policy"] for p in b.reward_config["policies"]] == ["tracking_var"]
     # variants: every verdict, arrays for the kept ones only, equal to the variants run's
     assert [v.name for v in b.train] == ["o_t1_a1", "m_t1.33_a1.1", "o_t0.75_a0.85"]
     kept = b.kept("train")
@@ -125,7 +128,8 @@ def test_manifest_fields(run, tmp_path):
     assert m["format"] == "a2h-env" and m["format_version"] == 1 and m["id"] == "latent_t1" and m["run"] == "remote_latent_t1"
     assert m["title"] == "Kick" and m["clip"] == "front_kick"
     assert m["pipeline"]["retarget_version"] == "v-test" and m["pipeline"]["retarget_git"] == "abc123" and m["pipeline"]["pose_frontend"] == "sam3d"
-    assert m["pipeline"]["commit"] is None or len(m["pipeline"]["commit"]) == 12
+    assert m["pipeline"]["commit"] == "abc123"  # the retarget's commit, from the clip's meta.json
+    assert m["pipeline"]["exported_at_commit"] is None or (len(m["pipeline"]["exported_at_commit"]) == 12 and m["pipeline"]["dirty"] in (True, False))
     spec = json.loads((run / "task_spec.json").read_text())
     assert m["spec_sha256"] == X.sha256(X.canonical(spec)) and len(m["qpos_sha256"]) == 64
     assert m["reference"]["frames"] == len(np.load(QPOS)) and m["reference"]["fps"] == 30.0 and m["reference"]["in_place"] is True
@@ -134,6 +138,7 @@ def test_manifest_fields(run, tmp_path):
     assert m["variants"]["train"] == {"total": 3, "kept": 2, "with_arrays": 2, "index": "variants/train/index.json"}
     assert m["variants"]["held_out"]["with_arrays"] == 1 and m["variants"]["source"] == "remote_variants_t1"
     assert m["reward"]["feet_height"]["weight"] == 2.0 and m["reward"]["policy"] == "tracking_var"
+    assert m["reward"]["started_from"] == {"mode": "init", "checkpoint": "model_1499.pt"} and m["reward"]["trained_on"] == "variants: athletes_x"
     assert m["credit"]["url"] == "https://www.pexels.com/x"
     assert m["extras"] == {"silhouette": "extras/silhouette.mp4"}  # the latent was too big
     assert m["robot"]["nq"] == 36 and "mjlab" in m["loader"]["requires"]
@@ -181,7 +186,7 @@ def test_live_export(tmp_path):
           fake_variant("o_t0.75_a1", {"mirror": False, "tempo": 0.75, "amplitude": 1.0, "warp": 0.0, "seed": 1}, qpos, ok=False, rules=["ballistic"])]
     m = X.export_live(tmp_path, qpos=qpos, fps=30.0, spec=spec, variants=vs, pos=pos, name="clip", job_id="abcdef0123",
                       meta={"frontend": "MediaPipe"})
-    assert (tmp_path / "env.zip").is_file() and m["id"] == "live-abcdef0123" and m["variants"]["train"]["with_arrays"] == 1
+    assert (tmp_path / "env.zip").is_file() and m["id"] == "live-abcdef01" and m["variants"]["train"]["with_arrays"] == 1  # server/live.py env_filename
     b = B.load_bundle(tmp_path / "env.zip")
     assert np.array_equal(b.qpos, qpos) and b.reference_meta["frontend"] == "MediaPipe" and not b.in_place
     assert b.contacts.shape == (len(qpos), 2) and b.contacts[0].tolist() == [True, True] and b.contacts[15].tolist() == [True, False]
@@ -208,7 +213,8 @@ def test_info_cli(run, tmp_path):
 
 
 def test_loader_is_self_contained(run, tmp_path):
-    """The vendored a2h_env/ imports with nothing else of this repository on the path (numpy only)."""
+    """The vendored a2h_env/ imports and reads a bundle with nothing else of this repository on the path, and with numpy
+    alone: a2h_env.env and a2h_env.train import torch and mjlab only when an environment is built."""
     out = tmp_path / "t1.a2h-env.zip"
     X.export_run(run, out, generate=False)
     with zipfile.ZipFile(out) as z:
@@ -218,17 +224,26 @@ def test_loader_is_self_contained(run, tmp_path):
             f"b = a2h_env.load_bundle({str(out)!r}); print(len(b.qpos), len(b.kept()))\n"
             "from a2h_env.env import interpolate\n"
             "pos, quat, joints, lin_vel, ang_vel, joint_vel = interpolate(b.qpos, b.fps)\n"
-            "print(len(pos))")
+            "print(len(pos), 'torch' in sys.modules)")
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=tmp_path / "clean")
     assert r.returncode == 0, r.stderr
     n = len(np.load(QPOS))
-    assert r.stdout.split() == [str(n), "2", str(len(np.arange(0, (n - 1) / 30.0, 1 / 50.0)))]
+    assert r.stdout.split() == [str(n), "2", str(len(np.arange(0, (n - 1) / 30.0, 1 / 50.0))), "False"]
+
+
+def test_axis_angle_flips_the_sign_of_w():
+    """A quaternion and its negation are the same rotation: both give the same small rotation vector (mjlab's
+    axis_angle_from_quat negates w < 0; without it a sign jump between frames reads as a ~2 pi turn)."""
+    sys.path.insert(0, str(ROOT))
+    from a2h_env.env import _axis_angle
+    q = np.array([[np.cos(0.01), np.sin(0.01), 0.0, 0.0]])  # 0.02 rad about x
+    assert np.allclose(_axis_angle(q), [[0.02, 0, 0]], atol=1e-9) and np.allclose(_axis_angle(-q), [[0.02, 0, 0]], atol=1e-9)
+    assert np.allclose(_axis_angle(np.array([[1.0, 0, 0, 0]])), 0) and np.allclose(_axis_angle(np.array([[-1.0, 0, 0, 0]])), 0)
 
 
 def test_interpolate_matches_mjlab_motion_loader():
     """The loader's qpos -> 50 Hz interpolation equals mjlab.scripts.csv_to_npz's MotionLoader on the same CSV."""
     pytest.importorskip("mjlab")
-    import torch
     from mjlab.scripts.csv_to_npz import MotionLoader
     sys.path.insert(0, str(ROOT))
     from a2h_env.env import interpolate
@@ -239,9 +254,26 @@ def test_interpolate_matches_mjlab_motion_loader():
         wxyz = qpos[:, 3:7]
         np.savetxt(csv, np.column_stack([qpos[:, :3], wxyz[:, 1:], wxyz[:, :1], qpos[:, 7:]]), delimiter=",", fmt="%.6f")
         m = MotionLoader(str(csv), 30, 50, "cpu")
-    pos, quat, joints, lin_vel, ang_vel, joint_vel = interpolate(np.loadtxt(csv, delimiter=",")[:, [0, 1, 2, 6, 3, 4, 5] + list(range(7, 36))], 30.0)
+        rows = np.loadtxt(csv, delimiter=",")  # the same rounded values mjlab read
+    qp = rows[:, [0, 1, 2, 6, 3, 4, 5] + list(range(7, 36))]
+    pos, quat, joints, lin_vel, ang_vel, joint_vel = interpolate(qp, 30.0)
+    assert pos.shape == m.motion_base_poss.shape
     assert np.allclose(pos, m.motion_base_poss.numpy(), atol=1e-5) and np.allclose(joints, m.motion_dof_poss.numpy(), atol=1e-5)
-    assert np.allclose(np.abs((quat * m.motion_base_rots.numpy()).sum(1)), 1, atol=1e-4)
+    assert np.allclose(np.abs((quat * m.motion_base_rots.numpy()).sum(1)), 1, atol=1e-5)
     assert np.allclose(lin_vel, m.motion_base_lin_vels.numpy(), atol=1e-3) and np.allclose(joint_vel, m.motion_dof_vels.numpy(), atol=1e-3)
-    assert np.allclose(ang_vel, m.motion_base_ang_vels.numpy(), atol=1e-2)
-    assert torch.is_tensor(m.motion_base_rots)
+    # Angular velocity is the axis-angle of q[t+1] q[t-1]^-1 over 2 dt = 0.04 s. mjlab's slerp returns the first quaternion
+    # untouched when a pair is within 4 float32 ulps of identical (a step of up to ~1e-3 rad, ~0.06 rad/s at near-still
+    # frames), and float32 rounding of the dot product decides which frames that hits; the loader blends those smoothly
+    # (a2h_env.env._slerp), so they are compared loosely. Everywhere else the two agree to ~3e-5 rad/s (the float32
+    # products, measured on this clip, the lunge, the jog and the squat jump); 1e-3 leaves a factor ~30.
+    n = len(rows)
+    phase = np.arange(0, (n - 1) / 30.0, 1 / 50.0) / ((n - 1) / 30.0)
+    i0 = np.floor(phase * (n - 1)).astype(int)
+    # mjlab's shortcut fires on |dot| within 4.77e-7 of 1 in float32 arithmetic, whose own rounding reaches ~5e-7; an output
+    # frame on an input frame's boundary belongs to either neighbouring pair (float32 floors the phase differently)
+    dots = np.abs((qp[:-1, 3:7] * qp[1:, 3:7]).sum(1)) > 1 - 2e-6  # input pair k = (k, k + 1) near-identical
+    pair = dots[np.minimum(i0, n - 2)] | dots[np.maximum(i0 - 1, 0)]
+    near_still = pair | np.roll(pair, 1) | np.roll(pair, -1)  # the central difference reaches one frame either side
+    diff = np.abs(ang_vel - m.motion_base_ang_vels.numpy()).max(1)
+    assert diff[~near_still].max() < 1e-3, diff[~near_still].max()
+    assert diff.max() < 0.1, diff.max()

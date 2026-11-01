@@ -7,8 +7,10 @@
 training and held-out variant with the physics filter's verdict, the reward config, the source credit and a loader.
 With mjlab installed and nothing else of this repository, `python -m a2h_env train <zip>` trains a tracking policy
 on it. Smoke-tested on CPU: 20 PPO iterations on the front kick's reference and on its 36 variants end to end, from
-a clean folder with only the zip and mjlab 1.6.0. Not tested: a full GPU training from a bundle (the stored policies
-were trained by `train_motion.py` on the same arrays, through the same mjlab task).
+a clean folder with only the zip and mjlab 1.6.0. Not tested: a full GPU training from a bundle. The bundle's arrays are
+the reference, its spec and the variants this pipeline generates for it; what each stored policy actually trained on
+(the reference alone or a variants run, and the checkpoint it was built off) is recorded in `reward_config.json`
+`policies`, and is not always these variants (the table below).
 
 ## Where to get one
 
@@ -17,7 +19,7 @@ were trained by `train_motion.py` on the same arrays, through the same mjlab tas
 | Run page (`/runs/<id>`) | "Download training environment", with the size and one line on what is inside | `GET /api/runs/<id>/env.zip` (`server/runs.py env_bundle`): the run folder's `env.zip` when it ships one, else built on demand from the run folder and cached under `A2H_DATA_DIR/env/`, rebuilt when the run's inputs change |
 | Build view (`/build/<id>`), stage 05 "Variants" | the same button, in the stage's caption and under the variant grid | the run's `env` entry |
 | Live page (`/live/<job>`) | the button once the variants stage has written the zip | `server/live_worker.py` exports the bundle right after the variants (stage 05's output); with no variants in time, it still holds the reference and the spec. `GET /api/jobs/<job>/env.zip`; it expires with the upload |
-| Batch | `outputs/remote_<run>/env.zip` for each run, shipped by `scripts/build_space.py` | `python scripts/export_env.py outputs/remote_latent_s3_* outputs/remote_latent_ra_*` (the repo's venv: numpy, mujoco, scipy, torch) |
+| Batch | `outputs/remote_<run>/env.zip` for each run, shipped by `scripts/build_space.py` | `python scripts/export_env.py outputs/remote_latent_s3_* outputs/remote_latent_ra_*` (the repo's venv: numpy, mujoco, scipy, torch). An existing zip is kept while its manifest's spec and retarget hashes match the run, rebuilt otherwise; the API applies the same check to a shipped zip and falls back to its cache. |
 
 `a2h_env/export.py` builds every one of them. It is standard library only (numpy, MuJoCo and `skill/` are used when
 importable: foot contacts, generating variants), so the API server needs nothing beyond Python to serve a bundle.
@@ -51,6 +53,7 @@ generates: it takes the sibling run, or the verdicts from `variants.json` with n
 
 ```bash
 uv venv -p 3.12 mjlab_env && uv pip install -p mjlab_env/bin/python mjlab==1.6.0 tensorboard
+source mjlab_env/bin/activate
 unzip latent_s3_kick.a2h-env.zip -d latent_s3_kick && cd latent_s3_kick
 python -m a2h_env info  ../latent_s3_kick.a2h-env.zip
 python -m a2h_env train ../latent_s3_kick.a2h-env.zip --iters 1500 --num-envs 4096   # --variant train (default) | reference | <name>
@@ -59,16 +62,24 @@ python -m a2h_env train ../latent_s3_kick.a2h-env.zip --iters 1500 --num-envs 40
 ```python
 import a2h_env
 b = a2h_env.load_bundle("latent_s3_kick.a2h-env.zip")   # numpy only: b.qpos, b.fps, b.contacts, b.spec, b.train, b.held_out, b.reward_config
-env = a2h_env.make_env(b, variant="train", num_envs=4096)   # mjlab ManagerBasedRlEnv
+env = a2h_env.make_env(b, num_envs=4096)   # mjlab ManagerBasedRlEnv on every kept training variant (the default, as `train`)
 ```
 
+The zip itself on `PYTHONPATH` works too (`PYTHONPATH=<zip> python -m a2h_env info <zip>`; not under `python -I`, which
+ignores it). Under a cleared environment on macOS (`env -i`) keep `/usr/sbin` on `PATH`: MuJoCo's warp backend calls
+`sysctl`.
 - `load_bundle` reads the zip (or its unzipped folder) with numpy alone.
 - `make_env` builds mjlab's G1 flat tracking environment the way `train_motion.py` and `experiments/variant_policy.py`
   do: the qpos becomes mjlab's 50 Hz motion file by forward kinematics on mjlab's G1 (`mjlab.scripts.csv_to_npz`'s
   steps, in process, no Weights & Biases; `tests/test_training_env.py` checks the interpolation against mjlab's
-  `MotionLoader`), cached in `<bundle>.motions/`. `variant="train"` lays every kept training variant end to end and keeps
-  each env inside its own (`VariantMotionCommand`, as `mjlab_tasks.py` `A2H_VARIANTS`); `feet_height` is applied when
-  the bundle's reward config sets it (`mjlab_tasks.py FEET_HEIGHT`).
+  `MotionLoader`: 1e-5 in position, and 1e-3 rad/s in angular velocity away from near-still frames, where mjlab's slerp
+  returns the first quaternion unchanged below a float32 threshold and the loader blends smoothly; measured ≤ 4.4e-5
+  rad/s on nine clips), cached in
+  `<bundle>.motions/`. The default, `variant="train"` (also `train`'s and the CLI's), lays every kept training variant
+  end to end and keeps each env inside its own (`VariantMotionCommand`, as `mjlab_tasks.py` `A2H_VARIANTS`), falling
+  back to the reference when the bundle has none with arrays; `feet_height` is applied when the bundle's reward config
+  sets it (`mjlab_tasks.py FEET_HEIGHT`). `weights.json` names the task that results: mjlab's own
+  `Mjlab-Tracking-Flat-Unitree-G1` for one motion with no extra term, `A2H-Tracking-Flat-Unitree-G1` otherwise.
 - `train` runs mjlab's `MotionTrackingOnPolicyRunner` (rsl_rl PPO, mjlab's G1 tracking PPO config) and writes
   `logs/<timestamp>/model_<it>.pt` and `weights.json`.
 - Dependencies: numpy to read; mjlab 1.6.0 (torch, mujoco, mujoco-warp, rsl-rl-lib) and tensorboard to train. A GPU for
@@ -78,19 +89,23 @@ env = a2h_env.make_env(b, variant="train", num_envs=4096)   # mjlab ManagerBased
 
 ## Bundle per stored run
 
-Exported on 2026-11-01 at commit b8186830df9b, each loaded back with `python -m a2h_env info`:
+Exported on 2026-11-01 from commit b8186830df9b (`manifest.pipeline.exported_at_commit`, with `dirty` saying whether the
+checkout had uncommitted changes; `pipeline.commit` is the retarget's own commit from the clip's `meta.json`), each
+loaded back with `python -m a2h_env info`:
 
-| Run | Clip | Reference | Key moments | Training variants | Held out | Variants from | feet_height | Zip |
+| Run | Clip | Reference | Key moments | Training variants | Held out | Variants from | The stored tracking policy trained on | Zip |
 |---|---|---|---|---|---|---|---|---|
-| `latent_s3_kick` | front kick | 167 frames, 5.6 s | 4, named by Muse | 36 of 36 (209 s) | 7 of 7 | `remote_variants_s3_kick` | no | 1.75 MB |
-| `latent_s3_sj` | squat jump | 271 frames, 9.0 s | 7 | 36 of 36 (336 s) | 7 of 7 | `remote_variants_s3_sj` | no | 2.76 MB |
-| `latent_s3_squat` | squat | 306 frames, 10.2 s | 4 | 36 of 36 (383 s) | 7 of 7 | generated | no | 3.03 MB |
-| `latent_s3_jacks` | jumping jacks | 159 frames, 5.3 s | 11 | 20 of 36 (124 s); 16 dropped: speed | 3 of 7 | generated | no | 1.28 MB |
-| `latent_s3_lunge` | lunge | 297 frames, 9.9 s | 13 | 36 of 36 (371 s) | 7 of 7 | generated | no | 3.08 MB |
-| `latent_s3_punch` | punches | 168 frames, 5.6 s | 11 | 36 of 36 (210 s) | 7 of 7 | generated | no | 1.78 MB |
-| `latent_ra_jog` | lakeside jog, in place | 180 frames, 6.0 s | 13 | 36 of 36 (225 s) | 7 of 7 | `remote_variants_ra_jog` | weight 2.0 | 1.96 MB |
+| `latent_s3_kick` | front kick | 167 frames, 5.6 s | 4, named by Muse | 36 of 36 (209 s) | 7 of 7 | `remote_variants_s3_kick` | the reference alone (`policy_tracking`) | 1.75 MB |
+| `latent_s3_sj` | squat jump | 271 frames, 9.0 s | 7 | 36 of 36 (336 s) | 7 of 7 | `remote_variants_s3_sj` | the reference alone (`policy_tracking`) | 2.76 MB |
+| `latent_s3_squat` | squat | 306 frames, 10.2 s | 4 | 36 of 36 (383 s) | 7 of 7 | generated | the reference alone (`policy_tracking`) | 3.03 MB |
+| `latent_s3_jacks` | jumping jacks | 159 frames, 5.3 s | 11 | 20 of 36 (124 s); 16 dropped: speed | 3 of 7 | generated | a task policy, not tracking | 1.28 MB |
+| `latent_s3_lunge` | lunge | 297 frames, 9.9 s | 13 | 36 of 36 (371 s) | 7 of 7 | generated | a task policy, not tracking | 3.08 MB |
+| `latent_s3_punch` | punches | 168 frames, 5.6 s | 11 | 36 of 36 (210 s) | 7 of 7 | generated | a task policy, not tracking | 1.78 MB |
+| `latent_ra_jog` | lakeside jog, in place | 180 frames, 6.0 s | 13 | 36 of 36 (225 s) | 7 of 7 | `remote_variants_ra_jog` | these variants, feet_height 2.0, from `model_1499.pt` of an earlier run | 1.96 MB |
 
-The jumping-jacks drops are the joint-speed cap on its stored retarget (docs/PIPELINE_ACCURACY.md, fix 4).
+The jumping-jacks drops are the joint-speed cap on its stored retarget (docs/PIPELINE_ACCURACY.md, fix 4). The variants
+of the kick and the squat jump are the sets `remote_variants_*` trained `tracking_var` / `taskhybrid_var` on, kept in
+those runs; the policies shown on the run pages are the single-clip ones.
 
 ## Smoke test: the bundle trains
 
@@ -105,9 +120,10 @@ unzipped and a fresh virtualenv with `mjlab==1.6.0` (nothing of this repository 
 
 Both wrote `model_0.pt` and `model_19.pt` and a `weights.json`; `info` printed the bundle's manifest. Twenty iterations
 on eight envs say nothing about learning (the rewards above are noise around an untrained policy); they say the zip,
-the loader and mjlab's trainer fit together with no server and no repository. The stored policies were trained by
-`train_motion.py` on these same arrays through the same mjlab task, 1,000–1,500 iterations on one GPU; a full training
-from a bundle was not run.
+the loader and mjlab's trainer fit together with no server and no repository. A full training from a bundle was not
+run. The stored policies came from `train_motion.py` through the same mjlab task on one GPU, 1,000–1,500 iterations,
+on the data the table above names, most of them fine-tuned from an earlier run's checkpoint (`reward_config.json`
+`policies[].started_from`).
 
 ## Tests
 
@@ -116,5 +132,6 @@ from a bundle was not run.
   the spec's rule); the `.npy` header parser; the `info` command; the vendored loader importing with nothing of the
   repository on the path; and, with mjlab installed, the loader's interpolation against mjlab's `MotionLoader`.
 - `server/tests/test_env_bundle.py`: `GET /api/runs/{id}/env.zip` (404 without a spec, content type, attachment name,
-  the cache and its rebuild, a shipped `env.zip`, unknown and traversing ids), the run detail's `env` entry, and a live
-  job's `env.zip` through the fake worker.
+  the cache and its rebuild, a shipped `env.zip` served while current and rebuilt once stale, unknown and traversing
+  ids), eight concurrent requests for an uncached run building it once with no temp files left, two ids that clean to
+  the same file name, the run detail's `env` entry, and a live job's `env.zip` through the fake worker.
