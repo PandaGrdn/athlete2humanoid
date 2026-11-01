@@ -43,7 +43,8 @@ DEFAULT_DEMO_RUN = "latent_s3_kick"  # featured on the home page: a front kick l
 
 # What server/live_worker.py imports from the repo (no latent/, no SAM: MediaPipe on CPU), and its assets.
 LIVE_MODULES = ["config.py", "pose.py", "track.py", "retarget.py", "render.py",
-                "skill/__init__.py", "skill/task.py", "skill/keypose.py", "skill/variations.py"]
+                "skill/__init__.py", "skill/task.py", "skill/keypose.py", "skill/variations.py",
+                "frontends/sam3d_body.py"]  # reads the GPU pose's output (A2H_LIVE_POSE=modal, server/live_pose.py)
 POSE_MODEL = "assets/pose_landmarker_heavy.task"
 G1_SCENE = "assets/mujoco_menagerie/unitree_g1/scene.xml"
 TORCH_CPU_INDEX = "https://download.pytorch.org/whl/cpu"
@@ -107,6 +108,7 @@ COPY assets assets
 """
 LIVE_CODE = """COPY {modules} ./
 COPY skill skill
+COPY frontends frontends
 """
 # server/live.py hands the worker A2H_ASSETS_DIR and points HOME, caches and config.py's output folders at
 # the job's own scratch under A2H_DATA_DIR. These defaults keep anything else (the import probe, a manual

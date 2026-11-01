@@ -179,6 +179,18 @@ def test_gpu_pose_mode_hands_the_worker_the_modal_token(live_client, monkeypatch
     assert json.loads((live_dir / "argv.json").read_text())[-2:] == ["--pose", "modal"]
 
 
+def test_gpu_pose_reader_ships_in_the_bundle():
+    """The worker reads the GPU's output through frontends/sam3d_body.py: the deploy bundle must carry it (a hosted
+    build once crashed importing it after the GPU had answered)."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("build_space", REPO / "scripts" / "build_space.py")
+    bs = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bs)
+    assert "frontends/sam3d_body.py" in bs.LIVE_MODULES and "COPY frontends frontends" in bs.LIVE_CODE
+    assert all((REPO / m).is_file() for m in bs.LIVE_MODULES)
+
+
 def test_gpu_pose_settings(monkeypatch):
     from server.config import Settings
     monkeypatch.setenv("A2H_LIVE_POSE", "tpu")

@@ -112,6 +112,11 @@ def gpu_pose(video, out, n_frames, width, height, timeout_s, log):
         log("no Modal token on this host")
         return None
     try:
+        from frontends import sam3d_body  # noqa: F401  (reads the result below; a bundle without it can't use the GPU)
+    except ImportError as e:
+        log(f"this host can't read SAM 3D Body output ({e})")
+        return None
+    try:
         r = live_pose.fetch(Path(video).read_bytes(), timeout_s)
         why = live_pose.check(r, n_frames, width, height)
         if why:
