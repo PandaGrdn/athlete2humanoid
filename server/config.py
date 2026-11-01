@@ -37,6 +37,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 RUNNERS = {"demo", "colab"}
+LIVE_POSE = {"cpu", "modal"}
 BACKENDS = {"colab", "farmshare"}
 
 
@@ -113,6 +114,10 @@ class Settings:
     # Muse names each live upload's key moments (muse/moment_namer.py, ~10 s and ~1 cent a clip). Off by
     # default: it needs MUSE_API_KEY in this process's environment, and spends it per visitor upload.
     live_muse_names: bool = field(default_factory=lambda: _env("A2H_MUSE_NAMES", "0") == "1")
+    # Where the live runner's pose runs: "cpu" is MediaPipe here; "modal" sends the clip through SAM 3.1 and SAM 3D
+    # Body on the deployed Modal GPU app (server/live_pose.py, frontends/live_pose_modal.py; MODAL_TOKEN_ID and
+    # MODAL_TOKEN_SECRET must be in this process's environment; ~$0.05-0.15 a clip), MediaPipe if that fails.
+    live_pose: str = field(default_factory=lambda: _env("A2H_LIVE_POSE", "cpu"))
     live_ok: bool = field(default=False, repr=False)  # set at startup by server.live.available()
     colab_policies: list = field(default_factory=lambda: _list("A2H_COLAB_POLICIES", "task"))
     colab_init: str = field(default_factory=lambda: _env("A2H_COLAB_INIT", str(REPO / "outputs" / "remote_latent_final")))
@@ -157,6 +162,12 @@ class Settings:
             errs.append(f"A2H_REMOTE_BACKEND must be one of {sorted(BACKENDS)}, got {self.remote_backend!r}")
         if self.live_mode not in ("auto", "0", "1"):
             errs.append(f"A2H_LIVE must be auto, 0 or 1, got {self.live_mode!r}")
+        if self.live_pose not in LIVE_POSE:
+            errs.append(f"A2H_LIVE_POSE must be one of {sorted(LIVE_POSE)}, got {self.live_pose!r}")
+        elif self.live_pose == "modal" and not (os.environ.get("MODAL_TOKEN_ID") and os.environ.get("MODAL_TOKEN_SECRET")):
+            warns.append("A2H_LIVE_POSE=modal but MODAL_TOKEN_ID / MODAL_TOKEN_SECRET are not set: live builds use "
+                         "MediaPipe on the CPU")
+            self.live_pose = "cpu"
         if self.log_format not in ("json", "text"):
             errs.append(f"A2H_LOG_FORMAT must be json or text, got {self.log_format!r}")
         if self.log_level not in ("DEBUG", "INFO", "WARNING", "ERROR"):

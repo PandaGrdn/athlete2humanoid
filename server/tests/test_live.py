@@ -24,6 +24,7 @@ from pathlib import Path
 args = sys.argv[3:]  # -m server.live_worker <video> <out> --max-seconds N
 out, mode = Path(args[1]), Path({mode!r}).read_text().strip()
 (out / "env.json").write_text(json.dumps(sorted(os.environ)))
+(out / "argv.json").write_text(json.dumps(args))
 def emit(**m): print(json.dumps(m), flush=True)
 emit(stage="video", progress=0.5)
 (out / "processed.mp4").write_bytes(Path({mp4!r}).read_bytes())
@@ -151,12 +152,94 @@ def test_one_build_at_a_time(live_client):
 def test_the_worker_gets_no_secrets(live_client, monkeypatch, make_client):
     monkeypatch.setenv("HF_TOKEN", "hf_" + "x" * 30)
     monkeypatch.setenv("MUSE_API_KEY", "k")
+    monkeypatch.setenv("MODAL_TOKEN_ID", "ak-x")
+    monkeypatch.setenv("MODAL_TOKEN_SECRET", "as-x")
     c = live_client()
     jid = wait_done(c, upload(c).json()["id"])["id"]
     data_dir = c.app.state.settings.data_dir
     seen = json.loads((data_dir / "uploads" / jid / "live" / "env.json").read_text())
     assert "HF_TOKEN" not in seen and "MUSE_API_KEY" not in seen and "PATH" in seen
+    assert "MODAL_TOKEN_ID" not in seen and "MODAL_TOKEN_SECRET" not in seen  # the CPU pose needs no token
     assert "A2H_OUTPUT_DIR" in seen  # config.py's folders go to the job's scratch, not the read-only image
+    assert c.get("/api/health").json()["live"]["pose"] == "cpu"
+    assert c.get(f"/api/jobs/{jid}/live/mask").status_code == 404  # no SAM 3.1 mask without the GPU
+
+
+def test_gpu_pose_mode_hands_the_worker_the_modal_token(live_client, monkeypatch):
+    """A2H_LIVE_POSE=modal: the worker runs with --pose modal and the Modal token, and nothing else of ours."""
+    monkeypatch.setenv("HF_TOKEN", "hf_" + "x" * 30)
+    monkeypatch.setenv("MODAL_TOKEN_ID", "ak-x")
+    monkeypatch.setenv("MODAL_TOKEN_SECRET", "as-x")
+    c = live_client(live_pose="modal")
+    assert c.get("/api/health").json()["live"]["pose"] == "modal"
+    jid = wait_done(c, upload(c).json()["id"])["id"]
+    live_dir = c.app.state.settings.data_dir / "uploads" / jid / "live"
+    seen = json.loads((live_dir / "env.json").read_text())
+    assert "MODAL_TOKEN_ID" in seen and "MODAL_TOKEN_SECRET" in seen and "HF_TOKEN" not in seen
+    assert json.loads((live_dir / "argv.json").read_text())[-2:] == ["--pose", "modal"]
+
+
+def test_gpu_pose_settings(monkeypatch):
+    from server.config import Settings
+    monkeypatch.setenv("A2H_LIVE_POSE", "tpu")
+    with pytest.raises(Exception, match="A2H_LIVE_POSE"):
+        Settings().validate()
+    monkeypatch.setenv("A2H_LIVE_POSE", "modal")
+    monkeypatch.delenv("MODAL_TOKEN_ID", raising=False)
+    monkeypatch.delenv("MODAL_TOKEN_SECRET", raising=False)
+    s = Settings()
+    assert any("MODAL_TOKEN_ID" in w for w in s.validate()) and s.live_pose == "cpu"  # no token: CPU, with a warning
+    monkeypatch.setenv("MODAL_TOKEN_ID", "ak-x")
+    monkeypatch.setenv("MODAL_TOKEN_SECRET", "as-x")
+    s = Settings()
+    assert not [w for w in s.validate() if "MODAL" in w] and s.live_pose == "modal"
+
+
+def test_gpu_pose_client_checks_and_saves(tmp_path, monkeypatch):
+    """server/live_pose.py: a result is checked against the worker's frames and written as the npz files the worker
+    reads; the worker's gpu_pose falls back (returns None, says why) on a bad result, an error or a missing token."""
+    import io
+
+    import numpy as np
+
+    from server import live_pose, live_worker
+
+    T, H, W = 4, 6, 8
+    masks = np.zeros((T, H, W), bool)
+    masks[:, 1:5, 2:6] = True
+    sam3d = io.BytesIO()
+    np.savez_compressed(sam3d, kp3d=np.zeros((T, 70, 3), np.float32), kp2d=np.zeros((T, 70, 2), np.float32),
+                        cam_t=np.zeros((T, 3), np.float32), image_wh=np.array([W, H]))
+    m = io.BytesIO()
+    np.savez_compressed(m, masks=masks)
+    result = {"sam3d": sam3d.getvalue(), "masks": m.getvalue(), "frames": T, "width": W, "height": H,
+              "seen": 1.0, "timings_s": {"sam": 1.5, "sam3d": 2.0}, "gpu": "L40S"}
+    assert live_pose.check(result, T, W, H) is None
+    assert "frames" in live_pose.check(result, T + 1, W, H)
+    assert live_pose.check({"sam3d": b""}, T, W, H) == "not a pose result"
+    out = tmp_path / "live"
+    out.mkdir()
+    path, got = live_pose.save(result, out)
+    assert path == out / "sam3d.npz" and got.dtype == bool and (got == masks).all()
+    assert np.load(out / "masks.npz")["masks"].shape == (T, H, W)
+    video = tmp_path / "processed.mp4"
+    video.write_bytes(b"not really a video")
+
+    whys = []
+    monkeypatch.delenv("MODAL_TOKEN_ID", raising=False)
+    assert live_worker.gpu_pose(video, out, T, W, H, 5, whys.append) is None and "token" in whys[-1]
+    monkeypatch.setenv("MODAL_TOKEN_ID", "ak-x")
+    monkeypatch.setenv("MODAL_TOKEN_SECRET", "as-x")
+    monkeypatch.setattr(live_pose, "fetch", lambda b, t, prompt="athlete": result)
+    p, mk, r = live_worker.gpu_pose(video, out, T, W, H, 5, whys.append)
+    assert p == out / "sam3d.npz" and mk.shape == (T, H, W) and r["gpu"] == "L40S"
+    monkeypatch.setattr(live_pose, "fetch", lambda b, t, prompt="athlete": {**result, "frames": T + 2})
+    assert live_worker.gpu_pose(video, out, T, W, H, 5, whys.append) is None and "frames" in whys[-1]
+
+    def boom(b, t, prompt="athlete"):
+        raise TimeoutError("no container in 5 s")
+    monkeypatch.setattr(live_pose, "fetch", boom)
+    assert live_worker.gpu_pose(video, out, T, W, H, 5, whys.append) is None and whys[-1].startswith("TimeoutError")
 
 
 def _have(*mods):

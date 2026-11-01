@@ -251,6 +251,7 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
   const [extra, setExtra] = useState<Partial<BuildInput>>({});
   const [extraRun, setExtraRun] = useState<string | null | undefined>(undefined); // undefined: still loading
   const t = useVideoTime(video);
+  const { health } = useHealth();  // which pose model this host runs, for the stage badge before the pose is in
   const running = job?.status === "running" || job?.status === "queued";
   const id = job?.id ?? "";
 
@@ -285,7 +286,7 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
   // scene doesn't replay its arrival (a skeleton growing in, the G1 snapping on) on every refetch
   const prev = useRef<Partial<BuildInput>>({});
   const input = useMemo<BuildInput>(() => {
-    const base = { ...emptyInput(), ...(live ? fromLive(live, null, source ? null : api.liveEnv(id)) : {}) };
+    const base = { ...emptyInput(), ...(live ? fromLive(live, null, source ? null : api.liveEnv(id), source ? null : api.liveMask(id)) : {}) };
     for (const k of ["skeleton", "qpos", "variants"] as const) {
       const was = prev.current[k];
       if (was && base[k] && signature(was) === signature(base[k])) (base as Record<string, unknown>)[k] = was;
@@ -352,7 +353,8 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
           <div className="card stepper live-steps">
             {(job?.stages.length ? job.stages : STEPS.map((s) => ({ ...s, status: "pending" as const, progress: 0, description: "", started_at: null, finished_at: null }))).map((s, i) => {
               const took = live?.timings_s[s.key] ?? (s.started_at && s.finished_at ? s.finished_at - s.started_at : null);
-              const model = (s.key === "pose" && live?.pose_model) || STEPS.find((x) => x.key === s.key)?.model;
+              const model = (s.key === "pose" && (live?.pose_model || (health?.live?.pose === "modal" ? "SAM 3D Body · GPU" : null)))
+                || STEPS.find((x) => x.key === s.key)?.model;
               return (
                 <div className={`stage ${s.status}`} key={s.key}>
                   <div className="marker">{s.status === "done" ? <Icon name="check" size={14} /> : s.status === "skipped" ? "–" : i + 1}</div>

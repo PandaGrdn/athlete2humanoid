@@ -21,8 +21,8 @@ STAGE_KEYS = [s[0] for s in STAGES]
 # The live runner (server/live.py): the real environment for an uploaded video, on the host's CPU. Shares of
 # the job's progress; training (a GPU, 1-2 h) is the last stage and "skipped" on a host without one.
 LIVE_STAGES = [
-    ("video", "Video check", "Trimmed and rescaled; one person, whole frame (no SAM 3.1 on CPU)", 0.10),
-    ("pose", "Pose", "MediaPipe 3D landmarks per frame", 0.45),
+    ("video", "Video check", "Trimmed and rescaled", 0.10),
+    ("pose", "Pose", "SAM 3.1 tracks the person and SAM 3D Body lifts the pose, on a GPU; MediaPipe on a CPU-only host", 0.45),
     ("retarget", "Retarget", "mink IK onto the Unitree G1 (29 DoF)", 0.20),
     ("environment", "Task environment", "Key moments, contacts and the reward machine, compiled from the retarget", 0.25),
     ("policy", "Policy training", "PPO in mjlab on a GPU, 1-2 h", 0.0),

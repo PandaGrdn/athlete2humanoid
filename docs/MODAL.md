@@ -20,6 +20,13 @@ python3 scripts/remote_run.py variants --tag var_sj --target squat_jump --reuse 
 
 The first run builds the image (about 10 min, once). Later runs start in seconds.
 
+## The live demo's pose
+
+`frontends/live_pose_modal.py` is a second, always-deployed app (`a2h-live-pose`): one function that takes an
+uploaded clip and returns SAM 3.1's masks and SAM 3D Body's pose, which the web API's live runner calls per visitor
+upload when it runs with `A2H_LIVE_POSE=modal` (`server/live_pose.py`; setup in `docs/DEPLOY.md`, "The live runner's
+pose on a GPU"). About $0.05-0.15 a clip; nothing runs between uploads.
+
 ## How it works
 
 - **`scripts/modal_app.py`** is the Modal app.

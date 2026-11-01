@@ -12,7 +12,7 @@ Jobs go through one of three runners:
 | Runner | What it does | Where |
 |---|---|---|
 | `demo` (default) | Replays a finished run: its real log lines and training curves, on a ~40 s clock. Results are that run's results. | Everywhere. |
-| `live` | Builds a real RL task environment from the uploaded video on CPU: MediaPipe pose, mink retarget onto the G1, then the keypose task spec (`skill/keypose.py`). It runs `python -m server.live_worker` as a sandboxed subprocess and stops before training (that needs a GPU). | On whenever the pipeline imports (`A2H_LIVE=auto`). The Space image includes it. |
+| `live` | Builds a real RL task environment from the uploaded video: the pose (SAM 3.1 masks and SAM 3D Body on a Modal GPU with `A2H_LIVE_POSE=modal`, below; MediaPipe on the CPU otherwise, or when the GPU doesn't answer), mink retarget onto the G1, then the keypose task spec (`skill/keypose.py`) and the variants. It runs `python -m server.live_worker` as a sandboxed subprocess and stops before training (that needs a GPU for 1-2 h). | On whenever the pipeline imports (`A2H_LIVE=auto`). The Space image includes it. |
 | `colab` | Copies the upload into `clips/` and runs `scripts/remote_run.py latent` on a Colab A100 (about 3 hours). It follows `runner.log`, `job.log` and `status.json`, and the finished run joins the gallery. | Local only. Needs `A2H_RUNNERS=demo,colab` **and** `A2H_ENABLE_COLAB=1`, plus a logged-in `colab` CLI. It spends compute units, so it is off by default. |
 
 The UI says so when a job is a demo replay, including for uploads.
@@ -97,6 +97,7 @@ failure modes and health endpoints: `docs/SYSTEM_DESIGN.md`.
 | `A2H_LIVE_CONCURRENCY` | `1` | Live builds at once; later jobs queue |
 | `A2H_LIVE_TIMEOUT_S` / `A2H_LIVE_MEMORY_MB` | `240` / `8192` | Per-build wall-clock limit (CPU-time limit is twice that) and address-space cap (Linux) |
 | `A2H_LIVE_PYTHON` | the server's Python | The interpreter the live worker runs in |
+| `A2H_LIVE_POSE` | `cpu` | `modal`: the pose stage runs SAM 3.1 and SAM 3D Body on the deployed Modal GPU app (below); needs `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` in the server's environment, else it logs a warning and stays `cpu` (MediaPipe) |
 | `A2H_HOSTED` | unset (`1` in the Space image; a Space's `SPACE_ID` implies it) | Public deploy: the GPU runner can't be enabled, the job list is off, CORS `*` is refused |
 | `A2H_REMOTE_BACKEND` | `colab` | GPU backend for the local GPU runner: `colab` or `farmshare` (docs/FARMSHARE.md) |
 | `A2H_LIST_JOBS` | on locally, off hosted | `GET /api/jobs` (debugging) |
@@ -213,6 +214,35 @@ Options are set through the environment:
 - `SKIP_WEB=1` deploys the backend only.
 
 The script never prints a token: `hf` and `wrangler` use their own stored logins.
+
+### The live runner's pose on a GPU
+
+By default a live build's pose stage is MediaPipe on the host's CPU, because SAM 3.1 and SAM 3D Body need CUDA and
+gated weights. With `A2H_LIVE_POSE=modal` the worker instead sends the processed clip (H.264, 30 fps, longest side
+640, at most `A2H_LIVE_MAX_SECONDS`) to the deployed Modal app `a2h-live-pose` (`frontends/live_pose_modal.py`:
+SAM 3.1 masks, then SAM 3D Body on the mask boxes, on an L40S; the weights stay on a Modal Volume so a cold start
+only boots the container), writes back `sam3d.npz` and `masks.npz` and goes on exactly as a stored run does: the
+build view then plays SAM 3.1's mask over the clip and the stage badge says SAM 3D Body. If the GPU does not answer
+inside its share of the build's wall clock, or anything else fails, the build logs why and finishes with MediaPipe.
+It costs about $0.05-0.15 a clip on Modal's per-second billing (the Starter plan's $30 a month covers a few hundred);
+`scaledown_window` keeps the container warm for five minutes between uploads, so back-to-back demos are fast.
+
+One-time setup, in this order:
+
+1. Deploy the app (needs the `a2h-hf` Modal secret with `HF_TOKEN`, for the gated checkpoints):
+   ```bash
+   MODAL_PROFILE=a2h python -m modal deploy frontends/live_pose_modal.py
+   ```
+2. Give Cloud Run the Modal token and switch the pose on. The script reads the token from `~/.modal.toml`, puts it in
+   Secret Manager (never on a command line or in the terminal) and sets the two variables on the service:
+   ```bash
+   MODAL_PROFILE=a2h PATH="$HOME/google-cloud-sdk/bin:$PATH" scripts/cloudrun_modal_pose.sh
+   ```
+   `deploy.sh` keeps those settings on later deploys (`--update-env-vars`). `A2H_LIVE_TIMEOUT_S` goes to 900 s so a
+   cold container fits in the build's wall clock. `curl $API/api/health` then shows `"live": {..., "pose": "modal"}`.
+
+Locally, the same thing is `A2H_LIVE_POSE=modal` with `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET` exported (from
+`python -m modal token new`) before `uvicorn server.main:app`.
 
 ### What the bundle contains
 

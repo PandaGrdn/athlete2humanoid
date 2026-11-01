@@ -170,7 +170,9 @@ cloudrun)
   gcloud run deploy "$SERVICE" --image "$TAG" --project "$PROJECT" --region "$REGION" --platform managed \
     --allow-unauthenticated --port 7860 --cpu 2 --memory 4Gi --min-instances 0 --max-instances 1 \
     --no-cpu-throttling --concurrency 80 --timeout 3600 --execution-environment gen2 \
-    --set-env-vars A2H_MAX_UPLOAD_STORAGE_MB=400 --quiet  # CORS is baked into the bundle (build_space.py --cors)
+    --update-env-vars A2H_MAX_UPLOAD_STORAGE_MB=400 --quiet  # CORS is baked into the bundle (build_space.py --cors)
+  # --update-env-vars keeps what was set on the service by hand: the GPU pose (A2H_LIVE_POSE=modal with the Modal
+  # token from Secret Manager, docs/DEPLOY.md "The live runner's pose on a GPU") survives a redeploy.
   API_BASE="$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format 'value(status.url)')"
   say "Waiting for $API_BASE/readyz"
   wait_ready "$API_BASE" 20 "gcloud run services logs read $SERVICE --region $REGION --project $PROJECT"
