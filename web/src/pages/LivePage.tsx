@@ -518,6 +518,7 @@ function PolicyCard({ job, file, attempts }: { job: Job; file: File | null; atte
   const [err, setErr] = useState<string | null>(null);
   const policy = job.stages.find((s) => s.key === "policy");
   const colab = !!health?.runners.includes("colab");
+  const modal = !!health?.train;
   useEffect(() => {
     if (!colab && !runs) api.runs().then(setRuns).catch(() => setRuns([]));
   }, [colab, runs]);
@@ -568,7 +569,9 @@ function PolicyCard({ job, file, attempts }: { job: Job; file: File | null; atte
     <div className="card card-pad live-policy">
       <div className="eyebrow">Policy</div>
       <p className="muted" style={{ fontSize: 14 }}>
-        Training a policy in this environment takes 1–2 h on a GPU (PPO across thousands of simulated G1s){policy?.status !== "skipped" ? "." : colab ? "; this build stops at the environment, and the GPU runner can take it from there." : "; this host has none, so the build stops here."}
+        {modal && policy?.status === "skipped"
+          ? <>The environment is built. "Train on a GPU" in the build view above trains a policy on it (PPO in mjlab on a Modal GPU, about {health?.train?.minutes} min) and plays the robot's attempts there as it learns.{health?.train?.code_required ? " It needs an invite code." : ""}</>
+          : <>Training a policy in this environment takes 1–2 h on a GPU (PPO across thousands of simulated G1s){policy?.status !== "skipped" ? "." : colab ? "; this build stops at the environment, and the GPU runner can take it from there." : "; this host has none, so the build stops here."}</>}
       </p>
       {colab ? (
         gpu ? (
@@ -578,7 +581,7 @@ function PolicyCard({ job, file, attempts }: { job: Job; file: File | null; atte
         ) : (
           <p className="faint" style={{ fontSize: 13 }}>To train on the GPU, <Link to="/live" style={{ color: "var(--accent)" }}>upload the video again</Link> (it isn't kept in this tab after a reload).</p>
         )
-      ) : (
+      ) : modal ? null : (
         <>
           <p className="faint" style={{ fontSize: 13 }}>Runs already trained against a keypose task like this one:</p>
           {runs == null ? <div className="skeleton" style={{ height: 40 }} /> : trained.length ? (

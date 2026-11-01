@@ -21,6 +21,11 @@ Security limits are in `docs/SECURITY.md`; deploy steps in `docs/DEPLOY.md`; the
    colab runner ─▶ scripts/remote_run.py ─┬─ --backend colab      ─▶ Colab A100 VM (colab CLI)
                                           └─ --backend farmshare  ─▶ FarmShare Slurm, L40S (ssh/rsync)
    results land in outputs/remote_<session>/ ─▶ build_space.py ─▶ the Space's data/runs
+
+ hosted too (server/train.py, gated by an invite code / a daily allowance):
+   modal runner ─▶ the live build's env.zip ─▶ Modal Volume a2h-runs ─▶ run_job (scripts/modal_app.py, L40S)
+                   `python -m a2h_env train --attempt-every 50` ─▶ attempts/iter_NNNN.npz mirrored into the job's
+                   folder every 30 s ─▶ GET /api/jobs/{id}/attempts ─▶ the build view plays the robot learning
 ```
 
 | Component | State | Scales by |

@@ -57,6 +57,7 @@ source mjlab_env/bin/activate
 unzip latent_s3_kick.a2h-env.zip -d latent_s3_kick && cd latent_s3_kick
 python -m a2h_env info  ../latent_s3_kick.a2h-env.zip
 python -m a2h_env train ../latent_s3_kick.a2h-env.zip --iters 1500 --num-envs 4096   # --variant train (default) | reference | <name>
+python -m a2h_env train ../latent_s3_kick.a2h-env.zip --iters 1000 --attempt-every 50   # + attempts/: the policy on the clip every 50 iterations
 ```
 
 ```python
@@ -68,6 +69,11 @@ env = a2h_env.make_env(b, num_envs=4096)   # mjlab ManagerBasedRlEnv on every ke
 The zip itself on `PYTHONPATH` works too (`PYTHONPATH=<zip> python -m a2h_env info <zip>`; not under `python -I`, which
 ignores it). Under a cleared environment on macOS (`env -i`) keep `/usr/sbin` on `PATH`: MuJoCo's warp backend calls
 `sysctl`.
+- `--attempt-every N` (`a2h_env/attempts.py`) rolls the policy out once on the reference every N iterations and at the
+  end, in a one-env play copy of the environment, into `<out>/attempts/iter_NNNN.npz` (qpos (T, 36) float32 at 50 Hz,
+  the episode's reward, whether it fell; with the repository on the path, the key-moment stages it reached) plus
+  `index.json` with the reward curve. The website's "watch it learn" view plays these (`docs/DEPLOY.md`, "Live
+  training on a GPU").
 - `load_bundle` reads the zip (or its unzipped folder) with numpy alone.
 - `make_env` builds mjlab's G1 flat tracking environment the way `train_motion.py` and `experiments/variant_policy.py`
   do: the qpos becomes mjlab's 50 Hz motion file by forward kinematics on mjlab's G1 (`mjlab.scripts.csv_to_npz`'s

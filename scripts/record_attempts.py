@@ -62,7 +62,7 @@ def main(a):
                         m = T._ITER.search(line)
                         if m:
                             last_it = int(m.group(1)) + 1
-                        if line.startswith("[a2h_env]") or line.startswith("rendering with") or "Error" in line or "error" in line[:40]:
+                        if line.startswith(("[a2h_env]", "rendering with", "Traceback", "git clone")) or "Error:" in line:
                             log(line[:300], f)
                     off = len(data)
                 raw = be.read(session, f"outputs/policy/{T.ATTEMPTS}/index.json", T.MAX_INDEX_BYTES)

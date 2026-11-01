@@ -312,21 +312,27 @@ class TrainRunner:
             if _ATTEMPT.search(line) or line.startswith("[a2h_env]") or line.startswith("rendering with"):
                 self.store.log(job, "policy", line[:300])
         if new_points:
-            with self.store.lock:
-                pts = job.curves.setdefault("policy", [])
-                known = {p[0] for p in pts}
-                pts.extend(p for p in new_points if p[0] not in known)
-                pts.sort()
-                del pts[:-5000]
-                tr = job.training
-                tr["iteration"], tr["reward"] = new_points[-1][0], new_points[-1][1]
-                total = total or tr["iterations"]
-            self.store.set_stage(job, "policy", min(0.99, new_points[-1][0] / max(1, total)))
+            self._merge_curve(job, new_points, total)
+            it, reward = job.training["iteration"], job.training["reward"]
             every = max(1, job.training["attempt_every"])
-            if last_line is None or new_points[-1][0] - last_line >= every:
-                last_line = new_points[-1][0]
-                self.store.log(job, "policy", f"iteration {new_points[-1][0]}/{total}: mean reward {new_points[-1][1]:.2f}")
+            if last_line is None or it - last_line >= every:
+                last_line = it
+                self.store.log(job, "policy", f"iteration {it}/{total or job.training['iterations']}: mean reward {reward:.2f}")
         return len(data), last_line
+
+    def _merge_curve(self, job, points, total=None):
+        """New [iteration, mean reward] points into the job's curve; the newest iteration drives the stage's progress."""
+        with self.store.lock:
+            pts = job.curves.setdefault("policy", [])
+            known = {p[0] for p in pts}
+            pts.extend(p for p in points if p[0] not in known)
+            pts.sort()
+            del pts[:-5000]
+            tr = job.training
+            if pts and pts[-1][0] >= (tr.get("iteration") or 0):
+                tr["iteration"], tr["reward"] = pts[-1][0], pts[-1][1]
+            total = total or tr["iterations"]
+        self.store.set_stage(job, "policy", min(0.99, tr["iteration"] / max(1, total)))
 
     def _mirror_attempts(self, job, session, seen):
         """Copy attempts the trainer has written since the last pass into the job's folder; rewrite its index."""
@@ -353,6 +359,11 @@ class TrainRunner:
             out.mkdir(parents=True, exist_ok=True)
             tmp.write_text(json.dumps(index, separators=(",", ":")))
             tmp.replace(out / "index.json")
+        # The index carries the reward curve too, and it lands on the Volume as soon as it is written, while the job's
+        # log (a file kept open) can lag until the job ends: progress and the curve come from here first.
+        curve = [[int(x), float(y)] for x, y in index.get("curve", []) if isinstance(x, (int, float)) and isinstance(y, (int, float))]
+        if curve:
+            self._merge_curve(job, curve, index.get("iterations"))
         if got:
             last = got[-1]
             self._set(job, attempts=len(seen), last={k: last.get(k) for k in ("iteration", "reward", "stages_completed",

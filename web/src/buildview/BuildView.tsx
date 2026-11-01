@@ -236,7 +236,7 @@ export default function BuildView({ input, status, kicker, follow = false, notes
 
         {/* over the view on a wide screen, under it on a phone */}
         <div className="bv-hud">
-        <Caption k={shown} input={input} status={status} pick={pick} accepted={accepted} note={shown ? notes[shown] : null} learning={learnOn} />
+        <Caption k={shown} input={input} status={status} pick={pick} accepted={accepted} note={shown ? notes[shown] : null} learning={learnOn} canTrain={!!offer} />
 
         {status.policy === "offer" && !accepted && (offer || pick) && (
           <div className="bv-offer">
@@ -342,7 +342,7 @@ function stageModels(k: StageKey, input: BuildInput, st: StageStatus): StageMode
   }
 }
 
-function Caption({ k, input, status, pick, accepted, note, learning }: { k: StageKey | null; input: BuildInput; status: BuildViewProps["status"]; pick: PolicyPick | null; accepted: boolean; note: ReactNode; learning: boolean }) {
+function Caption({ k, input, status, pick, accepted, note, learning, canTrain }: { k: StageKey | null; input: BuildInput; status: BuildViewProps["status"]; pick: PolicyPick | null; accepted: boolean; note: ReactNode; learning: boolean; canTrain: boolean }) {
   if (!k) return <div className="bv-caption"><span className="bv-cap-k mono">Build</span><p>Waiting for the clip.</p></div>;
   const n = STAGES.findIndex((s) => s.key === k) + 1;
   const st = status[k];
@@ -361,6 +361,8 @@ function Caption({ k, input, status, pick, accepted, note, learning }: { k: Stag
     policy: learning ? (input.training && (input.training.state === "starting" || input.training.state === "running")
       ? <>The policy is training on a GPU now: PPO in mjlab, {input.training.iterations.toLocaleString()} iterations. Every {input.training.attempt_every} iterations the robot tries the clip once and the attempt lands here; the ghost is the retarget it is paid to follow.</>
       : <>The policy's attempts while it trained, one every {input.attempts?.attempt_every ?? 50} iterations: the robot tries the clip once with the policy as it was then, next to the retarget as a ghost. Early attempts fall at once; later ones follow the ghost. Slide through them, or let them play.</>)
+      : status.policy === "offer" && !accepted && canTrain
+      ? <>Nothing is trained yet. Press "Train on a GPU" to train a policy on this environment (PPO in mjlab on a Modal GPU) and watch the robot's attempts land here every few iterations{pick ? <>, or play the nearest stored policy ({pick.tab.toLowerCase()}) meanwhile</> : null}.</>
       : pick ? (status.policy === "offer" && !accepted
       ? <>Training a policy on this clip takes PPO in mjlab 1–2 h on a GPU, and this host has none. You can play the nearest stored policy instead ({pick.tab.toLowerCase()}: {pick.why.replace("the nearest stored policy: ", "")}), labelled pre-trained.</>
       : pick.own

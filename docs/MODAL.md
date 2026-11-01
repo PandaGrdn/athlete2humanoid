@@ -27,6 +27,29 @@ uploaded clip and returns SAM 3.1's masks and SAM 3D Body's pose, which the web 
 upload when it runs with `A2H_LIVE_POSE=modal` (`server/live_pose.py`; setup in `docs/DEPLOY.md`, "The live runner's
 pose on a GPU"). About $0.05-0.15 a clip; nothing runs between uploads.
 
+## Live training from the website
+
+The web API's `modal` runner (`server/train.py`; setup in `docs/DEPLOY.md`, "Live training on a GPU") runs the same
+`run_job` for a visitor: after the live runner has built an upload's environment, "Train on a GPU" on the page uploads
+the build's `env.zip` to `runs/live_<job>/inputs/` and spawns
+
+```
+$A2H_MJLAB_PYTHON -m a2h_env train /vol/runs/live_<job>/inputs/env.zip --iters 1000 --num-envs 4096 \
+    --attempt-every 50 --out /vol/runs/live_<job>/outputs/policy --work-dir /vol/runs/live_<job>/outputs/motions
+```
+
+on the repository's `main` (`A2H_TRAIN_BRANCH`). `--attempt-every 50` makes the trainer roll the policy out once on the
+clip's reference every 50 iterations into `outputs/policy/attempts/iter_NNNN.npz` (`a2h_env/attempts.py`: qpos at 50 Hz,
+the episode's reward, the key-moment stages reached, whether it fell) with an `index.json` that also carries the reward
+curve; the server reads the index every 30 s, copies new attempts into the job's folder and the page plays them.
+Note that a file the job keeps open (its log) can lag on the Volume until the job ends, so progress comes from the
+index. When the call returns, `weights.json` and the final checkpoint come back and `runs/live_<job>/` is deleted.
+No HF token is uploaded: the training needs none. Cost: about 20-30 min of L40S, about $1, per 1,000 iterations.
+
+`scripts/record_attempts.py <run folder>` records the same attempts for a stored run (its `env.zip`, trained again)
+into `<run>/attempts/`, through the same backend, so `/build/<run>` on the site shows the robot learn without a live
+job; `scripts/build_space.py` ships them.
+
 ## How it works
 
 - **`scripts/modal_app.py`** is the Modal app.

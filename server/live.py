@@ -168,8 +168,13 @@ class LiveRunner:
             return store.finish(job, "failed", error=f"internal error building the environment (ref {ref})")
         if s.live_muse_names:
             self._name(job, out)
-        store.log(job, "policy", "training a policy on this environment needs a GPU (PPO in mjlab, 1-2 h); "
-                                 "this host builds environments only")
+        if "modal" in s.enabled_runners and s.train_open:  # the modal runner (server/train.py) can take it from here
+            store.log(job, "policy", f"the environment is built; \"Train on a GPU\" trains a policy on it (PPO in mjlab on a "
+                                     f"Modal GPU, {s.train_iters} iterations, about {store.train.eta_min()} min) and plays its "
+                                     f"attempts here as it learns")
+        else:
+            store.log(job, "policy", "training a policy on this environment needs a GPU (PPO in mjlab, 1-2 h); "
+                                     "this host builds environments only")
         store.set_stage(job, "policy", status="skipped")
         store.finish(job, "succeeded")
 
