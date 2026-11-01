@@ -200,8 +200,7 @@ def test_gpu_pose_client_checks_and_saves(tmp_path, monkeypatch):
     reads; the worker's gpu_pose falls back (returns None, says why) on a bad result, an error or a missing token."""
     import io
 
-    import numpy as np
-
+    np = pytest.importorskip("numpy")  # the worker's Python has it; the API-only CI job does not
     from server import live_pose, live_worker
 
     T, H, W = 4, 6, 8

@@ -14,8 +14,6 @@ import io
 import os
 from pathlib import Path
 
-import numpy as np
-
 APP, FUNCTION = "a2h-live-pose", "pose"
 RESULT_KEYS = ("sam3d", "masks", "frames", "width", "height")
 SAM3D_NPZ, MASKS_NPZ = "sam3d.npz", "masks.npz"
@@ -56,6 +54,8 @@ def check(result, n_frames, width, height):
 
 def save(result, out):
     """Write the result's sam3d.npz and masks.npz into out. -> (sam3d path, masks (T, H, W) bool)."""
+    import numpy as np  # the worker's Python has it; the API's own tests need not
+
     out = Path(out)
     sam3d = out / SAM3D_NPZ
     sam3d.write_bytes(bytes(result["sam3d"]))
