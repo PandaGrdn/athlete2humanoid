@@ -66,7 +66,7 @@ const meanCm = (e: Record<string, [number, number] | number> | null | undefined)
 };
 
 /** A live job's data, as far as it has got; `envUrl` is where its env.zip is served from (api.liveEnv). */
-export function fromLive(d: LiveData, video: string | null, envUrl?: string | null): Partial<BuildInput> {
+export function fromLive(d: LiveData, video: string | null, envUrl?: string | null, maskUrl?: string | null): Partial<BuildInput> {
   let skeleton: Skeleton | null = null;
   const s = d.skeleton;
   if (s?.frames?.length) {
@@ -79,7 +79,8 @@ export function fromLive(d: LiveData, video: string | null, envUrl?: string | nu
     fps: d.fps,
     video: video ? { src: video, sideBySide: false, label: "Processed clip" } : null,
     landmarks: d.landmarks,
-    segmenter: null,
+    mask: d.segmenter && maskUrl ? { src: maskUrl } : null,
+    segmenter: d.segmenter ?? null,
     poseModel: d.pose_model ?? (d.landmarks ? "MediaPipe" : null),
     skeleton,
     qpos: d.qpos?.length ? qposFrames(d.qpos) : null,

@@ -142,7 +142,8 @@ def create_app(settings=None):
             "limits": {"max_upload_mb": settings.max_upload_mb, "extensions": sorted(VIDEO_EXT)},
             "stages": [{"key": k, "label": label, "description": d} for k, label, d, _ in STAGES],
             "live_stages": [{"key": k, "label": label, "description": d} for k, label, d, _ in LIVE_STAGES],
-            "live": {"max_seconds": settings.live_max_seconds, "concurrency": settings.live_concurrency}
+            "live": {"max_seconds": settings.live_max_seconds, "concurrency": settings.live_concurrency,
+                     "pose": settings.live_pose}  # "modal": SAM 3.1 + SAM 3D Body on a GPU; "cpu": MediaPipe here
             if settings.live_ok else None,
         }
 
@@ -318,6 +319,14 @@ def create_app(settings=None):
         p = runs.safe_path(_live_folder(jid), "processed.mp4")
         if p is None:
             raise HTTPException(404, "the video isn't processed yet")
+        return FileResponse(p, media_type="video/mp4", headers={"X-Content-Type-Options": "nosniff"})
+
+    @app.get("/api/jobs/{jid}/live/mask")
+    def job_live_mask(jid: str):
+        """The processed clip with SAM 3.1's mask tinted over the person, when the pose ran on the GPU."""
+        p = runs.safe_path(_live_folder(jid), live.MASK_VIDEO)
+        if p is None:
+            raise HTTPException(404, "this build has no mask video")
         return FileResponse(p, media_type="video/mp4", headers={"X-Content-Type-Options": "nosniff"})
 
     @app.get("/api/jobs/{jid}/env.zip")

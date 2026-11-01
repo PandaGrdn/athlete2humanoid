@@ -43,6 +43,9 @@ VARIANT_MAX_S = 12  # longer clips get the four ghost variants only (CPU time)
 # The variants run after the environment is complete, under the job's own wall clock: skipped once the build has
 # used this share of its timeout, and stopped (keeping what is done) at the other share or VARIANT_BUDGET_S.
 VARIANT_START_BY, VARIANT_STOP_BY, VARIANT_BUDGET_S = 0.4, 0.7, 45.0
+# --pose modal: the GPU pose may use this share of the job's timeout (a cold container boots in it), the rest is
+# the CPU stages'; the mask video it leaves beside processed.mp4 is what the build view plays over the clip
+GPU_POSE_SHARE, MASK_VIDEO = 0.6, "mask.mp4"
 # MediaPipe landmarks drawn over the video: the body, not the face or hands
 LANDMARKS = {0: "nose", 11: "left shoulder", 12: "right shoulder", 13: "left elbow", 14: "right elbow",
              15: "left wrist", 16: "right wrist", 23: "left hip", 24: "right hip", 25: "left knee",
@@ -100,7 +103,27 @@ def _round(a, nd):
     return [[None if np.isnan(p).any() else p.tolist() for p in f] for f in a]
 
 
-def run(video, out, max_seconds, name="clip", sam3d=None, timeout_s=240.0, job_id=None):
+def gpu_pose(video, out, n_frames, width, height, timeout_s, log):
+    """The processed clip through SAM 3.1 and SAM 3D Body on the Modal GPU (server/live_pose.py), waiting at most
+    timeout_s. -> (sam3d.npz path, (T, H, W) masks, the result dict), or None with the reason given to log."""
+    from server import live_pose
+
+    if not live_pose.configured():
+        log("no Modal token on this host")
+        return None
+    try:
+        r = live_pose.fetch(Path(video).read_bytes(), timeout_s)
+        why = live_pose.check(r, n_frames, width, height)
+        if why:
+            raise RuntimeError(why)
+        path, masks = live_pose.save(r, out)
+        return path, masks, r
+    except Exception as e:  # noqa: BLE001  (the GPU is optional: the build goes on without it)
+        log(f"{type(e).__name__}: {str(e)[:160]}" if str(e) else type(e).__name__)
+        return None
+
+
+def run(video, out, max_seconds, name="clip", sam3d=None, timeout_s=240.0, job_id=None, pose_backend="cpu"):
     started = time.monotonic()
     out.mkdir(parents=True, exist_ok=True)
     live = {"fps": FPS, "frames": 0, "duration_s": 0.0, "video": None, "landmarks": None, "pose_found": None,
@@ -137,6 +160,20 @@ def run(video, out, max_seconds, name="clip", sam3d=None, timeout_s=240.0, job_i
     import track
     emit(stage="pose", progress=0.0)
     d = None
+    if pose_backend == "modal" and not sam3d:
+        # the full SAM pipeline on a Modal GPU (server/live_pose.py); any failure -> MediaPipe here, with a line why
+        emit(stage="pose", note="SAM 3.1 and SAM 3D Body on a Modal GPU (a cold start adds a minute or two)")
+        got = gpu_pose(processed, out, T, W, H, max(30.0, timeout_s * GPU_POSE_SHARE - (time.monotonic() - started)),
+                       lambda why: emit(stage="pose", note=f"GPU pose unavailable ({why}); MediaPipe on the CPU instead"))
+        if got is not None:
+            sam3d, masks, r = got
+            seen = float(masks.any((1, 2)).mean())
+            live["segmenter"], live["mask_seen"] = "SAM 3.1", round(seen, 3)
+            live["gpu"] = {"name": str(r.get("gpu", ""))[:40],
+                           "timings_s": {str(k)[:20]: round(float(v), 2) for k, v in (r.get("timings_s") or {}).items()
+                                         if isinstance(v, (int, float))}}
+            mediapy.write_video(str(out / MASK_VIDEO), track.overlay(frames, masks), fps=FPS)  # the build view's mask
+            emit(stage="pose", note=f"SAM 3.1: person visible in {seen:.0%} of frames", progress=0.8)
     if sam3d:
         from frontends import sam3d_body  # not in the Space image: imported only when asked for
         d = sam3d_body.cached(sam3d, frames)
@@ -188,7 +225,10 @@ def run(video, out, max_seconds, name="clip", sam3d=None, timeout_s=240.0, job_i
     from skill import keypose
     from skill import task as skill_task
     emit(stage="environment", progress=0.2)
-    spec = keypose.compile_keypose_spec(pos, FPS, name=name)
+    try:
+        spec = keypose.compile_keypose_spec(pos, FPS, name=name)
+    except ValueError as e:  # the compiler's own verdict on the clip (too many moments even at a coarse tolerance)
+        raise ClipError(f"couldn't compile the key moments: {e}") from e
     spec["self_check"] = skill_task.evaluate({**spec, "down": spec["down_ref"], "air": spec["air_ref"]}, pos, FPS)
     (out / "task_spec.json").write_text(json.dumps(spec))
     sc = spec["self_check"]
@@ -264,9 +304,12 @@ def main(argv=None):
     ap.add_argument("--sam3d", help="SAM 3D Body's npz for this video's processed frames: the pose instead of MediaPipe")
     ap.add_argument("--timeout-s", type=float, default=240.0, help="the job's wall-clock limit (the variants' budget)")
     ap.add_argument("--job-id", help="the job's id, named in the training environment's manifest")
+    ap.add_argument("--pose", choices=("cpu", "modal"), default="cpu",
+                    help="modal: SAM 3.1 + SAM 3D Body on the deployed Modal GPU app (server/live_pose.py), MediaPipe "
+                         "on the CPU if that fails; cpu: MediaPipe")
     a = ap.parse_args(argv)
     try:
-        run(Path(a.video), Path(a.out), a.max_seconds, a.name, a.sam3d, a.timeout_s, a.job_id)
+        run(Path(a.video), Path(a.out), a.max_seconds, a.name, a.sam3d, a.timeout_s, a.job_id, a.pose)
     except ClipError as e:
         emit(error=str(e))
         return 2

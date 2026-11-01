@@ -190,7 +190,8 @@ export type Health = {
   demo_seconds: number;
   run_count: number;
   limits: { max_upload_mb: number; extensions: string[] };
-  live?: { max_seconds: number; concurrency: number } | null; // set when runners include "live"
+  // set when runners include "live"; pose "modal": SAM 3.1 + SAM 3D Body on a GPU, "cpu": MediaPipe on the host
+  live?: { max_seconds: number; concurrency: number; pose?: "cpu" | "modal" } | null;
   stages: { key: string; label: string; description: string }[];
 };
 
@@ -204,8 +205,11 @@ export type LiveData = {
   // 2D, 0..1 of the processed frame (x right, y down); null where not detected.
   landmarks: { names: string[]; edges: [number, number][]; frames: (([number, number] | null)[] | null)[] } | null;
   pose_found: number | null;
-  // which 3D pose model ran (server/live_worker.py): "MediaPipe" on the CPU, "SAM 3D Body" in recorded builds
+  // which 3D pose model ran (server/live_worker.py): "MediaPipe" on the CPU, "SAM 3D Body" on the Modal GPU
   pose_model?: string;
+  segmenter?: string; // "SAM 3.1" when the person was masked on the GPU (then GET /api/jobs/{id}/live/mask plays it)
+  mask_seen?: number; // share of frames the mask found the person in
+  gpu?: { name: string; timings_s: Record<string, number> };
   // The 3D skeleton the retarget read (the landmarks' joints): metres, z up, the athlete facing +x.
   skeleton?: { names: string[]; edges: [number, number][]; frames: ([number, number, number] | null)[][] } | null;
   // G1 bodies in metres, world frame, z up.
@@ -259,6 +263,7 @@ export const api = {
   job: (id: string) => request<Job>(`/api/jobs/${encodeURIComponent(id)}`),
   live: (id: string) => request<LiveData>(`/api/jobs/${encodeURIComponent(id)}/live`),
   liveVideo: (id: string) => url(`/api/jobs/${encodeURIComponent(id)}/live/video`),
+  liveMask: (id: string) => url(`/api/jobs/${encodeURIComponent(id)}/live/mask`),
   liveEnv: (id: string) => `/api/jobs/${encodeURIComponent(id)}/env.zip`,
   jobTaskSpec: (id: string) => request<TaskSpec>(`/api/jobs/${encodeURIComponent(id)}/task_spec`),
   cancel: (id: string) => request<Job>(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" }),

@@ -26,6 +26,7 @@ log = logging.getLogger("a2h.live")
 LIVE_DIR = "live"
 MAX_LIVE_BYTES = 8 * 1048576  # live.json is ~250 kB for a 6 s clip, ~1 MB at the 20 s cap
 MAX_ENV_BYTES = 32 * 1048576  # env.zip is ~0.5 MB for a 6 s clip with 18 variants; anything bigger isn't ours
+MASK_VIDEO = "mask.mp4"  # the worker's SAM 3.1 overlay, beside processed.mp4, when the pose ran on the GPU
 
 
 def env_filename(jid):
@@ -50,8 +51,9 @@ def available(settings):
     return _probe(settings.live_python)
 
 
-def _env(out_dir):
-    """The worker's whole environment: nothing from ours but the path and the asset location."""
+def _env(out_dir, gpu_pose=False):
+    """The worker's whole environment: nothing from ours but the path and the asset location (and the Modal token
+    when the pose runs on the GPU)."""
     env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "PYTHONPATH": str(REPO), "PYTHONDONTWRITEBYTECODE": "1",
            "OMP_NUM_THREADS": "2", "MKL_NUM_THREADS": "2", "OPENBLAS_NUM_THREADS": "2", "MUJOCO_GL": "disable",
            "GLOG_minloglevel": "2", "TF_CPP_MIN_LOG_LEVEL": "2"}
@@ -61,6 +63,8 @@ def _env(out_dir):
                 "A2H_OUTPUT_DIR": scratch, "A2H_CLIPS_DIR": scratch}
     if os.environ.get("A2H_ASSETS_DIR"):
         env["A2H_ASSETS_DIR"] = os.environ["A2H_ASSETS_DIR"]
+    if gpu_pose:  # the Modal client's token, the one secret the worker gets, and only in this mode (server/live_pose.py)
+        env |= {k: os.environ[k] for k in ("MODAL_TOKEN_ID", "MODAL_TOKEN_SECRET") if os.environ.get(k)}
     return env
 
 
@@ -114,10 +118,10 @@ class LiveRunner:
         store, s = self.store, self.settings
         cancel = store.cancel[job.id]
         cmd = [s.live_python, "-m", "server.live_worker", str(src), str(out), "--max-seconds", str(s.live_max_seconds),
-               "--timeout-s", str(s.live_timeout_s), "--job-id", job.id]
+               "--timeout-s", str(s.live_timeout_s), "--job-id", job.id, "--pose", s.live_pose]
         store.set_stage(job, "video", 0.0)
         t0 = time.monotonic()
-        proc = subprocess.Popen(cmd, cwd=REPO, env=_env(out), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+        proc = subprocess.Popen(cmd, cwd=REPO, env=_env(out, gpu_pose=s.live_pose == "modal"), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE, text=True, start_new_session=True,
                                 preexec_fn=_limits(int(s.live_timeout_s * 2), s.live_memory_mb))
         err_tail = []
