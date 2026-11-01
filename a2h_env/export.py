@@ -405,6 +405,11 @@ def write_zip(out, parts, manifest):
                     z.write(d, name)
                 else:
                     z.writestr(name, d)
+        # mkstemp makes the file owner-only (0600); the bundle is a plain artifact that a deploy image copies and a
+        # server running as another user must read, so give it the ordinary permissions a created file would get
+        umask = os.umask(0)
+        os.umask(umask)
+        os.chmod(tmp, 0o666 & ~umask)
         os.replace(tmp, out)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)

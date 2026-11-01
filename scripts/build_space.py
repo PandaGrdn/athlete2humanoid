@@ -129,6 +129,7 @@ def copy(src, dst):
     if src.is_file():
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
+        dst.chmod(0o644)  # the image runs as another user (USER 1000): a 0600 source (an env.zip from mkstemp) must not ship unreadable
         return dst.stat().st_size
     return 0
 

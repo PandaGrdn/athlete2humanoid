@@ -92,6 +92,7 @@ def test_export_then_load_round_trips_the_run(run, tmp_path):
     out = tmp_path / "t1.a2h-env.zip"
     m = X.export_run(run, out, generate=False)
     assert m and out.is_file() and m["bytes"] == out.stat().st_size
+    assert out.stat().st_mode & 0o044 == 0o044  # readable by other users: a deploy image serves it as a different uid
     b = B.load_bundle(out)
     qpos = np.load(run / "clips" / "front_kick" / "qpos.npy")
     assert np.array_equal(b.qpos, qpos) and b.fps == 30.0 and b.in_place and b.clip == "front_kick" and b.id == "latent_t1"
