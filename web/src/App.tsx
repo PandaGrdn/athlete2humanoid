@@ -8,6 +8,7 @@ import { Icon } from "./components/ui";
 import { ExampleDetail, ExamplesIndex } from "./pages/Examples";
 import Home from "./pages/Home";
 import JobPage from "./pages/JobPage";
+import MyPage from "./pages/MyPage";
 import LivePage, { LiveReplayPage } from "./pages/LivePage";
 import RunPage from "./pages/RunPage";
 import { UiCtx, useUi } from "./theme";
@@ -68,6 +69,7 @@ export default function App() {
             <NavLink to="/live" className="nav-ex">Live</NavLink>
             <NavLink to="/showcase" className="nav-ex">Showcase</NavLink>
             <NavLink to="/research" className="nav-ex">Research</NavLink>
+            <NavLink to="/my" className="nav-ex">Mine</NavLink>
             <Link to="/#run">Run</Link>
             <Link to="/#gallery">Gallery</Link>
             <Link to="/#how">How it works</Link>
@@ -94,6 +96,7 @@ export default function App() {
           <Route path="/jobs/:id" element={<JobPage />} />
           <Route path="/build/:rid" element={<Suspense fallback={<div className="container section"><div className="skeleton" style={{ height: 520 }} /></div>}><BuildPage /></Suspense>} />
           <Route path="/runs/:id" element={<RunPage />} />
+          <Route path="/my" element={<MyPage />} />
           <Route path="/showcase/:clip?" element={<Suspense fallback={ShowcaseFallback}><Showcase /></Suspense>} />
           <Route path="/research" element={<ExamplesIndex />} />
           <Route path="/research/:id" element={<ExampleDetail />} />
@@ -126,6 +129,7 @@ function AetherNav() {
           <NavLink to="/live">Live</NavLink>
           <NavLink to="/showcase">Showcase</NavLink>
           <NavLink to="/research">Research</NavLink>
+          <NavLink to="/my">Mine</NavLink>
         </nav>
         <Link to="/" className="ae-brand" aria-label="athlete2humanoid, home">
           <span>Athlete</span><span>2 Humanoid</span>

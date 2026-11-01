@@ -108,6 +108,7 @@ failure modes and health endpoints: `docs/SYSTEM_DESIGN.md`.
 | `A2H_TRAIN_CONCURRENCY` | `1` | Trainings at once (each one is a GPU: a second visitor gets a 429 with the minutes left) |
 | `A2H_TRAIN_TIMEOUT_H` | `3` | A training still running after this is cancelled on Modal and the job fails |
 | `A2H_TRAIN_BRANCH` | `main` | The repository branch the GPU job clones (`scripts/modal_app.py` `run_job`) |
+| `A2H_STORE` | unset | Where finished builds and trainings are kept past a restart (`server/store.py`): unset = files under `A2H_DATA_DIR/persist`; `gcs://<bucket>[/<prefix>]` = a Cloud Storage bucket (`scripts/cloudrun_store.sh`) |
 | `A2H_LIST_JOBS` | on locally, off hosted | `GET /api/jobs` (debugging) |
 | `A2H_LOG_FORMAT` / `A2H_LOG_LEVEL` | `json` / `INFO` | Structured logs on stderr; `text` for humans |
 | `A2H_RUN_EXCLUDE` | `*smoke*` | Glob patterns of run folders to hide |
@@ -287,6 +288,41 @@ Setup, after the GPU pose (the Modal token is already on the service):
 Locally: `A2H_RUNNERS=demo,modal A2H_TRAIN_CODE=<code> A2H_TRAIN_BRANCH=<branch>` with `MODAL_TOKEN_ID` /
 `MODAL_TOKEN_SECRET` exported, then `uvicorn server.main:app`. The tests drive the runner with a stand-in Modal
 (`server/tests/test_train.py`); a stored run's attempts for the gallery come from `scripts/record_attempts.py`.
+
+### Keeping environments between visits
+
+Job state lives in memory and in a SQLite journal under `A2H_DATA_DIR`, and a live build's files sit with its upload
+there. On Cloud Run that folder is `/tmp`: a new revision or a restart forgets every build, and an upload's files
+expire after `A2H_UPLOAD_TTL_H`. The store (`server/store.py`) keeps what a visitor made past both: when a live
+build finishes it copies the build's files (`processed.mp4`, `mask.mp4`, `live.json`, `task_spec.json`, `qpos.npy`,
+`env.zip`) and the job's record (its public JSON with a short log, who owns it, what was kept) to the store; when a
+training finishes, `train/weights.json`, `train/policy.pt` and `train/attempts/*` follow. A job that isn't in memory
+any more (pruned, expired, or from before a restart) comes back from its record on the next `GET /api/jobs/{id}`, and
+its files are fetched into the job's folder again before they are served. Raw uploads are never kept.
+
+Two backends behind one interface, chosen by `A2H_STORE`: local files under `A2H_DATA_DIR/persist` with a SQLite
+record table (the default, and what the tests use; on a single always-on machine that is already durable), or a
+Cloud Storage bucket (`gcs://<bucket>[/<prefix>]`: objects `jobs/<id>/<file>`, the record at `jobs/<id>/record.json`,
+and an owner index `owners/<key>/<id>` so a visitor's list is one prefix listing). No Firestore: a JSON record per job
+in the bucket is enough for this, and it needs one dependency (`google-cloud-storage`) and one IAM binding.
+
+**No accounts.** The browser makes a 32-hex key on its first visit (`localStorage` `a2h_owner`), sends it as
+`X-A2H-Owner` on every API call, and the server records it on each job it creates. `GET /api/my/jobs` lists the
+visitor's builds and trainings (status, date, the task spec's one line, links to the build view, `env.zip` and the
+trained policy), which is the `/my` page ("Mine" in the navigation). The page shows a link with `?key=` that restores
+the key on another device; anyone with the link sees that list, so it is theirs to share or not. Without the key
+nobody can list anyone's jobs; a job's id stays the only key to its files, and the hosted job list stays off.
+`/api/health` reports `"store": {"kind": "local" | "gcs"}`; `/readyz` checks the store answers.
+
+One-time setup on Google Cloud (the bucket, the service account's access, `A2H_STORE` on the service):
+
+```bash
+PATH="$HOME/google-cloud-sdk/bin:$PATH" scripts/cloudrun_store.sh
+```
+
+`BUCKET=<name>` picks another bucket name (default `<project>-jobs`, in the service's region, uniform access, public
+access prevented). `deploy.sh` keeps `A2H_STORE` on later deploys. Locally, `A2H_STORE=gcs://<bucket>` works with
+`gcloud auth application-default login`.
 
 ### What the bundle contains
 

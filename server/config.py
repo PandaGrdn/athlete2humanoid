@@ -38,6 +38,8 @@ A2H_TRAIN_TIMEOUT_H a training still running after this many hours is cancelled 
 A2H_TRAIN_BRANCH    the repository branch the GPU job runs (default: main)
 A2H_TRAIN_CONCURRENCY  trainings at once (default: 1; each one is a GPU)
 A2H_RATE_TRAIN      POST /api/jobs/{id}/train per client per hour (default: 12; bounds invite-code guessing)
+A2H_STORE           where finished builds and trainings are kept past a restart (server/store.py): unset = files
+                    under A2H_DATA_DIR/persist; gcs://<bucket>[/<prefix>] = a Cloud Storage bucket
 """
 
 import os
@@ -144,6 +146,9 @@ class Settings:
     rate_train_per_hour: float = field(default_factory=lambda: _num("A2H_RATE_TRAIN", 12))
     modal_token: bool = field(default_factory=lambda: bool(os.environ.get("MODAL_TOKEN_ID") and os.environ.get("MODAL_TOKEN_SECRET")))
     train_backend: object = field(default=None, repr=False)  # tests: a stand-in for server/train.py's ModalBackend
+    # Durable storage for what visitors made (server/store.py): local files by default, a GCS bucket when hosted.
+    store_url: str = field(default_factory=lambda: _env("A2H_STORE", ""))
+    store_backend: object = field(default=None, repr=False)  # tests: a Store to use instead
     colab_policies: list = field(default_factory=lambda: _list("A2H_COLAB_POLICIES", "task"))
     colab_init: str = field(default_factory=lambda: _env("A2H_COLAB_INIT", str(REPO / "outputs" / "remote_latent_final")))
     parse_errors: list = field(default_factory=lambda: _errors[:], repr=False)
@@ -214,6 +219,8 @@ class Settings:
                                                         "name the frontend origin(s)")
             elif not (o.startswith("https://") or o.startswith("http://localhost") or o.startswith("http://127.0.0.1")):
                 warns.append(f"A2H_CORS_ORIGINS: {o!r} is neither https nor localhost")
+        if self.store_url and not re.fullmatch(r"gcs://[a-z0-9][a-z0-9._-]{1,220}[a-z0-9](/[\w./-]*)?", self.store_url):
+            errs.append(f"A2H_STORE must be unset or gcs://<bucket>[/<prefix>], got {self.store_url!r}")
         if not re.fullmatch(r"[A-Za-z0-9._/-]+", self.train_branch):
             errs.append(f"A2H_TRAIN_BRANCH: odd branch name {self.train_branch!r}")
         if "modal" in self.runners:
