@@ -458,7 +458,7 @@ def attempts_view(folder, url_of):
         return None
     rows = []
     for r in index["attempts"]:
-        if not isinstance(r, dict) or not NPZ.match(str(r.get("file", ""))) or not (folder / ATTEMPTS / r["file"]).is_file():
+        if not isinstance(r, dict) or not NPZ.fullmatch(str(r.get("file", ""))) or not (folder / ATTEMPTS / r["file"]).is_file():
             continue
         rows.append({"iteration": int(r.get("iteration") or 0), "reward": r.get("reward"), "success": r.get("success"),
                      "stages_completed": r.get("stages_completed"), "stages_total": r.get("stages_total"),
