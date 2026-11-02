@@ -159,7 +159,10 @@ class TrainRunner:
         self.store, self.settings = store, store.settings
         self.backend = backend or ModalBackend()
         self.poll_s = max(0.01, float(self.settings.train_poll_s))
+        self.stale_s = max(3 * self.poll_s, 90.0)  # a heartbeat older than this: the follower is gone (tests lower it)
         self.lock = threading.Lock()
+        self.following = set()  # job ids whose training this process follows
+        self._cache, self._cache_at, self._today, self._today_at = 0, -1e9, 0, -1e9
 
     # --- what the API asks ---------------------------------------------------------------------
     def available(self):
@@ -169,28 +172,107 @@ class TrainRunner:
         return self.backend.status()
 
     def training_info(self, job):
-        """What the store's training index holds for a job (server/store.py put_training)."""
+        """A row of the store's training index (server/store.py put_training): one per training (keyed by its session,
+        so a retry is another row), with a heartbeat the follow thread refreshes each poll."""
         tr = job.training or {}
-        return {"id": job.id, "started_at": tr.get("started_at"), "finished_at": tr.get("finished_at"), "state": tr.get("state"),
-                "call_id": tr.get("call_id"), "session": tr.get("session")}
+        return {"job": job.id, "id": job.id, "session": tr.get("session"), "started_at": tr.get("started_at"),
+                "finished_at": tr.get("finished_at"), "state": tr.get("state"), "call_id": tr.get("call_id"),
+                "updated_at": time.time()}
 
     def _index(self, job):
+        tr = job.training or {}
+        if not tr.get("session"):
+            return
+        self._cache_at = self._today_at = -1e9  # a change of ours: the cached counts are stale
         try:
-            self.store.persist.put_training(job.id, self.training_info(job))
+            self.store.persist.put_training(tr["session"], self.training_info(job))
         except Exception:  # noqa: BLE001
             log.exception("training index write failed", extra={"fields": {"job": job.id}})
 
-    def active(self):
-        """Trainings running now: this process's, after any the store knows of from a process that is gone have been
-        revived (which cancels them: nobody follows them). So two instances can't both keep one running."""
+    def _rows(self, since=None):
+        """The index's rows that may still matter, newest first per job: {job id: row}."""
+        since = time.time() - 2 * max(1.0, self.settings.train_timeout_h) * 3600 if since is None else since
         try:
-            for info in self.store.persist.trainings(time.time() - 2 * max(1.0, self.settings.train_timeout_h) * 3600):
-                if info.get("state") in ("starting", "running") and self.store.peek(info["id"]) is None:
-                    self.store.get(info["id"])  # revives it: a stray training is stopped and marked failed
+            rows = self.store.persist.trainings(since)
         except Exception:  # noqa: BLE001
             log.exception("training index read failed")
+            return {}
+        out = {}
+        for info in sorted(rows, key=lambda i: i.get("started_at") or 0):
+            jid = info.get("job") or info.get("id")
+            if jid:
+                out[jid] = info
+        return out
+
+    def stale(self, info, now=None):
+        """A row nobody has heartbeat for a few poll intervals: its process is gone."""
+        hb = info.get("updated_at") or info.get("started_at") or 0
+        return (now or time.time()) - hb > self.stale_s
+
+    def row_for(self, job):
+        """The index row of the job's current training, or None."""
+        tr = job.training or {}
+        if not tr.get("session"):
+            return None
+        row = self._rows().get(job.id)
+        return row if row and row.get("session") == tr["session"] else None
+
+    def active_count(self, cached=False):
+        """Trainings running now, here or on another instance of this service: this process's own, plus the index's
+        rows with a fresh heartbeat that nobody here follows. A row whose heartbeat went stale is a stray (its process
+        died): its call is cancelled and it is marked failed. cached: a value up to 10 s old (health checks)."""
+        if cached and time.monotonic() - self._cache_at < 10:
+            return self._cache
+        now = time.time()
+        rows = self._rows()
+        n = 0
         with self.store.lock:
-            return [j for j in self.store.jobs.values() if j.training and j.training.get("state") in ("starting", "running")]
+            mine = [j for j in self.store.jobs.values() if j.training and j.training.get("state") in ("starting", "running")]
+        seen = set()
+        for j in mine:
+            seen.add(j.id)
+            if j.id in self.following:
+                n += 1
+                continue
+            row = rows.get(j.id)  # in memory here but followed elsewhere (or by nobody): the index says
+            if row is None or row.get("session") != j.training.get("session") or row.get("state") not in ("starting", "running"):
+                self._ended_elsewhere(j, row)
+            elif self.stale(row, now):
+                self._stray(j)
+            else:
+                n += 1
+        for jid, row in rows.items():
+            if jid in seen or row.get("state") not in ("starting", "running"):
+                continue
+            if self.stale(row, now):
+                self.store.get(jid)  # revives it; _revive sees the stale row and stops it
+            else:
+                n += 1
+        self._cache, self._cache_at = n, time.monotonic()
+        return n
+
+    def _ended_elsewhere(self, job, row):
+        """Another instance finished (or lost) this training: take its word."""
+        state = (row or {}).get("state")
+        state = state if state in ("done", "failed", "cancelled") else "failed"
+        error = None if state == "done" else "the training ended on another instance of this service"
+        if state == "done":
+            job.training["checkpoint"] = job.training.get("checkpoint") or None
+        self.store.finish_training(job, state, error, persist=False)
+
+    def _stray(self, job):
+        """A training whose follower is gone: stop the GPU job, mark it failed, say so in the store."""
+        self.recover(job)
+        self.store.finish_training(job, "failed", "the server restarted while the policy was training; the GPU job was stopped",
+                                   persist=False)
+        self._index(job)
+        self.store.save_record(job)
+
+    def active(self):
+        """This process's own running trainings (what shutdown() must stop)."""
+        with self.store.lock:
+            return [j for j in self.store.jobs.values() if j.id in self.following
+                    and j.training and j.training.get("state") in ("starting", "running")]
 
     def shutdown(self):
         """The process is stopping (a Cloud Run instance going away): stop the GPU jobs it can no longer follow, now,
@@ -207,19 +289,25 @@ class TrainRunner:
             self._end(job, "failed", "the server stopped while the policy was training; the GPU job was stopped")
 
     def started_since(self, since):
-        """Trainings started since `since`, from the store's index (every start is written there first) and memory."""
-        ids = set()
+        """Trainings started since `since`: one per row of the index (a retry is a training too), plus any in memory
+        the index missed."""
+        keys = set()
         try:
-            ids = {i["id"] for i in self.store.persist.trainings(since) if i.get("id")}
+            keys = {i.get("session") or i.get("id") for i in self.store.persist.trainings(since)}
         except Exception:  # noqa: BLE001
             log.exception("training index read failed")
         with self.store.lock:
-            ids |= {j.id for j in self.store.jobs.values() if j.training and (j.training.get("started_at") or 0) >= since}
-            ids |= {j.id for j in self.store.jobs.values() for h in (j.training or {}).get("history", []) if (h.get("started_at") or 0) >= since}
-        return len(ids)
+            for j in self.store.jobs.values():
+                for tr in [j.training] + list((j.training or {}).get("history") or []):
+                    if tr and (tr.get("started_at") or 0) >= since:
+                        keys.add(tr.get("session") or f"{j.id}:{tr.get('started_at')}")
+        return len(keys - {None})
 
-    def today(self):
-        return self.started_since(time.time() - 86400)
+    def today(self, cached=False):
+        if cached and time.monotonic() - self._today_at < 10:
+            return self._today
+        self._today, self._today_at = self.started_since(time.time() - 86400), time.monotonic()
+        return self._today
 
     def eta_min(self, job=None):
         """Minutes a training is expected to take (the last ones' mean, else a rule of thumb per 1,000 iterations)."""
@@ -234,7 +322,7 @@ class TrainRunner:
         n = sum(1 for _ in (job.training or {}).get("history", [])) + (1 if job.training else 0)
         session = f"live_{job.id[:12]}" + (f"_{n}" if n else "")  # a retry gets its own folder on the Volume
         with self.store.lock:
-            history = ((job.training or {}).get("history") or []) + ([{k: job.training.get(k) for k in ("state", "started_at", "finished_at", "error", "attempts")}] if job.training else [])
+            history = ((job.training or {}).get("history") or []) + ([{k: job.training.get(k) for k in ("state", "started_at", "finished_at", "error", "attempts", "session")}] if job.training else [])
             job.training = {"backend": "modal", "state": "starting", "session": session, "call_id": None, "history": history,
                             "iterations": s.train_iters, "attempt_every": s.train_attempt_every, "num_envs": s.train_num_envs,
                             "started_at": time.time(), "finished_at": None, "attempts": 0, "iteration": 0,
@@ -247,6 +335,7 @@ class TrainRunner:
         self.store.set_stage(job, "policy", 0.0, status="running")
         self.store.cancel[job.id].clear()  # a cancelled training's flag must not stop the next one at once
         self.store.flush()
+        self.following.add(job.id)
         self._index(job)  # counted from now on, whatever happens to this process
         self.store.save_record(job)
         threading.Thread(target=self._run, args=(job,), daemon=True, name=f"train-{job.id}").start()
@@ -260,6 +349,8 @@ class TrainRunner:
             ref = uuid.uuid4().hex[:8]
             log.exception("train runner crashed", extra={"fields": {"job": job.id, "ref": ref}})
             self._end(job, "failed", f"internal error in the modal runner (ref {ref})")
+        finally:
+            self.following.discard(job.id)
 
     def _set(self, job, **kw):
         with self.store.lock:
@@ -334,6 +425,7 @@ class TrainRunner:
                 return "cancelled", index_seen, None, False
             log_off, last_line = self._follow_log(job, session, log_off, last_line)
             index_seen = self._mirror_attempts(job, session, index_seen)
+            self._index(job)  # the heartbeat: another instance leaves a training alone while this one beats
             state = be.state(call_id)
             unknown = unknown + 1 if state == "unknown" else 0
             if state in ("done", "failed"):

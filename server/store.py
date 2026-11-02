@@ -106,9 +106,10 @@ class Store:
     def delete_record(self, jid):
         raise NotImplementedError
 
-    # GPU trainings, written at start (server/train.py) so that a new process, or another instance, sees what was
-    # started today and what may still be running: {"id", "started_at", "state", "call_id", "session", "finished_at"}
-    def put_training(self, jid, info):
+    # GPU trainings, one row per training keyed by its session (server/train.py training_info: job, session,
+    # started_at, state, call_id, finished_at, updated_at = the follower's heartbeat), written at start and refreshed
+    # each poll, so a new process or another instance sees what was started today and what is running where.
+    def put_training(self, key, info):
         raise NotImplementedError
 
     def trainings(self, since=0.0):
@@ -171,9 +172,9 @@ class LocalStore(Store):
         self.db.execute("CREATE INDEX IF NOT EXISTS records_owner ON records (owner, updated_at)")
         self.db.execute("CREATE TABLE IF NOT EXISTS trainings (id TEXT PRIMARY KEY, started_at REAL NOT NULL, body TEXT NOT NULL)")
 
-    def put_training(self, jid, info):
+    def put_training(self, key, info):
         with self.lock:
-            self.db.execute("INSERT OR REPLACE INTO trainings VALUES (?, ?, ?)", (jid, float(info.get("started_at") or 0), json.dumps(info)))
+            self.db.execute("INSERT OR REPLACE INTO trainings VALUES (?, ?, ?)", (str(key), float(info.get("started_at") or 0), json.dumps(info)))
             self.db.execute("DELETE FROM trainings WHERE started_at < ?", (time.time() - 3 * 86400,))
 
     def trainings(self, since=0.0):
@@ -310,8 +311,8 @@ class GcsStore(Store):
         tmp.replace(dest)
         return True
 
-    def put_training(self, jid, info):
-        self.bucket().blob(f"{self.prefix}trainings/{jid}").upload_from_string(json.dumps(info), content_type="application/json")
+    def put_training(self, key, info):
+        self.bucket().blob(f"{self.prefix}trainings/{key}").upload_from_string(json.dumps(info), content_type="application/json")
 
     def trainings(self, since=0.0):
         out = []

@@ -372,14 +372,18 @@ def test_restart_stops_a_training_it_cannot_follow(tmp_path, runs_dir):
     body = {"id": "a" * 32, "runner": "live", "status": "running", "stage": "policy", "stages": [], "logs": [], "curves": {},
             "created_at": 1.0, "updated_at": 2.0, "version": 3,
             "training": {"backend": "modal", "state": "running", "session": "live_aaaaaaaaaaaa", "call_id": "fc-9",
-                         "started_at": 1.0, "attempts": 1}}
+                         "started_at": time.time() - 100, "attempts": 1}}
     journal.save([("a" * 32, "running", 1.0, 2.0, None, body)])
     fake = FakeBackend()
     store = JobStore(s, journal, train_backend=fake)
     j = store.get("a" * 32)
     # (2) the training is marked failed, the build stays succeeded, nothing counts as running any more
     assert j.status == "succeeded" and "GPU job was stopped" in j.error and j.training["state"] == "failed"
-    assert fake.cancelled == ["fc-9"] and fake.removed == ["live_aaaaaaaaaaaa"] and store.train.active() == []
+    assert fake.cancelled == ["fc-9"] and fake.removed == ["live_aaaaaaaaaaaa"] and store.train.active_count() == 0
+    # (A) ... and the store says so too, so the job doesn't come back as "training" once it leaves memory
+    rec = store.persist.get_record("a" * 32)
+    assert rec["training"]["state"] == "failed" and rec["status"] == "succeeded"
+    assert [r["state"] for r in store.persist.trainings(0)] == ["failed"]
     store.close()
     journal.close()
 

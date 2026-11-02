@@ -118,6 +118,11 @@ class JobStore:
         for job in self._stop_training:
             self.train.recover(job)
             self.dirty.add(job.id)
+            self.save_record(job)  # the store's record and index say it ended too, not "running" for ever
+            try:
+                self.persist.put_training(job.training["session"], self.train.training_info(job))
+            except Exception:  # noqa: BLE001
+                log.exception("training index write failed", extra={"fields": {"job": job.id}})
         self._stop_training = []
 
     def start_background(self, interval=1.0):
@@ -375,8 +380,12 @@ class JobStore:
             job = _job_from_dict(rec)
         except TypeError:
             return None
-        stray = job.training and job.training.get("state") in ("starting", "running")
-        if stray:  # recorded mid-training by a process that is gone: nobody follows that GPU job; it is stopped
+        running = job.training and job.training.get("state") in ("starting", "running")
+        row = self.train.row_for(job) if running else None
+        # recorded mid-training: a stray (no row, or a heartbeat gone stale: its process died) is stopped here; a
+        # training another live instance of this service follows (a fresh heartbeat) is left to it
+        stray = running and (row is None or self.train.stale(row))
+        if stray:
             job.training.update(state="failed", finished_at=_now(), error="the server restarted while the policy was training; the GPU job was stopped")
             job.error = job.training["error"]
             for st in job.stages:
@@ -399,7 +408,7 @@ class JobStore:
             self.train.recover(job)  # cancels its call, removes its Volume folder (best effort)
             self.save_record(job)
             try:
-                self.persist.put_training(jid, self.train.training_info(job))  # the index says it ended too
+                self.persist.put_training(job.training["session"], self.train.training_info(job))  # the index says it ended too
             except Exception:  # noqa: BLE001
                 log.exception("training index write failed", extra={"fields": {"job": jid}})
         return job
@@ -518,7 +527,7 @@ class JobStore:
                                                         "seconds": round(job.updated_at - (job.training.get("started_at") or job.updated_at), 1)}})
         if persist:
             try:
-                self.persist.put_training(job.id, self.train.training_info(job))
+                self.persist.put_training(job.training["session"], self.train.training_info(job))
             except Exception:  # noqa: BLE001
                 log.exception("training index write failed", extra={"fields": {"job": job.id}})
             self.keep(job)

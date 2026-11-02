@@ -119,9 +119,9 @@ def create_app(settings=None):
         per_day = settings.train_per_day
         return {"backend": "modal", "code_required": bool(settings.train_code) and per_day <= 0,
                 "code_accepted": bool(settings.train_code), "per_day": per_day,
-                "left_today": max(0, per_day - store.train.today()) if per_day > 0 else 0,
+                "left_today": max(0, per_day - store.train.today(cached=True)) if per_day > 0 else 0,
                 "iterations": settings.train_iters, "attempt_every": settings.train_attempt_every,
-                "minutes": store.train.eta_min(), "busy": len(store.train.active()) >= settings.train_concurrency}
+                "minutes": store.train.eta_min(), "busy": store.train.active_count(cached=True) >= settings.train_concurrency}
 
     @app.get("/healthz", include_in_schema=False)
     def healthz():
@@ -152,7 +152,7 @@ def create_app(settings=None):
         ok = all(checks.values())
         body = {"ok": ok, "checks": checks, "gpu_backend": "ok" if gpu_ok else gpu_why,
                 "train_backend": "ok" if tr_ok else tr_why, "active_jobs": store.active_count(),
-                "trainings": len(store.train.active())}
+                "trainings": store.train.active_count(cached=True)}
         return JSONResponse(body, status_code=200 if ok else 503)
 
     @app.get("/api/health")
@@ -379,7 +379,7 @@ def create_app(settings=None):
             if not with_code and store.train.today() >= settings.train_per_day:
                 raise HTTPException(403, f"today's {settings.train_per_day} free training{'s are' if settings.train_per_day != 1 else ' is'} "
                                          f"used up" + ("; an invite code starts one" if settings.train_code else ""))
-            if len(store.train.active()) >= settings.train_concurrency:
+            if store.train.active_count() >= settings.train_concurrency:
                 raise HTTPException(429, f"another visitor's policy is training right now (about {store.train.eta_min()} min); "
                                          f"try again when it's done", headers={"Retry-After": "600"})
             store.train.start(job)
