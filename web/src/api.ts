@@ -240,7 +240,8 @@ export type Health = {
   train?: { backend: string; code_required: boolean; code_accepted: boolean; per_day: number; left_today: number;
     iterations: number; attempt_every: number; minutes: number; busy: boolean } | null;
   stages: { key: string; label: string; description: string }[];
-  store?: { kind: string } | null; // where finished builds and trainings are kept (server/store.py): "local" or "gcs"
+  // where finished builds and trainings are kept (server/store.py): "local" or "gcs"; durable: past the host's lifetime
+  store?: { kind: string; durable: boolean } | null;
 };
 
 /** A live job's data (GET /api/jobs/{id}/live), growing as its stages finish. Times are seconds of the

@@ -100,6 +100,7 @@ class JobStore:
         self.jobs = {}
         self.owner = {}  # job id -> client pseudonym (never sent to clients)
         self.owner_key = {}  # job id -> the visitor's key (X-A2H-Owner), when the browser sent one
+        self._restoring = {}  # job id -> the lock one restore of its files holds
         self.persist = settings.store_backend or store_for(settings)  # finished builds and trainings, past a restart
         self.lock = threading.RLock()
         self.cancel = {}
@@ -309,9 +310,19 @@ class JobStore:
         """A live job's outputs (server/live_worker.py): processed.mp4, live.json, task_spec.json. They are
         part of the upload, so they expire with it (A2H_UPLOAD_TTL_H); a kept job's come back from the store."""
         d = self.upload_dir(job.id) / LIVE_DIR
-        if job.kept and not (d / "live.json").is_file():
-            self.persist.materialize(job.id, d, job.kept)
+        if job.kept and any(not (d / rel).is_file() for rel in job.kept):
+            with self._restore_lock(job.id):  # the page asks for five files at once: one restore, not five
+                self.persist.materialize(job.id, d, job.kept)
         return d
+
+    def _restore_lock(self, jid):
+        with self.lock:
+            return self._restoring.setdefault(jid, threading.Lock())
+
+    def peek(self, jid):
+        """The job if it is in memory; never touches the store (for code on the event loop)."""
+        with self.lock:
+            return self.jobs.get(jid)
 
     def get(self, jid):
         with self.lock:
@@ -364,10 +375,18 @@ class JobStore:
             job = _job_from_dict(rec)
         except TypeError:
             return None
+        stray = job.training and job.training.get("state") in ("starting", "running")
+        if stray:  # recorded mid-training by a process that is gone: nobody follows that GPU job; it is stopped
+            job.training.update(state="failed", finished_at=_now(), error="the server restarted while the policy was training; the GPU job was stopped")
+            job.error = job.training["error"]
+            for st in job.stages:
+                if st.key == "policy":
+                    st.status = "failed"
+            if job.status not in TERMINAL:
+                job.status = "succeeded"  # the build had finished for the training to start
         if job.status not in TERMINAL:  # recorded mid-way: it can't be running any more
             job.status, job.error = "failed", "the server restarted while this job was running"
-            if job.training and job.training.get("state") in ("starting", "running"):
-                job.training["state"] = "failed"
+        job.updated_at = _now()  # not the record's: the sweep must not expire it the moment it is back
         with self.lock:
             if jid in self.jobs:
                 return self.jobs[jid]
@@ -376,7 +395,23 @@ class JobStore:
             if rec.get("owner"):
                 self.owner_key[jid] = rec["owner"]
             self.dirty.add(jid)
+        if stray:
+            self.train.recover(job)  # cancels its call, removes its Volume folder (best effort)
+            self.save_record(job)
+            try:
+                self.persist.put_training(jid, self.train.training_info(job))  # the index says it ended too
+            except Exception:  # noqa: BLE001
+                log.exception("training index write failed", extra={"fields": {"job": jid}})
         return job
+
+    def save_record(self, job):
+        """The job's record alone (no files): what a training start or end changes."""
+        if job.runner != "live" or not re.fullmatch(r"[a-f0-9]{32}", job.id):
+            return
+        try:
+            self.persist.save_record(job.id, self.owner_key.get(job.id), self._record(job))
+        except Exception:  # noqa: BLE001
+            log.exception("record write failed", extra={"fields": {"job": job.id, "store": self.persist.kind}})
 
     def mine(self, owner_key):
         """The visitor's jobs: the store's records and the ones in memory (running ones have no record yet), newest first."""
@@ -467,8 +502,8 @@ class JobStore:
         """A live job's training ends: done | failed | cancelled. The job's status returns to the build's (succeeded),
         the policy stage records the outcome, and the training's own state and error are kept apart from the job's."""
         with self.lock:
-            if not job.training:
-                return
+            if not job.training or job.training.get("state") not in ("starting", "running"):
+                return  # already ended (a shutdown's cancel racing the follow thread): the first word stands
             job.training.update(state=state, finished_at=_now(), error=error)
             for s in job.stages:
                 if s.key == "policy":
@@ -481,6 +516,12 @@ class JobStore:
         self.flush()
         log.info("training finished", extra={"fields": {"job": job.id, "state": state, "error": error,
                                                         "seconds": round(job.updated_at - (job.training.get("started_at") or job.updated_at), 1)}})
+        if persist:
+            try:
+                self.persist.put_training(job.id, self.train.training_info(job))
+            except Exception:  # noqa: BLE001
+                log.exception("training index write failed", extra={"fields": {"job": job.id}})
+            self.keep(job)
 
     # --- running -----------------------------------------------------------------------------
     def start(self, job):

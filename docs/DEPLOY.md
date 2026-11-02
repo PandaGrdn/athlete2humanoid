@@ -109,6 +109,7 @@ failure modes and health endpoints: `docs/SYSTEM_DESIGN.md`.
 | `A2H_TRAIN_TIMEOUT_H` | `3` | A training still running after this is cancelled on Modal and the job fails |
 | `A2H_TRAIN_BRANCH` | `main` | The repository branch the GPU job clones (`scripts/modal_app.py` `run_job`) |
 | `A2H_STORE` | unset | Where finished builds and trainings are kept past a restart (`server/store.py`): unset = files under `A2H_DATA_DIR/persist`; `gcs://<bucket>[/<prefix>]` = a Cloud Storage bucket (`scripts/cloudrun_store.sh`) |
+| `A2H_STORE_TTL_D` / `A2H_STORE_MAX_MB` | `30` / `2000` | The local store's caps: days a kept job stays, total size (the oldest go first). The bucket gets a 30-day lifecycle rule from the script instead. |
 | `A2H_LIST_JOBS` | on locally, off hosted | `GET /api/jobs` (debugging) |
 | `A2H_LOG_FORMAT` / `A2H_LOG_LEVEL` | `json` / `INFO` | Structured logs on stderr; `text` for humans |
 | `A2H_RUN_EXCLUDE` | `*smoke*` | Glob patterns of run folders to hide |
@@ -301,16 +302,26 @@ any more (pruned, expired, or from before a restart) comes back from its record 
 its files are fetched into the job's folder again before they are served. Raw uploads are never kept.
 
 Two backends behind one interface, chosen by `A2H_STORE`: local files under `A2H_DATA_DIR/persist` with a SQLite
-record table (the default, and what the tests use; on a single always-on machine that is already durable), or a
-Cloud Storage bucket (`gcs://<bucket>[/<prefix>]`: objects `jobs/<id>/<file>`, the record at `jobs/<id>/record.json`,
-and an owner index `owners/<key>/<id>` so a visitor's list is one prefix listing). No Firestore: a JSON record per job
-in the bucket is enough for this, and it needs one dependency (`google-cloud-storage`) and one IAM binding.
+record table (the default, and what the tests use; on a single always-on machine that is already durable, capped by
+`A2H_STORE_TTL_D` and `A2H_STORE_MAX_MB`; on Cloud Run that folder is `/tmp`, so `/api/health` says `"durable": false`
+and the page says so), or a Cloud Storage bucket (`gcs://<bucket>[/<prefix>]`: objects `jobs/<id>/<file>`, the record at
+`jobs/<id>/record.json`, an owner index `owners/<key>/<id>` so a visitor's list is one prefix listing, and
+`trainings/<id>` for GPU trainings). No Firestore: a JSON record per job in the bucket is enough for this, and it
+needs one dependency (`google-cloud-storage`) and one IAM binding (`objectAdmin`; `/readyz` lists one object, which
+needs no bucket metadata permission).
+
+The training index matters on a host that scales to zero: a GPU training is written to the store the moment it starts
+(and again with its Modal call id), so a new instance counts it against the day's allowance, never lets a second one
+start beside it, and cancels the call when it meets the job (nobody follows it any more). Restores of a kept job's
+files take one lock per job, write whole files under unique temporary names, fetch `live.json` last, and fetch again
+whatever is still missing on the next request.
 
 **No accounts.** The browser makes a 32-hex key on its first visit (`localStorage` `a2h_owner`), sends it as
 `X-A2H-Owner` on every API call, and the server records it on each job it creates. `GET /api/my/jobs` lists the
 visitor's builds and trainings (status, date, the task spec's one line, links to the build view, `env.zip` and the
 trained policy), which is the `/my` page ("Mine" in the navigation). The page shows a link with `?key=` that restores
-the key on another device; anyone with the link sees that list, so it is theirs to share or not. Without the key
+the key on another device (in the URL fragment, so it reaches no server log, and the page takes it out of the
+address at once); anyone with the link sees that list, so it is theirs to share or not. Without the key
 nobody can list anyone's jobs; a job's id stays the only key to its files, and the hosted job list stays off.
 `/api/health` reports `"store": {"kind": "local" | "gcs"}`; `/readyz` checks the store answers.
 

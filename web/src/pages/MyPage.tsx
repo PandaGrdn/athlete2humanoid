@@ -1,21 +1,29 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link, Navigate, useSearchParams } from "react-router";
+import { Link } from "react-router";
 import { api, fmt, OWNER_KEY_RE, ownerKey, setOwnerKey, url, type MyJob } from "../api";
 import { useHealth } from "../App";
 import { Icon, StatusPill } from "../components/ui";
 import { Typed } from "../components/pixel";
 
 // /my: this visitor's environments and trainings, kept by the API's store (server/store.py) under the key the browser
-// made on its first visit (localStorage, sent as X-A2H-Owner). A link with ?key= restores the key on another device.
+// made on its first visit (localStorage, sent as X-A2H-Owner). A link with #key= restores the key on another device:
+// a fragment, so the key never reaches the host's logs or a proxy, and it is taken out of the address at once.
+
+/** The key a /my#key=... link carries, taken out of the address bar (history and logs never keep it). */
+function takeKeyFromHash(): string | null {
+  const m = /(?:^#|[#&])key=([a-f0-9]{32})\b/i.exec(window.location.hash);
+  if (!m) return null;
+  window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  return m[1].toLowerCase();
+}
 
 export default function MyPage() {
-  const [params] = useSearchParams();
-  const given = params.get("key")?.trim().toLowerCase() ?? "";
-  if (given && OWNER_KEY_RE.test(given)) {
-    setOwnerKey(given);
-    return <Navigate to="/my" replace />;
-  }
-  return <MyList />;
+  const [restored, setRestored] = useState(0);
+  useEffect(() => {
+    const k = takeKeyFromHash();
+    if (k && OWNER_KEY_RE.test(k)) { setOwnerKey(k); setRestored((n) => n + 1); }
+  }, []);
+  return <MyList key={restored} />;
 }
 
 function MyList() {
@@ -26,7 +34,7 @@ function MyList() {
   const [copied, setCopied] = useState(false);
   const [paste, setPaste] = useState("");
   const [pasteErr, setPasteErr] = useState<string | null>(null);
-  const link = `${window.location.origin}/my?key=${key}`;
+  const link = `${window.location.origin}/my#key=${key}`;
 
   useEffect(() => {
     if (!health) return;
@@ -44,7 +52,7 @@ function MyList() {
   };
   const useKey = (e: FormEvent) => {
     e.preventDefault();
-    const k = paste.trim().toLowerCase().replace(/^.*[?&]key=/, "");
+    const k = paste.trim().toLowerCase().replace(/^.*[?&#]key=/, "");
     if (!OWNER_KEY_RE.test(k)) return setPasteErr("A key is 32 letters and digits, or the link that carries one.");
     setOwnerKey(k);
     window.location.assign("/my");
@@ -79,7 +87,7 @@ function MyList() {
       </div>
 
       {!health && apiError && <div className="notice"><Icon name="cube" /><div>The pipeline API isn't reachable, so the list can't load right now.</div></div>}
-      {health && health.store === null && <div className="notice"><Icon name="cube" /><div>This deployment keeps nothing between restarts: builds and trainings stay until the API restarts or their upload expires.</div></div>}
+      {health && !health.store?.durable && <div className="notice"><Icon name="cube" /><div>This deployment keeps builds and trainings only while its API instance lives: they stay until it restarts or their upload expires.</div></div>}
       {err && <div className="error-box">{err}</div>}
       {jobs && jobs.length === 0 && (
         <div className="card card-pad" style={{ maxWidth: 820 }}>

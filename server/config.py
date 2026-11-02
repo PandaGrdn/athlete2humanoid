@@ -40,6 +40,7 @@ A2H_TRAIN_CONCURRENCY  trainings at once (default: 1; each one is a GPU)
 A2H_RATE_TRAIN      POST /api/jobs/{id}/train per client per hour (default: 12; bounds invite-code guessing)
 A2H_STORE           where finished builds and trainings are kept past a restart (server/store.py): unset = files
                     under A2H_DATA_DIR/persist; gcs://<bucket>[/<prefix>] = a Cloud Storage bucket
+A2H_STORE_TTL_D / A2H_STORE_MAX_MB  the local store's caps: days a kept job stays (30), total size (2000 MB)
 """
 
 import os
@@ -148,6 +149,8 @@ class Settings:
     train_backend: object = field(default=None, repr=False)  # tests: a stand-in for server/train.py's ModalBackend
     # Durable storage for what visitors made (server/store.py): local files by default, a GCS bucket when hosted.
     store_url: str = field(default_factory=lambda: _env("A2H_STORE", ""))
+    store_ttl_d: float = field(default_factory=lambda: _num("A2H_STORE_TTL_D", 30))
+    store_max_mb: float = field(default_factory=lambda: _num("A2H_STORE_MAX_MB", 2000))
     store_backend: object = field(default=None, repr=False)  # tests: a Store to use instead
     colab_policies: list = field(default_factory=lambda: _list("A2H_COLAB_POLICIES", "task"))
     colab_init: str = field(default_factory=lambda: _env("A2H_COLAB_INIT", str(REPO / "outputs" / "remote_latent_final")))
@@ -194,7 +197,8 @@ class Settings:
                             ("A2H_TRAIN_PER_DAY", self.train_per_day, 0), ("A2H_TRAIN_ITERS", self.train_iters, 1),
                             ("A2H_TRAIN_ATTEMPT_EVERY", self.train_attempt_every, 1), ("A2H_TRAIN_NUM_ENVS", self.train_num_envs, 1),
                             ("A2H_TRAIN_TIMEOUT_H", self.train_timeout_h, 0.01), ("A2H_TRAIN_CONCURRENCY", self.train_concurrency, 1),
-                            ("A2H_RATE_TRAIN", self.rate_train_per_hour, 1)]:
+                            ("A2H_RATE_TRAIN", self.rate_train_per_hour, 1), ("A2H_STORE_TTL_D", self.store_ttl_d, 0.01),
+                            ("A2H_STORE_MAX_MB", self.store_max_mb, 1)]:
             if v < lo:
                 errs.append(f"{name} must be >= {lo:g}, got {v:g}")
         if unknown := sorted(set(self.runners) - RUNNERS):

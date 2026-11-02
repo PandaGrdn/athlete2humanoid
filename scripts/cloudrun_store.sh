@@ -18,8 +18,13 @@ if ! gcloud storage buckets describe "gs://$BUCKET" --project "$PROJECT" >/dev/n
 else
   say "bucket exists"
 fi
+DAYS="${A2H_STORE_TTL_D:-30}"
+say "lifecycle: objects older than $DAYS days are deleted (a visitor's builds and trainings are kept that long)"
+LIFECYCLE="$(mktemp)"; trap 'rm -f "$LIFECYCLE"' EXIT
+printf '{"rule": [{"action": {"type": "Delete"}, "condition": {"age": %s}}]}\n' "$DAYS" > "$LIFECYCLE"
+gcloud storage buckets update "gs://$BUCKET" --project "$PROJECT" --lifecycle-file "$LIFECYCLE" --quiet
 SA="$(gcloud projects describe "$PROJECT" --format 'value(projectNumber)')-compute@developer.gserviceaccount.com"
-say "service account $SA: objectAdmin on the bucket"
+say "service account $SA: objectAdmin on the bucket (objects only; /readyz lists one object, no bucket metadata needed)"
 gcloud storage buckets add-iam-policy-binding "gs://$BUCKET" --project "$PROJECT" \
   --member "serviceAccount:$SA" --role roles/storage.objectAdmin --quiet >/dev/null
 
