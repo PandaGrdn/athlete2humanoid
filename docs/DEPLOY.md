@@ -311,8 +311,11 @@ needs one dependency (`google-cloud-storage`) and one IAM binding (`objectAdmin`
 needs no bucket metadata permission).
 
 The training index matters on a host that scales to zero: a GPU training is written to the store the moment it starts
-(and again with its Modal call id), so a new instance counts it against the day's allowance, never lets a second one
-start beside it, and cancels the call when it meets the job (nobody follows it any more). Restores of a kept job's
+(one row per training, a retry included, and again with its Modal call id), and the instance following it refreshes
+the row's heartbeat every poll. Another instance counts a row with a fresh heartbeat as running (two can run briefly
+during a rollout) and leaves it alone; a row whose heartbeat is older than three polls (90 s at least) belongs to a
+process that died, so the next instance to meet it cancels the call and marks the training failed. The day's
+allowance counts rows. `/api/health` and `/readyz` read counts cached for 10 s. Restores of a kept job's
 files take one lock per job, write whole files under unique temporary names, fetch `live.json` last, and fetch again
 whatever is still missing on the next request.
 

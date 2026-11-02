@@ -212,9 +212,8 @@ def test_restart_mid_training_counts_and_cancels(tmp_path, runs_dir):
     assert len(idx) == 1 and idx[0]["state"] == "running" and idx[0]["call_id"] == "fc-1"
     rec = store.persist.get_record(jid)
     assert rec["training"]["state"] == "running" and rec["training"]["call_id"] == "fc-1"
-    # the instance dies: its journal is gone, the store stays; a new instance comes up on it (the old follow thread
-    # is left as it is: a dead process writes nothing more, and a cancel here would record the end it never saw)
-    store.stop.set()
+    # the instance dies: its journal is gone, the store stays; a new instance comes up on it
+    die(store)
     (s.data_dir / "jobs.sqlite3").unlink()
     fake2 = FakeBackend()
     s2 = Settings()
@@ -222,12 +221,75 @@ def test_restart_mid_training_counts_and_cancels(tmp_path, runs_dir):
     s2.modal_token, s2.train_code, s2.train_per_day, s2.train_backend, s2.store_backend = True, "", 1, fake2, store.persist
     fresh = JobStore(s2, Journal(s2.data_dir / "jobs.sqlite3"), train_backend=fake2)
     assert fresh.train.today() == 1  # the day's allowance is spent: no second GPU job per idle cycle
-    assert fresh.train.active() == []  # ... and nothing counts as running
-    assert fake2.cancelled == ["fc-1"] and fake2.removed == [f"live_{jid[:12]}"]  # the stray call was stopped
+    fresh.train.stale_s = 0.2  # a heartbeat older than this means the follower is gone (90 s for real)
+    assert fresh.train.active_count() == 1 and fake2.cancelled == []  # the heartbeat is fresh still: left alone
+    time.sleep(0.3)
+    assert fresh.train.active_count() == 0  # ... stale now: a stray, stopped
+    assert fake2.cancelled == ["fc-1"] and fake2.removed == [f"live_{jid[:12]}"]
     j = fresh.get(jid)
     assert j.status == "succeeded" and j.training["state"] == "failed" and "restarted" in j.error
     assert fresh.persist.trainings(0)[0]["state"] == "failed"
     fresh.close()
+
+
+def die(store):
+    """What a dead process leaves: no more heartbeats, no record of an end (the thread is told to stop quietly)."""
+    store.train._index = lambda job: None
+    store.train._end = lambda *a, **k: None
+    store.save_record = lambda job: None
+    store.stop.set()
+    for ev in store.cancel.values():
+        ev.set()
+    time.sleep(0.15)
+
+
+def test_a_second_live_instance_leaves_a_followed_training_alone(live_client, tmp_path):
+    """(C) Two instances during a rollout: the second counts the first's training as running and cancels nothing
+    while the first heartbeats; once the heartbeat goes stale it is a stray."""
+    from .test_train import FakeBackend, built, wait_for
+    fake = FakeBackend()
+    c = live_client(runners=["demo", "modal"], modal_token=True, train_code="", train_per_day=5, train_backend=fake,
+                    train_poll_s=0.05, rate_train_per_hour=1000)
+    jid = built(c)
+    assert c.post(f"/api/jobs/{jid}/train").status_code == 200
+    wait_for(lambda: c.get(f"/api/jobs/{jid}").json()["training"]["state"] == "running")
+    st = c.app.state.settings
+    s = Settings()
+    s.runs_dir, s.data_dir, s.runners, s.hosted, s.live_mode = st.runs_dir, tmp_path / "inst2", ["demo", "modal"], False, "0"
+    s.data_dir.mkdir()
+    s.modal_token, s.train_per_day, s.store_backend = True, 5, c.app.state.jobs.persist
+    fake2 = FakeBackend()
+    other = JobStore(s, Journal(s.data_dir / "jobs.sqlite3"), train_backend=fake2)
+    other.train.stale_s = 0.5
+    for _ in range(3):
+        assert other.train.active_count() == 1 and other.train.today() == 1
+        time.sleep(0.1)
+    assert fake2.cancelled == [] and c.get(f"/api/jobs/{jid}").json()["training"]["state"] == "running"
+    j2 = other.get(jid)  # a GET on instance 2 revives it as running, followed elsewhere
+    assert j2.training["state"] == "running" and fake2.cancelled == []
+    die(c.app.state.jobs)
+    time.sleep(0.6)
+    assert other.train.active_count() == 0 and fake2.cancelled == ["fc-1"]
+    assert other.get(jid).training["state"] == "failed"
+    other.close()
+
+
+def test_the_allowance_counts_trainings_not_jobs(live_client):
+    """(B) A retry on the same job is a training too: with two a day, the third start on one job is refused."""
+    from .test_train import FakeBackend, built, wait_for
+    fake = FakeBackend()
+    c = live_client(runners=["demo", "modal"], modal_token=True, train_code="", train_per_day=2, train_backend=fake,
+                    train_poll_s=0.05, rate_train_per_hour=1000)
+    jid = built(c)
+    for n in (1, 2):
+        assert c.post(f"/api/jobs/{jid}/train").status_code == 200
+        wait_for(lambda: len(fake.spawned) == n)
+        c.post(f"/api/jobs/{jid}/cancel")
+        wait_done(c, jid)
+    assert c.app.state.jobs.train.today() == 2 and c.get("/api/health").json()["train"]["left_today"] == 0
+    r = c.post(f"/api/jobs/{jid}/train")
+    assert r.status_code == 403 and "used up" in r.json()["detail"] and len(fake.spawned) == 2
+    assert len(c.app.state.jobs.persist.trainings(0)) == 2  # one row per training
 
 
 def test_local_store_prunes_by_age_and_size(tmp_path):
@@ -269,10 +331,10 @@ def test_gcs_store_layout(tmp_path):
     assert st.materialize(jid, out, ["env.zip", "train/attempts/iter_0050.npz", "../etc/passwd"]) == 2
     assert (out / "env.zip").read_bytes() == b"zip" and not (out / "etc").exists() and not list(out.glob("*.part"))
     assert st.ping()
-    st.put_training(jid, {"id": jid, "started_at": time.time(), "state": "running", "call_id": "fc-1"})
+    st.put_training("live_x_1", {"job": jid, "session": "live_x_1", "started_at": time.time(), "state": "running", "call_id": "fc-1"})
     assert [t["call_id"] for t in st.trainings(time.time() - 60)] == ["fc-1"] and st.trainings(time.time() + 60) == []
     st.delete(jid)
-    assert set(client.b.objects) == {f"v1/trainings/{jid}"}
+    assert set(client.b.objects) == {"v1/trainings/live_x_1"}
 
 
 def test_local_store_round_trip(tmp_path):
