@@ -97,7 +97,7 @@ export function outcome(a: AttemptMeta) {
 }
 
 /** The slider and the play buttons, over the stage. */
-export function LearnControls({ p, live, training, total }: { p: LearnPlayer; live: boolean; training: Training | null; total: number | null }) {
+export function LearnControls({ p, live, training, total, replaying = false }: { p: LearnPlayer; live: boolean; training: Training | null; total: number | null; replaying?: boolean }) {
   const st = useSyncExternalStore(p.actor?.subscribe ?? (() => () => undefined), p.actor?.getState ?? (() => null));
   const a = p.current;
   const n = p.rows.length;
@@ -117,6 +117,7 @@ export function LearnControls({ p, live, training, total }: { p: LearnPlayer; li
           {live && <button className={p.mode === "follow" ? "on" : ""} aria-pressed={p.mode === "follow"} onClick={() => p.setMode("follow")}>Latest</button>}
         </span>
         <span className="bv-learn-out mono" role="status">
+          {replaying ? "replay · " : ""}
           {p.err ? `couldn't load the attempt: ${p.err}` : p.loading && !p.actor ? "loading…" : a ? outcome(a) : live ? "the first attempt arrives after the first iterations" : ""}
           {live && training && training.state === "running" ? ` · training: iteration ${training.iteration} of ${training.iterations}` : ""}
         </span>
@@ -126,8 +127,9 @@ export function LearnControls({ p, live, training, total }: { p: LearnPlayer; li
 }
 
 /** The reward while it trained, with the attempt being played marked; under the stage. */
-export function LearnCurve({ view, current, training }: { view: AttemptsView; current: AttemptMeta | null; training: Training | null }) {
-  const pts = view.curve.length ? view.curve : [];
+export function LearnCurve({ view, current, training, upTo = null }: { view: AttemptsView; current: AttemptMeta | null; training: Training | null; upTo?: number | null }) {
+  // upTo: a replay in progress draws the curve only up to the attempt playing, so it fills in as the robot learns
+  const pts = upTo == null ? view.curve : view.curve.filter((p) => p[0] <= upTo);
   const xMax = view.iterations ?? training?.iterations ?? undefined;
   const n = view.attempts.length;
   return (

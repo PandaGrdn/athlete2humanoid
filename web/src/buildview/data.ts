@@ -174,7 +174,7 @@ export async function loadRun(run: RunDetail, set: (patch: Partial<BuildInput>) 
 // --- the policy for stage 6 --------------------------------------------------------------------------
 // The showcase bundles (public/showcase/<id>/) are the trained policies with recorded pushes. A clip that has one
 // plays its own; any other gets the nearest by what its key moments ask for, labelled as pre-trained.
-const OWN: Record<string, string> = { front_kick: "front-kick", squat_jump: "squat-jump", squat: "squat", jog_lakeside: "jog-lakeside" };
+const OWN: Record<string, string> = { front_kick: "front-kick", squat_jump: "squat-jump", squat: "squat", jog_lakeside: "jog-lakeside", dance: "dance" };
 
 export type PolicyPick = { id: string; own: boolean; tab: string; why: string };
 

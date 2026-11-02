@@ -256,6 +256,7 @@ def summarize(runs_dir, rid, folder, detail=False, env_cache=None):
             "best_aligned": best["metrics"]["aligned"] if best else None,
             "falls": sum(p["metrics"]["falls"] or 0 for p in current) if current else None,
         },
+        "replay": _replay(web.get("replay")),  # the fast replay's pacing on /build/<id> (web/src/buildview/replay.ts)
         "has_robust": rob is not None,
         "has_task_spec": safe_path(folder, TASK_SPEC) is not None,
         "clip_count": len([d for d in (folder / "clips").iterdir() if d.is_dir()]) if (folder / "clips").is_dir() else 0,
@@ -283,6 +284,19 @@ def summarize(runs_dir, rid, folder, detail=False, env_cache=None):
         "attempts": _attempts(folder, rid),  # the policy's attempts while it trained (a2h_env/attempts.py)
     })
     return s
+
+
+def _replay(v):
+    """web.json "replay": {"seconds": 25-30 or so, "attempt_stride": 100} -> the same, checked, or None (defaults)."""
+    if not isinstance(v, dict):
+        return None
+    out = {}
+    sec, stride = v.get("seconds"), v.get("attempt_stride")
+    if isinstance(sec, (int, float)) and 5 <= sec <= 180:
+        out["seconds"] = float(sec)
+    if isinstance(stride, (int, float)) and 0 <= stride <= 100000:
+        out["attempt_stride"] = int(stride)
+    return out or None
 
 
 def _attempts(folder, rid):

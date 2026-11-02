@@ -78,7 +78,8 @@ Where it appears:
 | Page | What it shows |
 |---|---|
 | `/live` → drop a clip | A real build of the upload on the API's CPU, stage by stage from the job's events (about 15–40 s; `punches.mov` took 21 s on a local CPU). Training needs a GPU, so stage 06 offers the nearest stored policy, labelled **pre-trained**. |
-| `/build/latent_s3_kick` (any `/api/runs` id; "Build in 3D" on a run page) | A stored run replayed from its own files, one stage every 2.6 s. "Replay the build" restarts it. |
+| `/build/latent_s3_kick` (any `/api/runs` id; "Build in 3D" on a run page) | A stored run replayed from its own files, fast: the five stages one after another, then (when the run has `attempts/`) stage 06 steps through the policy's attempts, every ~100th iteration for a couple of seconds each, cut at the fall, with the iteration counter and the reward curve filling in, and ends on the trained policy. About 28 s in all; the run's `web.json` `"replay": {"seconds", "attempt_stride"}` sets the pacing (`web/src/buildview/replay.ts`). "Replay the build" restarts it; touching the attempt slider takes over, slowly. |
+| `/showcase/dance` | The dance tab opens on that replay of its recorded build (`/build/latent_ra_dance`), then the trained policy to push. |
 | `/live/demo/front-kick` | A recorded live build; its 3D pieces come from the stored run of the same clip. |
 | `/jobs/<id>` for a demo-runner job | The same view, each stage revealed as the replayed job reaches it. |
 

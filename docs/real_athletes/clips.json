@@ -84,6 +84,27 @@
     "Shadow boxing,",
     "from one video."
    ]
+  },
+  {
+   "name": "dance",
+   "short": "dance",
+   "title": "Dance",
+   "description": "A dance on a phone video: the arms and hands carry the moves. The G1 trains on them from this video.",
+   "page": null,
+   "file": null,
+   "licence": "own recording",
+   "author": "the project's author",
+   "credit": "The project's own recording",
+   "trim_s": [
+    0.0,
+    5.93
+   ],
+   "in_place": false,
+   "tab": "Dance",
+   "showcase_title": [
+    "The dance,",
+    "learned."
+   ]
   }
  ],
  "rejected": [

@@ -84,6 +84,35 @@
     "url": "https://www.pexels.com/video/a-man-wearing-sunglasses-running-in-the-street-4065467/",
     "licence": "Pexels License"
    }
+  },
+  {
+   "id": "dance",
+   "tab": "Dance",
+   "title": [
+    "The dance,",
+    "learned."
+   ],
+   "kicker": "One phone video → one policy",
+   "lede": "A dance on a phone video: the arms and hands carry the moves. Watch the robot build its environment and learn, attempt by attempt, then push the trained policy.",
+   "video": "A phone video of a dance, the project's own recording. SAM 3.1 segments the person, SAM 3D Body lifts the pose to 3D.",
+   "policy": "PPO in mjlab on 36 automatic variants of the clip, warm-started from the squat-jump tracker, 1500 iterations. The network's own run in MuJoCo, recorded.",
+   "facts": [
+    {
+     "v": "0%",
+     "l": "of clean runs pass the clip's spec (3 of 7 key moments required)"
+    },
+    {
+     "v": "5%",
+     "l": "of runs on held-out variants pass their own spec"
+    }
+   ],
+   "credit": {
+    "text": "The project's own recording",
+    "url": "",
+    "licence": "own recording"
+   },
+   "caveat": "Tracks the moves closely and stays up, but passes 3 of 9 key-moment stages: not a success by the spec yet",
+   "replay_build": "latent_ra_dance"
   }
  ]
 }

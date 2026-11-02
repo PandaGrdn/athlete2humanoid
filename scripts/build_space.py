@@ -220,9 +220,12 @@ def server_has_live():
 
 
 def passes(run):
-    """A real-athlete run (remote_latent_ra_*) ships only when its policy completes its clip; an `assemble --all` copy kept
-    to inspect a failing one must not reach the site. Other runs aren't gated."""
+    """A real-athlete run (remote_latent_ra_*) ships only when its policy completes its clip, or when its web.json says
+    "ship": true (a recorded build shown with its caveat); an `assemble --all` copy kept to inspect a failing one must not
+    reach the site. Other runs aren't gated."""
     if not fnmatch.fnmatch(run.name, "remote_latent_ra_*"):
+        return True
+    if (R.read_json(run / "web.json") or {}).get("ship") is True:  # shown on purpose, caveat and all (the dance)
         return True
     ev = R.read_json(run / "eval.json") or {}
     return isinstance(ev.get("tracking_var"), dict) and ev["tracking_var"].get("task_success") is True
