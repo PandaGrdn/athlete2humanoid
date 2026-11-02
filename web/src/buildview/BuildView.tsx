@@ -6,6 +6,7 @@ import { loadIndex, loadRobot, loadShowcase, type ClipEntry, type Robot } from "
 import type { PolicyActor, PushState } from "../showcase/scene";
 import { pickPolicy, STAGES, type BuildInput, type PolicyPick, type StageKey, type StageStatus } from "./data";
 import { LearnControls, LearnCurve, useLearnPlayer } from "./learn";
+import type { ReplayPosition } from "./replay";
 import { BuildScene } from "./scene";
 import "./build.css";
 
@@ -26,6 +27,10 @@ export type BuildViewProps = {
   onVideo?: (v: HTMLVideoElement | null) => void;
   /** What the page offers in place of a policy when this host trains none (a "Train on a GPU" button). */
   offer?: ReactNode;
+  /** A fast replay in progress (buildview/replay.ts): it picks the attempt stage 06 plays and, at its end, the
+   *  trained policy. The visitor touching the attempt controls stops it (onReplayInteract). */
+  replay?: ReplayPosition | null;
+  onReplayInteract?: () => void;
 };
 
 const STRENGTHS = [{ mps: 0.5, label: "Nudge" }, { mps: 1, label: "Shove" }];
@@ -65,7 +70,7 @@ function useRobot() {
   return { clips, robot, err };
 }
 
-export default function BuildView({ input, status, kicker, follow = false, notes = {}, onVideo, offer }: BuildViewProps) {
+export default function BuildView({ input, status, kicker, follow = false, notes = {}, onVideo, offer, replay = null, onReplayInteract }: BuildViewProps) {
   const { clips, robot, err } = useRobot();
   const canvas = useRef<HTMLCanvasElement>(null);
   const [video, setVideo] = useState<HTMLVideoElement | null>(null);
@@ -122,6 +127,22 @@ export default function BuildView({ input, status, kicker, follow = false, notes
   const learnOn = learning && !pushMode;
   const learn = useLearnPlayer(scene, input.attempts, liveTraining, input.qpos, input.fps, learnOn && hasAttempts);
   const wantPolicy = !learnOn && (status.policy === "ready" || (status.policy === "offer" && accepted));
+  // the replay: each step picks an attempt (played from its start), the end puts the trained policy on
+  const stepIndex = replay?.step?.index ?? null;
+  const { setSel: learnSetSel, setMode: learnSetMode, actor: learnActor } = learn;
+  useEffect(() => {
+    if (stepIndex == null) return;
+    learnSetSel(stepIndex);
+    learnSetMode("hold");
+    learnActor?.seek(0);
+    learnActor?.setPlaying(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stepIndex]);
+  useEffect(() => {
+    if (!replay) return;
+    if (replay.closing && pick?.own) setPushMode(true);
+    else if (!replay.closing) setPushMode(false);
+  }, [replay?.closing, pick?.own, !!replay]);
   useEffect(() => {
     if (!scene || !pick || !wantPolicy) return;
     let live = true;
@@ -250,8 +271,9 @@ export default function BuildView({ input, status, kicker, follow = false, notes
         )}
         {policyErr && <div className="bv-offer"><div className="error-box">Couldn't load the policy: {policyErr}</div></div>}
         {learnOn && (hasAttempts || liveTraining) && (
-          <div className="bv-policy">
-            <LearnControls p={learn} live={liveTraining} training={input.training} total={input.attempts?.iterations ?? input.training?.iterations ?? null} />
+          <div className="bv-policy" onPointerDownCapture={() => onReplayInteract?.()}>
+            <LearnControls p={learn} live={liveTraining} training={input.training} total={input.attempts?.iterations ?? input.training?.iterations ?? null}
+              replaying={!!replay && !replay.closing && !replay.done} />
             {pick?.own && status.policy === "ready" && <button className="btn sm" onClick={() => setPushMode(true)}>Push the trained policy</button>}
           </div>
         )}
@@ -264,7 +286,8 @@ export default function BuildView({ input, status, kicker, follow = false, notes
         <div className="bv-below">
           {spec && <EnvironmentPanel spec={spec} t={t} onSeek={seek} />}
           {variants && <VariantList v={variants} env={input.env} />}
-          {learnOn && input.attempts && <LearnCurve view={input.attempts} current={learn.current} training={input.training} />}
+          {learnOn && input.attempts && <LearnCurve view={input.attempts} current={learn.current} training={input.training}
+            upTo={replay && !replay.closing ? replay.step?.iteration ?? 0 : null} />}
         </div>
       )}
     </section>

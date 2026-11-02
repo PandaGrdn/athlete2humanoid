@@ -120,3 +120,9 @@
 
 /* aether: square corners, hairlines */
 [data-ui="aether"] :is(.sc-crop, .sc-chip, .sc-seg, .sc-steps) { border-radius: 2px; }
+
+/* a tab that opens on a recorded build's replay (pages/BuildPage.tsx BuildReplay): the head and the tabs only, the 3D
+   view comes under them in the page's own width */
+.sc-stage.sc-replay { height: auto; min-height: 0; padding: 0 0 24px; }
+.sc-stage.sc-replay .sc-head { position: static; padding: 76px var(--sc-gutter) 0; max-width: 640px; }
+.sc-replay-view { margin-top: -8px; }

@@ -198,7 +198,8 @@ def run(video, out, max_seconds, name="clip", sam3d=None, timeout_s=240.0, job_i
     keep = list(LANDMARKS)
     live["landmarks"] = {"names": [LANDMARKS[i] for i in keep],
                          "edges": [[keep.index(a), keep.index(b)] for a, b in LANDMARK_EDGES],
-                         "frames": [None if np.isnan(f).all() else f for f in _round(px[:, keep], 4)]}
+                         # _round already made each missing point None: a frame with none of them is None itself
+                         "frames": [None if all(pt is None for pt in f) else f for f in _round(px[:, keep], 4)]}
     live["pose_found"] = round(found, 3)
     if found < MIN_POSE_FOUND:
         save()

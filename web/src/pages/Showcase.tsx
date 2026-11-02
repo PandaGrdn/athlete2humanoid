@@ -5,6 +5,7 @@ import { Typed } from "../components/pixel";
 import { examples, type Example, type Stage } from "../examples";
 import { BASE, loadIndex, loadShowcase, type ClipEntry, type Loaded } from "../showcase/data";
 import { ShowcasePlayer, type PlayerState, type PushState } from "../showcase/scene";
+import { BuildReplay } from "./BuildPage";
 import "../showcase/showcase.css";
 
 // Trained policies in 3D, one clip at a time (public/showcase/index.json; /showcase/<id>), each next to the
@@ -60,6 +61,7 @@ export default function Showcase() {
   const [glErr, setGlErr] = useState(false);
   const [mps, setMps] = useState(STRENGTHS[0].mps);
 
+  const replayTab = entry?.replay_build ?? null; // this tab opens on a recorded build's fast replay instead of the push player
   useEffect(() => {
     if (!data || !canvas.current) return;
     let p: ShowcasePlayer;
@@ -83,14 +85,14 @@ export default function Showcase() {
 
   return (
     <div className="sc">
-      <section className="sc-stage" aria-label="The trained G1 policy in 3D">
+      <section className={`sc-stage ${replayTab ? "sc-replay" : ""}`} aria-label={replayTab ? "The build replayed in 3D, then the trained G1 policy" : "The trained G1 policy in 3D"}>
         <div className="sc-glow" aria-hidden="true" />
-        {!glErr && <canvas ref={canvas} className="sc-canvas" aria-label={`The Unitree G1 performing the ${entry?.tab.toLowerCase() ?? "clip"}. Drag to orbit, pinch or ctrl-scroll to zoom, click the robot to push it.`} />}
-        {glErr && entry?.fallback && (
+        {!replayTab && !glErr && <canvas ref={canvas} className="sc-canvas" aria-label={`The Unitree G1 performing the ${entry?.tab.toLowerCase() ?? "clip"}. Drag to orbit, pinch or ctrl-scroll to zoom, click the robot to push it.`} />}
+        {!replayTab && glErr && entry?.fallback && (
           <video className="sc-fallback" src={`${BASE}${entry.fallback}`} autoPlay muted loop playsInline />
         )}
-        {glErr && !entry?.fallback && <div className="sc-loading"><div className="notice">This view needs WebGL, which this browser has turned off.</div></div>}
-        {!data && !err && <div className="sc-loading mono"><span className="dot live" />Loading the G1 and its recordings</div>}
+        {!replayTab && glErr && !entry?.fallback && <div className="sc-loading"><div className="notice">This view needs WebGL, which this browser has turned off.</div></div>}
+        {!replayTab && !data && !err && <div className="sc-loading mono"><span className="dot live" />Loading the G1 and its recordings</div>}
         {err && <div className="sc-loading"><div className="error-box">Couldn't load the showcase: {err}</div></div>}
 
         {entry && (
@@ -114,6 +116,22 @@ export default function Showcase() {
         {player && <Hint />}
         {data && player && <SourceVideo data={data} player={player} />}
       </section>
+
+      {replayTab && entry && (
+        <div className="container sc-replay-view" key={replayTab}>
+          <BuildReplay rid={replayTab} kicker={<>Showcase · {entry.tab}</>}
+            head={(run, restart) => (
+              <div className="job-head" style={{ marginTop: 18 }}>
+                <p className="muted" style={{ flex: 1, minWidth: 240, fontSize: 14, margin: 0 }}>
+                  The whole pipeline on this clip, replayed from its own files in about {Math.round(run?.replay?.seconds ?? 28)} s: the stages, then the policy
+                  learning attempt by attempt, then the trained policy, which you can push. Touch the attempt slider to take over.
+                </p>
+                <button className="btn sm" onClick={restart}><Icon name="play" size={14} />Replay</button>
+                <Link className="btn sm ghost" to={`/build/${replayTab}`}>Full build view <Icon name="arrow" size={14} /></Link>
+              </div>
+            )} />
+        </div>
+      )}
 
       {player && data && (
         <Controls player={player} stages={stages} duration={data.show.frames / data.show.fps} mps={mps} setMps={setMps} />

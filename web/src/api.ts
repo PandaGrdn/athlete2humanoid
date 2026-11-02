@@ -93,6 +93,7 @@ export type RunSummary = {
   video: FileRef | null;
   poster: FileRef | null;
   policies_trained: string[];
+  replay?: { seconds?: number; attempt_stride?: number } | null; // the fast replay's pacing (buildview/replay.ts)
   headline: { retarget_aligned: number | null; best_policy: string | null; best_aligned: number | null; falls: number | null };
   has_robust: boolean;
   has_task_spec?: boolean;

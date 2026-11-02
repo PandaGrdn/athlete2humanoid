@@ -54,6 +54,7 @@ export type ClipEntry = {
   id: string; tab: string; title: [string, string]; kicker: string; lede: string; video: string; policy: string;
   facts: { v: string; l: string }[]; research?: string | null; fallback?: string; caveat?: string;
   credit?: { text: string; url: string; licence: string }; // the source video's attribution (a clip someone else filmed)
+  replay_build?: string; // a run id: the tab opens on that recorded build's fast replay (pages/BuildPage.tsx), the policy at its end
 };
 export const loadIndex = () => get(`${BASE}showcase/index.json`, "json") as Promise<{ clips: ClipEntry[] }>;
 
