@@ -150,6 +150,8 @@ https://athlete2humanoid.pages.dev. The header says "Offline demo". Without an A
   recorded attempts every ~100th iteration, then the trained policy). The pacing is the run's `web.json`
   `"replay": {"seconds": 28, "attempt_stride": 100}` (defaults when absent; `web/src/buildview/replay.ts`). A showcase
   tab with `"replay_build": "<run>"` in `web/public/showcase/index.json` opens on that replay (the dance does).
+  A real-athlete run whose policy doesn't pass its spec ships only with `"ship": true` in its `web.json` (the dance:
+  shown with its caveat).
   - Each is a real run of the live worker, recorded by `scripts/build_live_demo.py`: its stage messages at the times they arrived, pose landmarks, the G1 retarget, and the task environment with Muse's moment names.
   - Then a fast replay of PPO training (the real run's reward curve), and the policies trained on that clip, each scored under today's checker.
 - **Your own video:** a dropped file stays in the browser. The page says live builds need the API and points at the recordings.
