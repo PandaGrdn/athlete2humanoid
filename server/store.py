@@ -29,8 +29,17 @@ from pathlib import Path
 
 log = logging.getLogger("a2h.store")
 OWNER_HEADER = "x-a2h-owner"
-OWNER_KEY = re.compile(r"^[a-f0-9]{32}$")
-REL = re.compile(r"^(?:[\w.-]+/)*[\w.-]+$")  # a kept file's path under the job: no '..', no leading slash
+OWNER_KEY = re.compile(r"[a-f0-9]{32}")  # used with fullmatch
+_REL = re.compile(r"(?:[\w.-]+/)*[\w.-]+")  # a kept file's path under the job: plain segments, no leading slash
+
+
+def safe_rel(rel):
+    """True for a file path under a job that can't escape it: no '..' segment, no slash at either end."""
+    return isinstance(rel, str) and bool(_REL.fullmatch(rel)) and not ({".", ".."} & set(rel.split("/")))
+
+
+class REL:  # the old name: REL.match(rel) is safe_rel(rel)
+    match = fullmatch = staticmethod(safe_rel)
 LIVE_FILES = ("processed.mp4", "mask.mp4", "live.json", "task_spec.json", "qpos.npy", "env.zip")
 TRAIN_FILES = ("train/weights.json", "train/policy.pt", "train/attempts/index.json")
 MAX_RECORD_LOGS = 60
@@ -42,7 +51,7 @@ def owner_key(headers):
     for k, v in items:
         if k.lower() == OWNER_HEADER:
             v = v.strip().lower()
-            return v if OWNER_KEY.match(v) else None
+            return v if OWNER_KEY.fullmatch(v) else None
     return None
 
 
@@ -57,12 +66,13 @@ def kept_files(folder):
 
 
 def store_for(settings):
-    """The Store A2H_STORE names: LocalStore by default."""
+    """The Store A2H_STORE names: LocalStore by default, with its own age and size caps (A2H_STORE_TTL_D, A2H_STORE_MAX_MB)."""
     url = getattr(settings, "store_url", "") or ""
     if url.startswith("gcs://"):
         bucket, _, prefix = url[6:].partition("/")
         return GcsStore(bucket, prefix.strip("/"))
-    return LocalStore(settings.data_dir / "persist")
+    return LocalStore(settings.data_dir / "persist", ttl_s=float(getattr(settings, "store_ttl_d", 30)) * 86400,
+                      max_bytes=int(float(getattr(settings, "store_max_mb", 2000)) * 1048576))
 
 
 class Store:
@@ -96,22 +106,33 @@ class Store:
     def delete_record(self, jid):
         raise NotImplementedError
 
+    # GPU trainings, written at start (server/train.py) so that a new process, or another instance, sees what was
+    # started today and what may still be running: {"id", "started_at", "state", "call_id", "session", "finished_at"}
+    def put_training(self, jid, info):
+        raise NotImplementedError
+
+    def trainings(self, since=0.0):
+        """-> [info] started at or after `since`."""
+        raise NotImplementedError
+
     # --- shared ----------------------------------------------------------------------------------
+    durable = True  # survives the process and the host: a local store on a host with a disk, or a bucket
+
     def keep(self, jid, folder, rels=None):
         """Put a job folder's kept files; -> the rels kept."""
         done = []
         for rel in (rels or kept_files(folder)):
-            if REL.match(rel) and (Path(folder) / rel).is_file():
+            if safe_rel(rel) and (Path(folder) / rel).is_file():
                 self.put(jid, rel, Path(folder) / rel)
                 done.append(rel)
         return done
 
     def materialize(self, jid, folder, rels):
-        """Fetch a job's kept files into its folder again (after a restart); -> how many came."""
+        """Fetch a job's kept files into its folder again (after a restart), live.json last so that a folder with
+        live.json in it is a whole one; files missing once are fetched again next time. -> how many are here now."""
         n = 0
-        for rel in rels:
-            if not REL.match(rel):
-                continue
+        order = sorted((r for r in rels if safe_rel(r)), key=lambda r: r == "live.json")
+        for rel in order:
             dest = Path(folder) / rel
             if dest.is_file():
                 n += 1
@@ -128,17 +149,63 @@ class Store:
         return True
 
 
+def _tmp_for(dest):
+    """A temp path beside dest unique to this writer: two restores of the same file never share one."""
+    import uuid
+    dest = Path(dest)
+    return dest.with_name(f".{dest.name}.{uuid.uuid4().hex[:8]}.part")
+
+
 class LocalStore(Store):
     kind = "local"
+    durable = False  # on a host whose disk is /tmp (Cloud Run) this goes with the instance; a bucket doesn't
 
-    def __init__(self, root):
+    def __init__(self, root, ttl_s=30 * 86400, max_bytes=2000 * 1048576):
         self.root = Path(root)
+        self.ttl_s, self.max_bytes = float(ttl_s), int(max_bytes)
         (self.root / "jobs").mkdir(parents=True, exist_ok=True)
         self.lock = threading.Lock()
         self.db = sqlite3.connect(str(self.root / "records.sqlite3"), check_same_thread=False, isolation_level=None, timeout=10)
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("CREATE TABLE IF NOT EXISTS records (id TEXT PRIMARY KEY, owner TEXT, updated_at REAL NOT NULL, body TEXT NOT NULL)")
         self.db.execute("CREATE INDEX IF NOT EXISTS records_owner ON records (owner, updated_at)")
+        self.db.execute("CREATE TABLE IF NOT EXISTS trainings (id TEXT PRIMARY KEY, started_at REAL NOT NULL, body TEXT NOT NULL)")
+
+    def put_training(self, jid, info):
+        with self.lock:
+            self.db.execute("INSERT OR REPLACE INTO trainings VALUES (?, ?, ?)", (jid, float(info.get("started_at") or 0), json.dumps(info)))
+            self.db.execute("DELETE FROM trainings WHERE started_at < ?", (time.time() - 3 * 86400,))
+
+    def trainings(self, since=0.0):
+        with self.lock:
+            rows = self.db.execute("SELECT body FROM trainings WHERE started_at >= ? ORDER BY started_at", (since,)).fetchall()
+        out = []
+        for (body,) in rows:
+            try:
+                out.append(json.loads(body))
+            except ValueError:
+                continue
+        return out
+
+    def prune(self, now=None):
+        """Jobs older than ttl_s, then the oldest beyond max_bytes, go (records and files); -> how many."""
+        now = now or time.time()
+        with self.lock:
+            rows = self.db.execute("SELECT id, updated_at FROM records ORDER BY updated_at").fetchall()
+        sizes = {}
+        for jid, _ in rows:
+            d = self.root / "jobs" / jid
+            sizes[jid] = sum(f.stat().st_size for f in d.rglob("*") if f.is_file()) if d.is_dir() else 0
+        total, gone = sum(sizes.values()), []
+        for jid, at in rows:
+            if now - at > self.ttl_s or total > self.max_bytes:
+                total -= sizes[jid]
+                gone.append(jid)
+        for jid in gone:
+            self.delete(jid)
+        if gone:
+            log.info("store pruned", extra={"fields": {"jobs": len(gone), "bytes_left": total}})
+        return len(gone)
 
     def _path(self, jid, rel):
         return self.root / "jobs" / jid / rel
@@ -146,7 +213,7 @@ class LocalStore(Store):
     def put(self, jid, rel, path):
         dest = self._path(jid, rel)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        tmp = dest.with_suffix(dest.suffix + ".part")
+        tmp = _tmp_for(dest)
         shutil.copyfile(path, tmp)
         tmp.replace(dest)
 
@@ -154,12 +221,22 @@ class LocalStore(Store):
         src = self._path(jid, rel)
         if not src.is_file():
             return False
-        shutil.copyfile(src, dest)
+        tmp = _tmp_for(dest)  # never serve a half-copied file: whole, then renamed into place
+        shutil.copyfile(src, tmp)
+        tmp.replace(dest)
         return True
 
     def files(self, jid):
         d = self.root / "jobs" / jid
-        return sorted(str(p.relative_to(d)) for p in d.rglob("*") if p.is_file()) if d.is_dir() else []
+        return sorted(str(p.relative_to(d)) for p in d.rglob("*") if p.is_file() and not p.name.endswith(".part")) if d.is_dir() else []
+
+    def keep(self, jid, folder, rels=None):
+        done = super().keep(jid, folder, rels)
+        try:
+            self.prune()
+        except Exception:  # noqa: BLE001
+            log.exception("store prune failed")
+        return done
 
     def delete(self, jid):
         shutil.rmtree(self.root / "jobs" / jid, ignore_errors=True)
@@ -228,10 +305,30 @@ class GcsStore(Store):
         b = self.bucket().blob(self._obj(jid, rel))
         if not b.exists():
             return False
-        tmp = Path(dest).with_suffix(Path(dest).suffix + ".part")
+        tmp = _tmp_for(dest)
         b.download_to_filename(str(tmp))
         tmp.replace(dest)
         return True
+
+    def put_training(self, jid, info):
+        self.bucket().blob(f"{self.prefix}trainings/{jid}").upload_from_string(json.dumps(info), content_type="application/json")
+
+    def trainings(self, since=0.0):
+        out = []
+        for b in list(self.bucket().list_blobs(prefix=f"{self.prefix}trainings/")):
+            try:
+                info = json.loads(b.download_as_bytes())
+            except (ValueError, TypeError):
+                continue
+            at = float(info.get("started_at") or 0)
+            if at < time.time() - 3 * 86400:  # old: tidy as we go
+                try:
+                    b.delete()
+                except Exception:  # noqa: BLE001
+                    pass
+            elif at >= since:
+                out.append(info)
+        return sorted(out, key=lambda i: i.get("started_at", 0))
 
     def files(self, jid):
         p = self._obj(jid, "")
@@ -264,7 +361,7 @@ class GcsStore(Store):
     def records_for(self, owner):
         p = f"{self.prefix}owners/{owner}/"
         ids = [b.name[len(p):] for b in self.bucket().list_blobs(prefix=p)]
-        out = [r for r in (self.get_record(j) for j in ids if OWNER_KEY.match(j) or re.fullmatch(r"[a-f0-9]{12,32}", j)) if r]
+        out = [r for r in (self.get_record(j) for j in ids if re.fullmatch(r"[a-f0-9]{12,32}", j)) if r]
         out.sort(key=lambda r: r.get("updated_at", 0), reverse=True)
         return out
 
@@ -274,7 +371,10 @@ class GcsStore(Store):
             b.delete()
 
     def ping(self):
+        """The bucket answers a listing (storage.objects.list, which objectAdmin has; bucket.exists() would need
+        storage.buckets.get)."""
         try:
-            return self.bucket().exists()
+            list(self.bucket().list_blobs(prefix=f"{self.prefix}jobs/", max_results=1))
+            return True
         except Exception:  # noqa: BLE001
             return False

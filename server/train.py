@@ -168,7 +168,27 @@ class TrainRunner:
             return False, "disabled"
         return self.backend.status()
 
+    def training_info(self, job):
+        """What the store's training index holds for a job (server/store.py put_training)."""
+        tr = job.training or {}
+        return {"id": job.id, "started_at": tr.get("started_at"), "finished_at": tr.get("finished_at"), "state": tr.get("state"),
+                "call_id": tr.get("call_id"), "session": tr.get("session")}
+
+    def _index(self, job):
+        try:
+            self.store.persist.put_training(job.id, self.training_info(job))
+        except Exception:  # noqa: BLE001
+            log.exception("training index write failed", extra={"fields": {"job": job.id}})
+
     def active(self):
+        """Trainings running now: this process's, after any the store knows of from a process that is gone have been
+        revived (which cancels them: nobody follows them). So two instances can't both keep one running."""
+        try:
+            for info in self.store.persist.trainings(time.time() - 2 * max(1.0, self.settings.train_timeout_h) * 3600):
+                if info.get("state") in ("starting", "running") and self.store.peek(info["id"]) is None:
+                    self.store.get(info["id"])  # revives it: a stray training is stopped and marked failed
+        except Exception:  # noqa: BLE001
+            log.exception("training index read failed")
         with self.store.lock:
             return [j for j in self.store.jobs.values() if j.training and j.training.get("state") in ("starting", "running")]
 
@@ -187,8 +207,16 @@ class TrainRunner:
             self._end(job, "failed", "the server stopped while the policy was training; the GPU job was stopped")
 
     def started_since(self, since):
+        """Trainings started since `since`, from the store's index (every start is written there first) and memory."""
+        ids = set()
+        try:
+            ids = {i["id"] for i in self.store.persist.trainings(since) if i.get("id")}
+        except Exception:  # noqa: BLE001
+            log.exception("training index read failed")
         with self.store.lock:
-            return sum(1 for j in self.store.jobs.values() if j.training and (j.training.get("started_at") or 0) >= since)
+            ids |= {j.id for j in self.store.jobs.values() if j.training and (j.training.get("started_at") or 0) >= since}
+            ids |= {j.id for j in self.store.jobs.values() for h in (j.training or {}).get("history", []) if (h.get("started_at") or 0) >= since}
+        return len(ids)
 
     def today(self):
         return self.started_since(time.time() - 86400)
@@ -219,6 +247,8 @@ class TrainRunner:
         self.store.set_stage(job, "policy", 0.0, status="running")
         self.store.cancel[job.id].clear()  # a cancelled training's flag must not stop the next one at once
         self.store.flush()
+        self._index(job)  # counted from now on, whatever happens to this process
+        self.store.save_record(job)
         threading.Thread(target=self._run, args=(job,), daemon=True, name=f"train-{job.id}").start()
         return job
 
@@ -260,6 +290,8 @@ class TrainRunner:
             return self._end(job, "failed", "the GPU didn't take the job; try again later")
         self._set(job, state="running", call_id=call_id)
         store.flush()
+        self._index(job)  # with the call id: a process that finds this later can cancel the call
+        store.save_record(job)
         store.log(job, "policy", f"running on a Modal GPU (call {call_id}); the robot's first attempt arrives after "
                                  f"{tr['attempt_every']} iterations")
         state = "running"
@@ -298,7 +330,7 @@ class TrainRunner:
         log_off, index_seen, last_line, unknown = 0, set(), None, 0
         state = "running"
         while True:
-            if cancel.wait(self.poll_s if state == "running" else 0):
+            if cancel.wait(self.poll_s):  # every poll waits, including those after an "unknown" (no spinning)
                 return "cancelled", index_seen, None, False
             log_off, last_line = self._follow_log(job, session, log_off, last_line)
             index_seen = self._mirror_attempts(job, session, index_seen)

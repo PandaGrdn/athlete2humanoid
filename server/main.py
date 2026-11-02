@@ -19,6 +19,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -172,7 +173,9 @@ def create_app(settings=None):
                      "pose": settings.live_pose}  # "modal": SAM 3.1 + SAM 3D Body on a GPU; "cpu": MediaPipe here
             if settings.live_ok else None,
             "train": train_status(),  # the modal runner: a live build trained on a GPU, when this host offers it
-            "store": {"kind": store.persist.kind},  # where finished builds and trainings are kept (server/store.py)
+            # where finished builds and trainings are kept (server/store.py); durable: past this host's lifetime (a
+            # bucket, or local files on a machine with a disk; not /tmp on a hosted instance)
+            "store": {"kind": store.persist.kind, "durable": bool(store.persist.durable or not settings.hosted)},
         }
 
     @app.get("/api/runs")
@@ -317,7 +320,7 @@ def create_app(settings=None):
     @app.get("/api/jobs/{jid}/events")
     async def job_events(jid: str, request: Request):
         """Server-sent events: the full job on every change, until it finishes."""
-        if store.get(jid) is None:
+        if await run_in_threadpool(store.get, jid) is None:  # may read the store (a kept job): off the event loop
             raise HTTPException(404, "job not found")
         if app.state.streams >= settings.max_streams:
             # the client falls back to polling GET /api/jobs/{id}
@@ -334,7 +337,7 @@ def create_app(settings=None):
         async def _events():
             last = -1
             while True:
-                job = store.get(jid)
+                job = store.peek(jid)  # in memory now (just revived if need be); never the store from the loop
                 if job is None or await request.is_disconnected():
                     return
                 if job.version != last:

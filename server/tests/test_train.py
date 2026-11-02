@@ -332,14 +332,17 @@ def test_lost_contact_is_not_a_failed_job(train_client):
 
     class Unavailable(Exception):
         pass
-    fake.state = lambda call_id: (_ for _ in ()).throw(Unavailable("UNAVAILABLE"))
+    fake.state_ = "unknown"  # what the real backend answers to a gRPC-style error (below)
     real = T.ModalBackend()
     real._call = lambda cid: type("C", (), {"get": lambda self, timeout=0: (_ for _ in ()).throw(Unavailable("x"))})()
     assert real.state("fc-1") == "unknown"
     real._call = lambda cid: type("C", (), {"get": lambda self, timeout=0: (_ for _ in ()).throw(ValueError("cancelled"))})()
     assert real.state("fc-1") == "failed"
+    time.sleep(0.3)  # several polls of "unknown"
     j = c.get(f"/api/jobs/{jid}").json()
-    assert j["training"]["state"] == "running"
+    assert j["training"]["state"] == "running" and fake.cancelled == []
+    fake.finish(f"live_{jid[:12]}")
+    assert wait_done(c, jid)["training"]["state"] == "done"
 
 
 def test_shutdown_cancels_running_trainings(train_client):
@@ -351,7 +354,7 @@ def test_shutdown_cancels_running_trainings(train_client):
     c.app.state.jobs.close()
     j = c.app.state.jobs.get(jid)
     assert j.training["state"] == "failed" and "server stopped" in j.error and j.status == "succeeded"
-    assert fake.cancelled == ["fc-1"] and f"live_{jid[:12]}" in fake.removed
+    assert set(fake.cancelled) == {"fc-1"} and f"live_{jid[:12]}" in fake.removed  # (the follow thread's exit cancels too)
 
 
 def test_train_requests_are_rate_limited_per_client(train_client):
