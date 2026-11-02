@@ -138,6 +138,9 @@ class RateLimit:
         if scope["method"] == "POST" and scope["path"] == "/api/jobs":
             # a few in a row are fine (retrying an upload); sustained, it is rate_jobs_per_hour
             checks.append(("job", self.s.rate_jobs_per_hour, 3600.0, min(5.0, self.s.rate_jobs_per_hour)))
+        elif scope["method"] == "POST" and scope["path"].endswith("/train"):
+            # starting a training takes an invite code: a handful of tries an hour per client, not 600 a minute
+            checks.append(("train", self.s.rate_train_per_hour, 3600.0, min(10.0, self.s.rate_train_per_hour)))
         for bucket, rate, per, burst in checks:
             ok, wait = self.limiter.hit((bucket, ip), rate, per, burst)
             if not ok:

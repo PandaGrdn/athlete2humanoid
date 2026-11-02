@@ -1,6 +1,6 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { api, checkVideo, demo, fmt, url, watchJob, type Job, type LiveData, type Replay, type ReplayIndex, type RunSummary, type TaskSpec } from "../api";
+import { api, checkVideo, demo, fmt, url, watchJob, type AttemptsView, type Health, type Job, type LiveData, type Replay, type ReplayIndex, type RunSummary, type TaskSpec } from "../api";
 import { useHealth } from "../App";
 import { emptyInput, fromLive, loadRun, type BuildInput, type StageKey } from "../buildview/data";
 import { liveJobStatus } from "../buildview/hooks";
@@ -80,6 +80,7 @@ export default function LivePage() {
   const [job, setJob] = useState<Job | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [watch, setWatch] = useState(0); // bumped when a finished job starts again (training): subscribe anew
 
   // Back on /live (the nav link): start over.
   useEffect(() => {
@@ -93,7 +94,7 @@ export default function LivePage() {
     setFile((f) => f ?? localFiles.get(id) ?? null);
     api.job(id).then(setJob).catch((e) => setErr(e.message));
     return watchJob(id, setJob);
-  }, [id]);
+  }, [id, watch]);
 
   const start = async (f: File) => {
     setErr(null);
@@ -111,7 +112,7 @@ export default function LivePage() {
 
   if (!id && !file) return <LiveStart onFile={start} err={err} />;
   if (id && err && !job) return <div className="container section"><div className="error-box">Job {id}: {err}</div></div>;
-  return <LiveView job={job} file={file} uploading={busy} err={err} />;
+  return <LiveView job={job} file={file} uploading={busy} err={err} onTrained={(j) => { setJob(j); setWatch((w) => w + 1); }} />;
 }
 
 function LiveStart({ onFile, err }: { onFile: (f: File) => void; err: string | null }) {
@@ -245,7 +246,7 @@ type Source = {
   extra?: (set: (p: Partial<BuildInput>) => void) => Promise<string | null>; // resolves to the run it used
 };
 
-function LiveView({ job, file, uploading, err, source }: { job: Job | null; file: File | null; uploading: boolean; err: string | null; source?: Source }) {
+function LiveView({ job, file, uploading, err, source, onTrained }: { job: Job | null; file: File | null; uploading: boolean; err: string | null; source?: Source; onTrained?: (j: Job) => void }) {
   const [video, setVideo] = useState<HTMLVideoElement | null>(null);
   const [blob, setBlob] = useState<string | null>(null);
   const [extra, setExtra] = useState<Partial<BuildInput>>({});
@@ -276,6 +277,7 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
   const version = `${st("retarget")}/${st("environment")}/${job?.status}`;
   const [live, fresh] = useWhenReady<LiveData>(done(job, "pose"), version, running, () => source ? source.live() : api.live(id));
   const [spec] = useWhenReady<TaskSpec>(done(job, "environment"), "1", running, () => source ? source.spec() : api.jobTaskSpec(id));
+  const attempts = useAttempts(source ? null : id, job?.training ?? null);
 
   // The processed copy once it exists (trimmed and rescaled, so the landmarks line up); until then the local file.
   const processed = done(job, "video") ? (source ? source.video : api.liveVideo(id)) : null;
@@ -306,8 +308,10 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
       variants: own("variants") as BuildInput["variants"],
       spec,
       clip: source?.clip ?? null,
+      attempts,
+      training: job?.training ?? null,
     };
-  }, [live, extra, src, aligned, source?.title, source?.clip, file, spec, blob, job?.input, id, !!source]);
+  }, [live, extra, src, aligned, source?.title, source?.clip, file, spec, blob, job?.input, id, !!source, attempts, job?.training]);
   const status = liveJobStatus(job, input, (k: StageKey) => fresh && (!source?.extra || extraRun !== undefined || k === "video"));
   const fromRun = extraRun ? <>3D from the stored run <Link to={`/build/${extraRun}`}>{extraRun}</Link> of the same clip (same SAM 3D Body front end); this recording kept the 2D landmarks only.</> : null;
 
@@ -317,8 +321,14 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
 
   const elapsed = job ? (running ? Date.now() / 1000 : job.updated_at) - job.created_at : 0;
   const stageLabel = job?.stages.find((s) => s.key === job.stage)?.label;
+  const tr = job?.training ?? null;
   const title = !job ? "Uploading…" : job.status === "failed" ? "Build failed" : job.status === "cancelled" ? "Build cancelled"
-    : spec ? "Environment ready" : job.status === "queued" ? "Waiting for the builder…" : stageLabel ? `${stageLabel}…` : "Starting…";
+    : tr?.state === "done" ? "Policy trained" : tr?.state === "failed" ? "Training failed" : tr?.state === "cancelled" ? "Training cancelled"
+    : tr ? "Watch the robot learn" : spec ? "Environment ready" : job.status === "queued" ? "Waiting for the builder…" : stageLabel ? `${stageLabel}…` : "Starting…";
+  // a training that failed or was cancelled can be started again: the offer comes back
+  const canTrainAgain = !!tr && (tr.state === "failed" || tr.state === "cancelled");
+  const offer = !source && job && (st("policy") === "skipped" || (canTrainAgain && st("policy") !== "running")) && health?.train && onTrained
+    ? <TrainOffer job={job} train={health.train} onStarted={onTrained} again={canTrainAgain} /> : null;
 
   return (
     <div className="container">
@@ -339,7 +349,7 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
       {(job?.error || (err && !uploading)) && <div className="error-box" style={{ marginBottom: 20 }}>{job?.error ?? err}</div>}
 
       <Suspense fallback={BuildFallback}>
-        <BuildView input={input} status={status} follow onVideo={setVideo}
+        <BuildView input={input} status={status} follow onVideo={setVideo} offer={offer}
           kicker={source ? <>Recorded build · {source.clip.replace(/_/g, " ")}</> : <>Live build{file ? <> · {file.name}</> : null}</>}
           notes={{
             video: !source && !aligned && src ? "Your local copy; the landmarks appear on the processed clip." : null,
@@ -404,7 +414,7 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
             </div>
           )}
 
-          {job && (source ? source.policy : <PolicyCard job={job} file={file} />)}
+          {job && (source ? source.policy : <PolicyCard job={job} file={file} attempts={attempts} />)}
 
           {job && job.logs.length > 0 && (
             <details className="live-log">
@@ -426,6 +436,65 @@ function LiveView({ job, file, uploading, err, source }: { job: Job | null; file
   );
 }
 
+/** A live job's attempts (GET /api/jobs/{id}/attempts): fetched when its training starts, every 8 s while the GPU
+ *  trains, and once more when it ends. */
+function useAttempts(id: string | null, training: Job["training"] | null): AttemptsView | null {
+  const [view, setView] = useState<AttemptsView | null>(null);
+  const state = training?.state ?? null;
+  useEffect(() => {
+    if (!id || !state) return;
+    let stopped = false;
+    let timer: number | undefined;
+    const go = async () => {
+      try {
+        const v = await api.attempts(id);
+        if (!stopped) setView(v);
+      } catch { /* not yet, or a blip: next time */ }
+      if (!stopped && (state === "starting" || state === "running")) timer = window.setTimeout(go, 8000);
+    };
+    go();
+    return () => { stopped = true; window.clearTimeout(timer); };
+  }, [id, state]);
+  useEffect(() => { setView(null); }, [id]);
+  return view;
+}
+
+/** "Train on a GPU": the modal runner's gate, over the build view once the environment is built. */
+function TrainOffer({ job, train, onStarted, again = false }: { job: Job; train: NonNullable<Health["train"]>; onStarted: (j: Job) => void; again?: boolean }) {
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const needCode = train.code_required || (train.per_day > 0 && train.left_today <= 0 && train.code_accepted);
+  const go = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    try {
+      onStarted(await api.train(job.id, code.trim()));
+    } catch (x) {
+      setErr((x as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form onSubmit={go} className="bv-train">
+      <p><strong>{again ? "The training stopped." : "The environment is built."}</strong> Train the robot on it {again ? "again" : "now"}: PPO on a Modal GPU, about {train.minutes} min,
+        {" "}and you watch each attempt as it learns.{train.per_day > 0 && !train.code_required ? ` ${train.left_today} of ${train.per_day} free trainings left today.` : ""}</p>
+      <div className="bv-train-row">
+        {(needCode || train.code_accepted) && (
+          <input type="text" value={code} onChange={(e) => setCode(e.target.value)} placeholder={needCode ? "Invite code" : "Invite code (optional)"}
+            aria-label="Invite code" autoComplete="off" spellCheck={false} required={needCode} maxLength={200} />
+        )}
+        <button className="btn sm primary" type="submit" disabled={busy || train.busy || (needCode && !code.trim())}>
+          <Icon name="play" size={14} />{busy ? "Starting…" : train.busy ? "GPU busy, try again soon" : "Train on a GPU"}
+        </button>
+      </div>
+      {err && <div className="error-box" style={{ marginTop: 8 }}>{err}</div>}
+    </form>
+  );
+}
+
 /** A cheap content signature of a build piece: frames by length and end values, variants by counts. */
 function signature(x: BuildInput["skeleton"] | BuildInput["qpos"] | BuildInput["variants"] | undefined): string {
   if (!x) return "";
@@ -442,8 +511,9 @@ function retargetErr(e: Record<string, [number, number]>) {
   return `${mean.toFixed(1)} / ${max.toFixed(1)} cm`;
 }
 
-/** Training needs a GPU: offer the colab runner when this host has it, else point at trained gallery runs. */
-function PolicyCard({ job, file }: { job: Job; file: File | null }) {
+/** Training needs a GPU: the modal runner's training when there is one, else offer the colab runner when this host
+ *  has it, else point at trained gallery runs. */
+function PolicyCard({ job, file, attempts }: { job: Job; file: File | null; attempts: AttemptsView | null }) {
   const { health } = useHealth();
   const [runs, setRuns] = useState<RunSummary[] | null>(null);
   const [gpu, setGpu] = useState<Job | null>(null);
@@ -451,6 +521,7 @@ function PolicyCard({ job, file }: { job: Job; file: File | null }) {
   const [err, setErr] = useState<string | null>(null);
   const policy = job.stages.find((s) => s.key === "policy");
   const colab = !!health?.runners.includes("colab");
+  const modal = !!health?.train;
   useEffect(() => {
     if (!colab && !runs) api.runs().then(setRuns).catch(() => setRuns([]));
   }, [colab, runs]);
@@ -467,7 +538,25 @@ function PolicyCard({ job, file }: { job: Job; file: File | null }) {
     }
   };
   const trained = runs?.filter((r) => r.has_task_spec) ?? [];
+  const tr = job.training;
 
+  if (tr) {
+    const last = attempts?.attempts[attempts.attempts.length - 1] ?? null;
+    const going = tr.state === "starting" || tr.state === "running";
+    return (
+      <div className="card card-pad live-policy">
+        <div className="eyebrow">Policy · {tr.state === "done" ? "trained on a GPU" : going ? "training on a GPU" : tr.state}</div>
+        <p className="muted" style={{ fontSize: 14 }}>
+          {tr.state === "starting" ? "Uploading the environment to the GPU…"
+            : going ? `PPO in mjlab on a Modal GPU: iteration ${tr.iteration.toLocaleString()} of ${tr.iterations.toLocaleString()}${tr.reward != null ? `, mean reward ${tr.reward.toFixed(2)}` : ""}. An attempt lands every ${tr.attempt_every} iterations; the build view above plays them as they come.`
+            : tr.state === "done" ? `Trained: ${tr.iterations.toLocaleString()} iterations, ${tr.attempts} attempts recorded.${last?.stages_total ? ` The final attempt reaches ${last.stages_completed ?? 0} of ${last.stages_total} key moments${last.fell ? " and falls" : last.success ? " and completes the clip" : ""}.` : ""}`
+            : tr.error ?? job.error ?? "The training stopped."}
+        </p>
+        {tr.checkpoint && <a className="btn sm" href={url(api.policy(job.id))} download><Icon name="download" size={14} />Download the policy (rsl_rl .pt)</a>}
+        {tr.state === "done" && <p className="faint" style={{ fontSize: 12.5, marginTop: 8 }}>The checkpoint loads in mjlab's play script or <span className="mono">mjlab_rollout.py</span> with this build's training environment. It is kept with the upload for a short while.</p>}
+      </div>
+    );
+  }
   if (policy?.status === "running" || policy?.status === "done") {
     return (
       <div className="card card-pad live-policy">
@@ -483,7 +572,9 @@ function PolicyCard({ job, file }: { job: Job; file: File | null }) {
     <div className="card card-pad live-policy">
       <div className="eyebrow">Policy</div>
       <p className="muted" style={{ fontSize: 14 }}>
-        Training a policy in this environment takes 1–2 h on a GPU (PPO across thousands of simulated G1s){policy?.status !== "skipped" ? "." : colab ? "; this build stops at the environment, and the GPU runner can take it from there." : "; this host has none, so the build stops here."}
+        {modal && policy?.status === "skipped"
+          ? <>The environment is built. "Train on a GPU" in the build view above trains a policy on it (PPO in mjlab on a Modal GPU, about {health?.train?.minutes} min) and plays the robot's attempts there as it learns.{health?.train?.code_required ? " It needs an invite code." : ""}</>
+          : <>Training a policy in this environment takes 1–2 h on a GPU (PPO across thousands of simulated G1s){policy?.status !== "skipped" ? "." : colab ? "; this build stops at the environment, and the GPU runner can take it from there." : "; this host has none, so the build stops here."}</>}
       </p>
       {colab ? (
         gpu ? (
@@ -493,7 +584,7 @@ function PolicyCard({ job, file }: { job: Job; file: File | null }) {
         ) : (
           <p className="faint" style={{ fontSize: 13 }}>To train on the GPU, <Link to="/live" style={{ color: "var(--accent)" }}>upload the video again</Link> (it isn't kept in this tab after a reload).</p>
         )
-      ) : (
+      ) : modal ? null : (
         <>
           <p className="faint" style={{ fontSize: 13 }}>Runs already trained against a keypose task like this one:</p>
           {runs == null ? <div className="skeleton" style={{ height: 40 }} /> : trained.length ? (

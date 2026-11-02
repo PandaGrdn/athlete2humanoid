@@ -30,6 +30,7 @@ from server import runs as R  # noqa: E402
 
 RUN_FILES = ["eval.json", "status.json", "task_spec.json", "distill_report.json", "comparison.mp4", "reward.pt", "web.json", "variants.json",
              "poster.jpg", "robust.json", "env.zip"]
+ATTEMPT_FILES = re.compile(r"^(index\.json|iter_\d{4,6}\.npz)$")  # attempts/: the "watch it learn" recordings (scripts/record_attempts.py)
 POLICY_FILES = ["policy.mp4", "policy_metrics.json", "policy.onnx"]
 CLIP_FILES = ["meta.json", "retarget_report.json", "motion.csv", "side_by_side.mp4", "silhouette.mp4", "human.npy",
               "qpos.npy"]  # qpos.npy: the retarget the run API checks its shipped env.zip against (runs.env_bundle)
@@ -159,6 +160,8 @@ def slim_run(src, dst):
         (out / "curve.json").write_text(json.dumps(R.train_curve(pdir)))
     for cdir in sorted(d for d in (src / "clips").glob("*") if d.is_dir()):
         size += sum(copy(cdir / f, dst / "clips" / cdir.name / f) for f in CLIP_FILES)
+    if (src / "attempts" / "index.json").is_file():  # ~30 KB an attempt; the build view plays them (buildview/learn.tsx)
+        size += sum(copy(f, dst / "attempts" / f.name) for f in sorted((src / "attempts").iterdir()) if ATTEMPT_FILES.match(f.name))
     lines = R.replay_lines(src)
     if lines:
         (dst / "job.log").write_text("\n".join(t for _, t in lines) + "\n")

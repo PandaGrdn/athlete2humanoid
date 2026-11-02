@@ -44,7 +44,9 @@ export default function BuildPage() {
       </p>
       <CreditLine credit={run?.credit} />
       <BuildView input={input} status={status} follow kicker={<>Recorded build · {run?.id ?? rid}</>}
-        notes={{ policy: run ? <>This run trained: {run.policies_trained.join(", ") || "none"} (<Link to={`/runs/${run.id}`}>scores and videos</Link>). The 3D robot is the showcase recording with pushes.</> : null }} />
+        notes={{ policy: run ? (run.attempts?.attempts.length
+          ? <>This run trained: {run.policies_trained.join(", ") || "none"} (<Link to={`/runs/${run.id}`}>scores and videos</Link>). The attempts were recorded by training this run's environment again on a Modal GPU, {run.attempts.iterations?.toLocaleString() ?? ""} iterations of mjlab's tracking task on the reference and its variants.</>
+          : <>This run trained: {run.policies_trained.join(", ") || "none"} (<Link to={`/runs/${run.id}`}>scores and videos</Link>). The 3D robot is the showcase recording with pushes.</>) : null }} />
     </div>
   );
 }

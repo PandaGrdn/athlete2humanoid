@@ -62,7 +62,7 @@ export default function RunPage() {
           <CreditLine credit={run.credit} />
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <Link className="btn primary" to={`/build/${run.id}`}><Icon name="cube" size={16} />Build in 3D</Link>
+          <Link className="btn primary" to={`/build/${run.id}`}><Icon name="cube" size={16} />{run.attempts?.attempts.length ? "Watch it learn in 3D" : "Build in 3D"}</Link>
           {run.env && <a className="btn" href={url(run.env.url)} download={run.env.filename}><Icon name="download" size={16} />Download training environment</a>}
           <button className="btn" onClick={replay} disabled={busy}><Icon name="play" size={16} />Replay pipeline</button>
         </div>

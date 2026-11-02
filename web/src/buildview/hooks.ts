@@ -92,6 +92,7 @@ export function liveJobStatus(job: Job | null, input: BuildInput, liveVersionLoa
     moments: piece("moments", "environment"),
     // variants come after the environment, before the job ends (best effort: an older API has none)
     variants: input.variants ? "ready" : env === "done" ? (ended ? "missing" : "working") : env === "failed" || ended ? "missing" : "waiting",
-    policy: policy === "done" ? "ready" : policy === "skipped" ? "offer" : policy === "running" ? "working" : ended ? "missing" : "waiting",
+    // a training that failed leaves the build intact: the offer (to train again) comes back
+    policy: policy === "done" ? "ready" : policy === "skipped" || (policy === "failed" && job?.training) ? "offer" : policy === "running" ? "working" : ended ? "missing" : "waiting",
   };
 }

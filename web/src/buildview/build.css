@@ -64,6 +64,13 @@
   border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: rgba(0, 0, 0, 0.72); text-align: center; }
 .bv-offer p { margin: 0 0 10px; font-size: 13.5px; color: var(--text-2); }
 .bv-offer strong { color: var(--text); }
+.bv-offer .btn + .btn, .bv-offer form + .btn { margin-top: 8px; }
+.bv-train { margin: 0; }
+.bv-train-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 4px; }
+.bv-train-row input { flex: 0 1 180px; min-width: 120px; height: 32px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.06); color: var(--text); font: inherit; font-size: 13px; }
+.bv-train-row input::placeholder { color: var(--text-3); }
+[data-ui="pixel"] .bv-train-row input { border-radius: 0; }
 
 .bv-policy { position: absolute; right: 16px; bottom: 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; max-width: calc(100% - 200px); }
 .bv-badge { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; padding: 4px 8px; border: 1px solid var(--border-strong); border-radius: 999px; color: var(--text); }
@@ -74,6 +81,14 @@
 .bv-seg button.on { background: var(--text); color: var(--bg); }
 .bv-seg button + button { border-left: 1px solid var(--border); }
 .bv-push { flex-basis: 100%; text-align: right; font-size: 11px; color: var(--text-2); }
+
+/* stage 06 as "watch it learn": the attempt slider and the play buttons (buildview/learn.tsx) */
+.bv-learn { display: flex; flex-direction: column; gap: 8px; width: min(520px, 100%); }
+.bv-learn-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.bv-learn-row > input[type="range"] { flex: 1 1 160px; min-width: 120px; accent-color: var(--accent); margin: 0; }
+.bv-learn-it { font-size: 12px; color: var(--text); white-space: nowrap; }
+.bv-learn-out { flex: 1 1 100%; font-size: 11px; color: var(--text-2); text-align: right; }
+.bv-learn-curve .chart { margin-top: 8px; }
 
 .bv-play { position: absolute; left: 16px; bottom: 16px; display: flex; gap: 12px; align-items: center; }
 .bv-play .btn { gap: 8px; }
@@ -114,7 +129,7 @@
   .bv-caption p { font-size: 12.5px; }
   .bv-kicker { left: 10px; max-width: calc(100% - 20px); }
   .bv-policy { justify-content: flex-start; }
-  .bv-push { text-align: left; }
+  .bv-push, .bv-learn-out { text-align: left; }
   .bv-play { left: 10px; bottom: 10px; }
   .bv-hint { display: none; }
   .bv-chip { padding: 7px 8px; }

@@ -28,17 +28,28 @@ A2H_LOG_LEVEL       default INFO
 A2H_RUN_EXCLUDE     comma-separated glob patterns of run folders to hide (default: *smoke*)
 A2H_STATIC_DIR      optional built frontend (web/dist) to serve at / (single-process deploys)
 A2H_COLAB_ITERS     PPO iterations for colab jobs (default: 2000)
+A2H_TRAIN_CODE      invite code that lets a visitor train a live build's environment on a Modal GPU (the modal
+                    runner, server/train.py); with A2H_RUNNERS=demo,modal and a Modal token in the environment
+A2H_TRAIN_PER_DAY   trainings a day allowed without the code (default: 0 = code only)
+A2H_TRAIN_ITERS     PPO iterations per training (default: 1000, ~30 min on an L40S)
+A2H_TRAIN_ATTEMPT_EVERY  iterations between the attempts the page plays (default: 50)
+A2H_TRAIN_NUM_ENVS  parallel environments (default: 4096)
+A2H_TRAIN_TIMEOUT_H a training still running after this many hours is cancelled (default: 3)
+A2H_TRAIN_BRANCH    the repository branch the GPU job runs (default: main)
+A2H_TRAIN_CONCURRENCY  trainings at once (default: 1; each one is a GPU)
+A2H_RATE_TRAIN      POST /api/jobs/{id}/train per client per hour (default: 12; bounds invite-code guessing)
 """
 
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-RUNNERS = {"demo", "colab"}
+RUNNERS = {"demo", "colab", "modal"}
 LIVE_POSE = {"cpu", "modal"}
-BACKENDS = {"colab", "farmshare"}
+BACKENDS = {"colab", "farmshare", "modal"}
 
 
 class ConfigError(ValueError):
@@ -119,6 +130,20 @@ class Settings:
     # MODAL_TOKEN_SECRET must be in this process's environment; ~$0.05-0.15 a clip), MediaPipe if that fails.
     live_pose: str = field(default_factory=lambda: _env("A2H_LIVE_POSE", "cpu"))
     live_ok: bool = field(default=False, repr=False)  # set at startup by server.live.available()
+    # The modal runner (server/train.py): a live build's environment trained on a Modal GPU, gated by an invite code
+    # and/or a daily allowance, never on a host without a Modal token.
+    train_code: str = field(default_factory=lambda: _env("A2H_TRAIN_CODE", ""), repr=False)
+    train_per_day: int = field(default_factory=lambda: _num("A2H_TRAIN_PER_DAY", 0, int))
+    train_iters: int = field(default_factory=lambda: _num("A2H_TRAIN_ITERS", 1000, int))
+    train_attempt_every: int = field(default_factory=lambda: _num("A2H_TRAIN_ATTEMPT_EVERY", 50, int))
+    train_num_envs: int = field(default_factory=lambda: _num("A2H_TRAIN_NUM_ENVS", 4096, int))
+    train_timeout_h: float = field(default_factory=lambda: _num("A2H_TRAIN_TIMEOUT_H", 3))
+    train_branch: str = field(default_factory=lambda: _env("A2H_TRAIN_BRANCH", "main"))
+    train_concurrency: int = field(default_factory=lambda: _num("A2H_TRAIN_CONCURRENCY", 1, int))
+    train_poll_s: float = field(default_factory=lambda: _num("A2H_TRAIN_POLL_S", 30))  # how often the GPU job is read
+    rate_train_per_hour: float = field(default_factory=lambda: _num("A2H_RATE_TRAIN", 12))
+    modal_token: bool = field(default_factory=lambda: bool(os.environ.get("MODAL_TOKEN_ID") and os.environ.get("MODAL_TOKEN_SECRET")))
+    train_backend: object = field(default=None, repr=False)  # tests: a stand-in for server/train.py's ModalBackend
     colab_policies: list = field(default_factory=lambda: _list("A2H_COLAB_POLICIES", "task"))
     colab_init: str = field(default_factory=lambda: _env("A2H_COLAB_INIT", str(REPO / "outputs" / "remote_latent_final")))
     parse_errors: list = field(default_factory=lambda: _errors[:], repr=False)
@@ -132,7 +157,14 @@ class Settings:
         out = ["demo"] + (["live"] if self.live_ok else [])
         if "colab" in self.runners and self.enable_colab and not self.hosted:
             out.append("colab")
+        if "modal" in self.runners and self.modal_token and self.live_ok:  # trains live builds: needs both
+            out.append("modal")
         return out
+
+    @property
+    def train_open(self):
+        """Whether anyone can start a training: the code, or a daily allowance, is set."""
+        return bool(self.train_code) or self.train_per_day > 0
 
     @property
     def job_list_enabled(self):
@@ -153,7 +185,11 @@ class Settings:
                             ("A2H_JOB_TTL_H", self.job_ttl_h, 0.001), ("A2H_UPLOAD_TTL_H", self.upload_ttl_h, 0.0),
                             ("A2H_JOB_TIMEOUT_H", self.job_timeout_h, 0.01), ("A2H_COLAB_ITERS", self.colab_iters, 1),
                             ("A2H_LIVE_MAX_SECONDS", self.live_max_seconds, 1), ("A2H_LIVE_TIMEOUT_S", self.live_timeout_s, 1),
-                            ("A2H_LIVE_CONCURRENCY", self.live_concurrency, 1), ("A2H_LIVE_MEMORY_MB", self.live_memory_mb, 0)]:
+                            ("A2H_LIVE_CONCURRENCY", self.live_concurrency, 1), ("A2H_LIVE_MEMORY_MB", self.live_memory_mb, 0),
+                            ("A2H_TRAIN_PER_DAY", self.train_per_day, 0), ("A2H_TRAIN_ITERS", self.train_iters, 1),
+                            ("A2H_TRAIN_ATTEMPT_EVERY", self.train_attempt_every, 1), ("A2H_TRAIN_NUM_ENVS", self.train_num_envs, 1),
+                            ("A2H_TRAIN_TIMEOUT_H", self.train_timeout_h, 0.01), ("A2H_TRAIN_CONCURRENCY", self.train_concurrency, 1),
+                            ("A2H_RATE_TRAIN", self.rate_train_per_hour, 1)]:
             if v < lo:
                 errs.append(f"{name} must be >= {lo:g}, got {v:g}")
         if unknown := sorted(set(self.runners) - RUNNERS):
@@ -178,6 +214,14 @@ class Settings:
                                                         "name the frontend origin(s)")
             elif not (o.startswith("https://") or o.startswith("http://localhost") or o.startswith("http://127.0.0.1")):
                 warns.append(f"A2H_CORS_ORIGINS: {o!r} is neither https nor localhost")
+        if not re.fullmatch(r"[A-Za-z0-9._/-]+", self.train_branch):
+            errs.append(f"A2H_TRAIN_BRANCH: odd branch name {self.train_branch!r}")
+        if "modal" in self.runners:
+            if not self.modal_token:
+                warns.append("A2H_RUNNERS has modal but MODAL_TOKEN_ID / MODAL_TOKEN_SECRET are not set: no GPU training")
+            elif not self.train_open:
+                warns.append("A2H_RUNNERS has modal but neither A2H_TRAIN_CODE nor A2H_TRAIN_PER_DAY is set: nobody can "
+                             "start a training")
         if self.hosted and ("colab" in self.runners or self.enable_colab):
             warns.append("colab runner requested on a hosted deploy; it stays disabled (A2H_HOSTED / SPACE_ID)")
         if self.hosted and self.proxy_hops == 0:

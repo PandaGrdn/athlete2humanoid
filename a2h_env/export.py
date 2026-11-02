@@ -31,7 +31,7 @@ ZIP_NAME = "env.zip"
 TASK = "A2H-Tracking-Flat-Unitree-G1"
 MAX_EXTRA_BYTES = 2 * 1048576  # the silhouette and the latent ride along only when small
 DOWN = 0.05  # m above the standing ankle height that counts as a foot on the floor (skill/task.py DOWN)
-LOADER_FILES = ("__init__.py", "__main__.py", "bundle.py", "env.py", "train.py")
+LOADER_FILES = ("__init__.py", "__main__.py", "bundle.py", "env.py", "train.py", "attempts.py")
 # mjlab 1.6.0's G1 flat tracking task (mjlab/tasks/tracking/tracking_env_cfg.py), the reward the stored tracking
 # policies were trained with; recorded here so the bundle says what it pays without importing mjlab.
 MJLAB_TRACKING = {

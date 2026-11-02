@@ -152,6 +152,7 @@ export type RunDetail = RunSummary & {
   downloads: FileRef[];
   variants?: FileRef | null; // variants.json (scripts/build_variants_view.py)
   env?: EnvBundle | null; // the training environment zip, built from the run folder on demand
+  attempts?: AttemptsView | null; // the policy's attempts while it trained, when the run folder has them
 };
 
 export type StageState = {
@@ -162,6 +163,48 @@ export type StageState = {
   progress: number;
   started_at: number | null;
   finished_at: number | null;
+};
+
+/** One attempt of the policy on the clip while it trained (a2h_env/attempts.py): its qpos at `url` (an .npz). */
+export type AttemptMeta = {
+  iteration: number;
+  reward: number | null; // the episode's return
+  success: boolean | null; // completed the key moments without falling (null: not scored)
+  stages_completed: number | null;
+  stages_total: number | null;
+  fell: boolean;
+  fell_at_s: number | null;
+  frames: number | null;
+  seconds: number | null;
+  url: string;
+};
+
+/** A live job's GPU training (server/train.py), on the job while it runs and after. */
+export type Training = {
+  backend: string;
+  state: "starting" | "running" | "done" | "failed" | "cancelled";
+  iterations: number;
+  attempt_every: number;
+  started_at: number;
+  finished_at: number | null;
+  attempts: number;
+  iteration: number; // the newest iteration seen in the GPU's log
+  reward: number | null; // ... and its mean reward
+  last: Partial<AttemptMeta> | null;
+  checkpoint: string | null; // "policy.pt" once the trained policy is back (GET /api/jobs/{id}/policy.pt)
+  error: string | null;
+};
+
+/** The attempts recorded while a policy trained (GET /api/jobs/{id}/attempts, GET /api/runs/{id}/attempts). */
+export type AttemptsView = {
+  iterations: number | null;
+  attempt_every: number | null;
+  fps: number;
+  task: string | null;
+  policy: string | null;
+  attempts: AttemptMeta[]; // by iteration
+  curve: [number, number][]; // [iteration, mean episode reward] while training
+  training?: Training; // a live job's
 };
 
 export type Job = {
@@ -176,6 +219,7 @@ export type Job = {
   input: { filename: string; size: number; url: string } | null;
   source_run: string | null;
   result_run: string | null;
+  training?: Training | null;
   error: string | null;
   created_at: number;
   updated_at: number;
@@ -192,6 +236,9 @@ export type Health = {
   limits: { max_upload_mb: number; extensions: string[] };
   // set when runners include "live"; pose "modal": SAM 3.1 + SAM 3D Body on a GPU, "cpu": MediaPipe on the host
   live?: { max_seconds: number; concurrency: number; pose?: "cpu" | "modal" } | null;
+  // set when a finished live build can be trained on a GPU (the modal runner): the gate and the queue
+  train?: { backend: string; code_required: boolean; code_accepted: boolean; per_day: number; left_today: number;
+    iterations: number; attempt_every: number; minutes: number; busy: boolean } | null;
   stages: { key: string; label: string; description: string }[];
 };
 
@@ -266,6 +313,14 @@ export const api = {
   liveMask: (id: string) => url(`/api/jobs/${encodeURIComponent(id)}/live/mask`),
   liveEnv: (id: string) => `/api/jobs/${encodeURIComponent(id)}/env.zip`,
   jobTaskSpec: (id: string) => request<TaskSpec>(`/api/jobs/${encodeURIComponent(id)}/task_spec`),
+  train: (id: string, code: string) => {
+    const fd = new FormData();
+    fd.append("code", code);
+    return request<Job>(`/api/jobs/${encodeURIComponent(id)}/train`, { method: "POST", body: fd });
+  },
+  attempts: (id: string) => request<AttemptsView>(`/api/jobs/${encodeURIComponent(id)}/attempts`),
+  runAttempts: (id: string) => request<AttemptsView>(`/api/runs/${encodeURIComponent(id)}/attempts`),
+  policy: (id: string) => `/api/jobs/${encodeURIComponent(id)}/policy.pt`,
   cancel: (id: string) => request<Job>(`/api/jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
   createJob: (opts: { file?: File; runId?: string; runner?: string }) => {
     const fd = new FormData();

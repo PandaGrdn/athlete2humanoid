@@ -10,6 +10,7 @@ docs/SECURITY.md for the limits and docs/SYSTEM_DESIGN.md for the job lifecycle.
 import asyncio
 import logging
 import re
+import secrets
 import shutil
 import tempfile
 import uuid
@@ -21,7 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import live, logs, runs
+from . import live, logs, runs, train
 from .config import Settings
 from .journal import Journal
 from .jobs import TERMINAL, JobStore, job_event
@@ -46,12 +47,15 @@ def sniff_video(head, ext=None):
 
 
 def gpu_backend_status(settings):
-    """(available, reason) for the runner that needs a GPU backend. Hosted deploys never have one."""
+    """(available, reason) for the colab runner's GPU backend. Hosted deploys never have one."""
     if "colab" not in settings.enabled_runners:
         return False, "disabled"
     if not (settings.remote_backend == "farmshare" or shutil.which("colab")):
         return False, "colab CLI not found on PATH"
     return True, "ok"
+
+
+ATTEMPT_HEADERS = {"Cache-Control": "private, max-age=86400, immutable", "X-Content-Type-Options": "nosniff"}  # the job id is the only key: no shared caches
 
 
 def create_app(settings=None):
@@ -103,8 +107,20 @@ def create_app(settings=None):
 
     def runners_now():
         """Enabled runners whose backend is reachable right now: demo and live (this host) always, colab when
-        its CLI is there."""
-        return [r for r in settings.enabled_runners if r in ("demo", "live") or gpu_backend_status(settings)[0]]
+        its CLI is there, modal when its app answers (checked every few minutes)."""
+        return [r for r in settings.enabled_runners if r in ("demo", "live")
+                or (r == "colab" and gpu_backend_status(settings)[0]) or (r == "modal" and store.train.available()[0])]
+
+    def train_status():
+        """What the page needs to offer "Train on a GPU" (None when this host can't): the gate and the queue."""
+        if "modal" not in runners_now() or not settings.train_open:
+            return None
+        per_day = settings.train_per_day
+        return {"backend": "modal", "code_required": bool(settings.train_code) and per_day <= 0,
+                "code_accepted": bool(settings.train_code), "per_day": per_day,
+                "left_today": max(0, per_day - store.train.today()) if per_day > 0 else 0,
+                "iterations": settings.train_iters, "attempt_every": settings.train_attempt_every,
+                "minutes": store.train.eta_min(), "busy": len(store.train.active()) >= settings.train_concurrency}
 
     @app.get("/healthz", include_in_schema=False)
     def healthz():
@@ -127,17 +143,23 @@ def create_app(settings=None):
         except Exception:
             checks["journal"] = False
         gpu_ok, gpu_why = gpu_backend_status(settings)
+        tr_ok, tr_why = store.train.available()
         ok = all(checks.values())
         body = {"ok": ok, "checks": checks, "gpu_backend": "ok" if gpu_ok else gpu_why,
-                "active_jobs": store.active_count()}
+                "train_backend": "ok" if tr_ok else tr_why, "active_jobs": store.active_count(),
+                "trainings": len(store.train.active())}
         return JSONResponse(body, status_code=200 if ok else 503)
 
     @app.get("/api/health")
     def health():
         gpu_ok, gpu_why = gpu_backend_status(settings)
+        tr_ok, tr_why = store.train.available()
+        degraded = [] if gpu_ok or gpu_why == "disabled" else [f"colab runner unavailable: {gpu_why}"]
+        if not tr_ok and tr_why != "disabled":
+            degraded.append(f"modal runner unavailable: {tr_why}")
         return {
             "ok": True, "runners": runners_now(), "default_runner": "demo",
-            "degraded": [] if gpu_ok or gpu_why == "disabled" else [f"colab runner unavailable: {gpu_why}"],
+            "degraded": degraded,
             "demo_run": demo_run(), "demo_seconds": settings.demo_seconds, "run_count": len(all_runs()),
             "limits": {"max_upload_mb": settings.max_upload_mb, "extensions": sorted(VIDEO_EXT)},
             "stages": [{"key": k, "label": label, "description": d} for k, label, d, _ in STAGES],
@@ -145,6 +167,7 @@ def create_app(settings=None):
             "live": {"max_seconds": settings.live_max_seconds, "concurrency": settings.live_concurrency,
                      "pose": settings.live_pose}  # "modal": SAM 3.1 + SAM 3D Body on a GPU; "cpu": MediaPipe here
             if settings.live_ok else None,
+            "train": train_status(),  # the modal runner: a live build trained on a GPU, when this host offers it
         }
 
     @app.get("/api/runs")
@@ -167,6 +190,15 @@ def create_app(settings=None):
             raise HTTPException(404, "no training environment for this run")
         return FileResponse(p, media_type="application/zip", filename=f"{rid}.a2h-env.zip",
                             headers={"Cache-Control": "public, max-age=3600", "X-Content-Type-Options": "nosniff"})
+
+    @app.get("/api/runs/{rid}/attempts")
+    def run_attempts(rid: str):
+        """The policy's attempts recorded while it trained (a2h_env/attempts.py), for the "watch it learn" view."""
+        d = all_runs().get(rid)
+        view = train.attempts_view(d, lambda name: runs.file_url(rid, f"{train.ATTEMPTS}/{name}")) if d else None
+        if view is None:
+            raise HTTPException(404, "no attempts recorded for this run")
+        return view
 
     @app.get("/api/runs/{rid}/task_spec")
     def run_task_spec(rid: str):
@@ -193,6 +225,9 @@ def create_app(settings=None):
     async def create_job(request: Request, file: UploadFile | None = File(None), run_id: str | None = Form(None),
                          runner: str = Form("demo")):
         owner = anon(client_ip(request.scope, settings.proxy_hops))
+        if runner == "modal":
+            raise HTTPException(400, "the modal runner trains a finished live build: upload with runner=live, then "
+                                     "POST /api/jobs/{id}/train")
         if runner not in settings.enabled_runners:
             raise HTTPException(400, f"runner '{runner}' is not enabled (available: {settings.enabled_runners})")
         fell_back = None
@@ -287,6 +322,78 @@ def create_app(settings=None):
                 await asyncio.sleep(0.25)
         return StreamingResponse(stream(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    @app.post("/api/jobs/{jid}/train")
+    def train_job(jid: str, request: Request, code: str = Form("")):
+        """Train a finished live build's environment on a GPU (the modal runner, server/train.py). Gated: the invite
+        code (A2H_TRAIN_CODE), or one of the day's free trainings (A2H_TRAIN_PER_DAY); one at a time by default."""
+        job = store.get(jid)
+        if job is None or job.runner != "live":
+            raise HTTPException(404, "not a live job")
+        if "modal" not in settings.enabled_runners or not settings.train_open:
+            raise HTTPException(503, "this host can't train policies (no GPU backend)")
+        if not store.train.available()[0]:
+            raise HTTPException(503, "the GPU backend isn't reachable right now; try again in a few minutes")
+        code = (code or "").strip()[:200]
+        with_code = bool(settings.train_code and code)
+        if with_code and not secrets.compare_digest(code.encode(), settings.train_code.encode()):
+            raise HTTPException(403, "that invite code isn't right")
+        if not with_code and settings.train_per_day <= 0:
+            raise HTTPException(403, "training needs an invite code")
+        with store.train.lock:  # the checks that spend: one per job, the day's allowance, the queue, all under one lock
+            state = (job.training or {}).get("state")
+            if state in ("starting", "running"):
+                raise HTTPException(409, "this build's policy is training already")
+            if state == "done":
+                raise HTTPException(409, "this build's policy is trained; download it below")
+            if job.status != "succeeded" or runs.safe_path(store.live_dir(job), runs.ENV_ZIP) is None:
+                raise HTTPException(409, "the environment isn't built yet; training starts from a finished build")
+            if not with_code and store.train.today() >= settings.train_per_day:
+                raise HTTPException(403, f"today's {settings.train_per_day} free training{'s are' if settings.train_per_day != 1 else ' is'} "
+                                         f"used up" + ("; an invite code starts one" if settings.train_code else ""))
+            if len(store.train.active()) >= settings.train_concurrency:
+                raise HTTPException(429, f"another visitor's policy is training right now (about {store.train.eta_min()} min); "
+                                         f"try again when it's done", headers={"Retry-After": "600"})
+            store.train.start(job)
+        log.info("training started", extra={"fields": {"job": jid, "client": anon(client_ip(request.scope, settings.proxy_hops)),
+                                                       "with_code": bool(code)}})
+        return store.snapshot(jid)
+
+    @app.get("/api/jobs/{jid}/attempts")
+    def job_attempts(jid: str):
+        """The attempts mirrored so far from the GPU (every A2H_TRAIN_ATTEMPT_EVERY iterations), newest last."""
+        job = store.get(jid)
+        if job is None or job.runner != "live" or job.training is None:
+            raise HTTPException(404, "this job isn't training a policy")
+        view = train.attempts_view(store.train.train_dir(job), lambda name: f"/api/jobs/{jid}/attempts/{name}")
+        if view is None:
+            view = {"iterations": job.training.get("iterations"), "attempt_every": job.training.get("attempt_every"),
+                    "fps": 50, "task": None, "policy": None, "attempts": [], "curve": job.curves.get("policy", [])}
+        view["training"] = job.training
+        return view
+
+    @app.get("/api/jobs/{jid}/attempts/{name}")
+    def job_attempt(jid: str, name: str):
+        """One attempt: iter_NNNN.npz (qpos (T, 36) float32 at 50 Hz, reward, stages, fell)."""
+        job = store.get(jid)
+        if job is None or job.runner != "live" or job.training is None or not train.NPZ.fullmatch(name):
+            raise HTTPException(404, "no such attempt")
+        p = runs.safe_path(store.train.train_dir(job) / train.ATTEMPTS, name)
+        if p is None:
+            raise HTTPException(404, "no such attempt")
+        return FileResponse(p, media_type="application/octet-stream", headers=ATTEMPT_HEADERS)
+
+    @app.get("/api/jobs/{jid}/policy.pt")
+    def job_policy(jid: str):
+        """The trained policy's checkpoint (rsl_rl format), once training is done."""
+        job = store.get(jid)
+        if job is None or job.runner != "live" or not (job.training or {}).get("checkpoint"):
+            raise HTTPException(404, "no trained policy")
+        p = runs.safe_path(store.train.train_dir(job), "policy.pt")
+        if p is None:
+            raise HTTPException(404, "no trained policy")
+        return FileResponse(p, media_type="application/octet-stream", filename=f"live-{jid[:8]}-policy.pt",
+                            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
     @app.get("/api/jobs/{jid}/task_spec")
     def job_task_spec(jid: str):

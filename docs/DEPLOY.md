@@ -7,13 +7,14 @@ The product UI is two pieces:
 - `web/`: a React + Vite + TypeScript frontend with a landing page and gallery, live job
   progress, and a results page.
 
-Jobs go through one of three runners:
+Jobs go through one of four runners:
 
 | Runner | What it does | Where |
 |---|---|---|
 | `demo` (default) | Replays a finished run: its real log lines and training curves, on a ~40 s clock. Results are that run's results. | Everywhere. |
 | `live` | Builds a real RL task environment from the uploaded video: the pose (SAM 3.1 masks and SAM 3D Body on a Modal GPU with `A2H_LIVE_POSE=modal`, below; MediaPipe on the CPU otherwise, or when the GPU doesn't answer), mink retarget onto the G1, then the keypose task spec (`skill/keypose.py`) and the variants. It runs `python -m server.live_worker` as a sandboxed subprocess and stops before training (that needs a GPU for 1-2 h). | On whenever the pipeline imports (`A2H_LIVE=auto`). The Space image includes it. |
 | `colab` | Copies the upload into `clips/` and runs `scripts/remote_run.py latent` on a Colab A100 (about 3 hours). It follows `runner.log`, `job.log` and `status.json`, and the finished run joins the gallery. | Local only. Needs `A2H_RUNNERS=demo,colab` **and** `A2H_ENABLE_COLAB=1`, plus a logged-in `colab` CLI. It spends compute units, so it is off by default. |
+| `modal` | Trains a finished live build's environment on a Modal GPU, started by the visitor with "Train on a GPU" on the build's page (`POST /api/jobs/{id}/train`): the build's `env.zip` goes to the Volume `a2h-runs`, `scripts/modal_app.py`'s `run_job` runs `python -m a2h_env train ... --attempt-every 50` (mjlab's G1 tracking task on the reference and the variants, 1,000 PPO iterations, ~20-30 min on an L40S, about $1), and every 50 iterations the robot's attempt on the clip comes back to the page, which plays it on the G1 against the retarget while the GPU keeps training (`server/train.py`). The trained checkpoint is downloadable at the end. | Hosted too. Needs `A2H_RUNNERS=demo,modal`, the Modal token on the service (as for the GPU pose) and a gate: an invite code (`A2H_TRAIN_CODE`) and/or free trainings a day (`A2H_TRAIN_PER_DAY`). One training at a time by default. Setup below, "Live training on a GPU". |
 
 The UI says so when a job is a demo replay, including for uploads.
 
@@ -100,6 +101,13 @@ failure modes and health endpoints: `docs/SYSTEM_DESIGN.md`.
 | `A2H_LIVE_POSE` | `cpu` | `modal`: the pose stage runs SAM 3.1 and SAM 3D Body on the deployed Modal GPU app (below); needs `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` in the server's environment, else it logs a warning and stays `cpu` (MediaPipe) |
 | `A2H_HOSTED` | unset (`1` in the Space image; a Space's `SPACE_ID` implies it) | Public deploy: the GPU runner can't be enabled, the job list is off, CORS `*` is refused |
 | `A2H_REMOTE_BACKEND` | `colab` | GPU backend for the local GPU runner: `colab` or `farmshare` (docs/FARMSHARE.md) |
+| `A2H_TRAIN_CODE` | unset | Invite code a visitor types to train a live build on a Modal GPU (the `modal` runner). Put it in Secret Manager (`scripts/cloudrun_train.sh`), not in a plain variable. |
+| `A2H_TRAIN_PER_DAY` | `0` | Trainings a day anyone may start without the code (`0`: code only). With both set, the code works once the day's allowance is used. |
+| `A2H_TRAIN_ITERS` / `A2H_TRAIN_ATTEMPT_EVERY` | `1000` / `50` | PPO iterations per training, and iterations between the attempts the page plays |
+| `A2H_TRAIN_NUM_ENVS` | `4096` | Parallel environments on the GPU |
+| `A2H_TRAIN_CONCURRENCY` | `1` | Trainings at once (each one is a GPU: a second visitor gets a 429 with the minutes left) |
+| `A2H_TRAIN_TIMEOUT_H` | `3` | A training still running after this is cancelled on Modal and the job fails |
+| `A2H_TRAIN_BRANCH` | `main` | The repository branch the GPU job clones (`scripts/modal_app.py` `run_job`) |
 | `A2H_LIST_JOBS` | on locally, off hosted | `GET /api/jobs` (debugging) |
 | `A2H_LOG_FORMAT` / `A2H_LOG_LEVEL` | `json` / `INFO` | Structured logs on stderr; `text` for humans |
 | `A2H_RUN_EXCLUDE` | `*smoke*` | Glob patterns of run folders to hide |
@@ -243,6 +251,42 @@ One-time setup, in this order:
 
 Locally, the same thing is `A2H_LIVE_POSE=modal` with `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET` exported (from
 `python -m modal token new`) before `uvicorn server.main:app`.
+
+### Live training on a GPU
+
+Once a live build has its environment, the page can offer "Train on a GPU": the `modal` runner (`server/train.py`)
+sends the build's `env.zip` to the Volume `a2h-runs` and spawns the same `run_job` as `scripts/remote_run.py --backend
+modal`, which trains `python -m a2h_env train <env.zip> --iters 1000 --attempt-every 50` on an L40S: mjlab's G1
+tracking task on the reference and every variant the build kept (`docs/TRAINING_ENV.md`), the policy the download
+trains. Every 50 iterations the trainer rolls the policy out once on the clip (`a2h_env/attempts.py`, no video:
+~30 KB of qpos) and the server copies it into the job's folder; the build view plays each attempt on the G1 with the
+retarget as a ghost, with the reward curve under it, as they arrive. At the end the checkpoint comes back
+(`GET /api/jobs/{id}/policy.pt`), the Volume folder is deleted, and the job's policy stage is done. About 20-30 min
+and $1 of GPU per training; the server cancels the Modal call if the visitor cancels the job, if the training runs
+past `A2H_TRAIN_TIMEOUT_H`, if the follow loop ends any other way than the call finishing, or when the process stops
+or restarts under it. A failed or cancelled training leaves the build as it was (the job stays succeeded, the policy
+stage says what happened) and can be started again; a trained one can't. `A2H_RATE_TRAIN` (12 an hour per client)
+bounds invite-code guessing.
+
+No secret goes up with a training (it needs no Hugging Face token), and nobody can start one without the gate: an
+invite code (`A2H_TRAIN_CODE`) the visitor types on the page, or a daily allowance (`A2H_TRAIN_PER_DAY`), or both.
+`/api/health` shows `"train": {...}` with the gate and the queue when the runner is on; `/readyz` reports
+`train_backend`. The trained policy and the attempts live with the upload and expire with it (`A2H_UPLOAD_TTL_H`).
+
+Setup, after the GPU pose (the Modal token is already on the service):
+
+1. Deploy the GPU app once (cached after): `MODAL_PROFILE=a2h python -m modal deploy scripts/modal_app.py`.
+2. Turn the runner on and store the invite code in Secret Manager (typed at a prompt, never on a command line):
+   ```bash
+   MODAL_PROFILE=a2h PATH="$HOME/google-cloud-sdk/bin:$PATH" scripts/cloudrun_train.sh
+   ```
+   `A2H_TRAIN_PER_DAY=2 scripts/cloudrun_train.sh` adds two free trainings a day. `deploy.sh` keeps the settings.
+3. Optionally set a spending limit in the Modal dashboard: the gate bounds how many trainings start, the limit
+   bounds what they can cost.
+
+Locally: `A2H_RUNNERS=demo,modal A2H_TRAIN_CODE=<code> A2H_TRAIN_BRANCH=<branch>` with `MODAL_TOKEN_ID` /
+`MODAL_TOKEN_SECRET` exported, then `uvicorn server.main:app`. The tests drive the runner with a stand-in Modal
+(`server/tests/test_train.py`); a stored run's attempts for the gallery come from `scripts/record_attempts.py`.
 
 ### What the bundle contains
 

@@ -29,8 +29,9 @@ function niceTicks(min: number, max: number, count = 4) {
 const short = (v: number) => (Math.abs(v) >= 1000 ? `${+(v / 1000).toFixed(1)}k` : `${+v.toFixed(2)}`);
 
 /** Line chart with a hover crosshair. One y-axis; series share units. */
-export function LineChart({ series, height = 200, xLabel, yLabel, xMax, compact = false }: {
+export function LineChart({ series, height = 200, xLabel, yLabel, xMax, compact = false, marker }: {
   series: Series[]; height?: number; xLabel?: string; yLabel?: string; xMax?: number; compact?: boolean;
+  marker?: number | null; // an x to mark with a vertical line (the attempt being played)
 }) {
   const [box, W] = useWidth();
   const H = height, m = compact ? { t: 6, r: 8, b: 6, l: 4 } : { t: 10, r: 14, b: 26, l: 40 };
@@ -73,6 +74,7 @@ export function LineChart({ series, height = 200, xLabel, yLabel, xMax, compact 
           const last = s.points[s.points.length - 1];
           return last && <circle key={s.key} cx={sx(last[0])} cy={sy(last[1])} r={4} fill={s.color} stroke="var(--surface-1)" strokeWidth={2} />;
         })}
+        {marker != null && <line x1={sx(marker)} x2={sx(marker)} y1={m.t} y2={H - m.b} stroke="var(--accent)" strokeWidth={1.5} />}
         {hover != null && <line x1={sx(hover)} x2={sx(hover)} y1={m.t} y2={H - m.b} stroke="var(--text-3)" strokeDasharray="3 3" />}
         {hover != null && series.map((s) => {
           const p = nearest(s.points, hover);
