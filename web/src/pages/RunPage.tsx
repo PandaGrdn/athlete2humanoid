@@ -91,7 +91,7 @@ export default function RunPage() {
             <div>
               <div className="eyebrow">Task environment</div>
               <h2 style={{ marginTop: 6 }}>What the robot was asked to do</h2>
-              <p>Compiled from the retarget before any training: the action's key moments, found statistically from the motion, plus flights and landings from foot contacts. This is the reward machine the task policies train against.</p>
+              <p>The key moments found in the motion, before any training. The reward pays for reaching them in order.</p>
             </div>
           </div>
           <EnvironmentPanel spec={spec} />
@@ -104,7 +104,7 @@ export default function RunPage() {
             <div>
               <div className="eyebrow">What the reward sees</div>
               <h2 style={{ marginTop: 6 }}>V-JEPA 2 compares silhouettes, not joint angles</h2>
-              <p>The source video and each robot rollout are rendered as silhouettes from the clip's camera angle and embedded by V-JEPA 2. Their similarity over time is the latent reward and the evaluation score.</p>
+              <p>The clip and each rollout as silhouettes, embedded by V-JEPA 2. Their similarity is the reward.</p>
             </div>
           </div>
           <div className="video-frame"><LoopVideo src={run.video.url} label="Silhouettes compared by V-JEPA 2" /></div>
@@ -116,7 +116,7 @@ export default function RunPage() {
           <div>
             <div className="eyebrow">Policies</div>
             <h2 style={{ marginTop: 6 }}>Three rewards, same robot</h2>
-            <p>Each policy is trained with PPO on 4,096 parallel G1s in mjlab, then rolled out once and scored. The ghost in each video is the retargeted reference.</p>
+            <p>Each trained with PPO on 4,096 G1s. The ghost is the reference.</p>
           </div>
         </div>
         <div className="policies">{current.map((p) => <PolicyCard key={p.key} p={p} />)}</div>
@@ -126,7 +126,7 @@ export default function RunPage() {
         <div className="two-col">
           <div className="card card-pad">
             <div className="eyebrow">V-JEPA 2 alignment (time-aligned cosine)</div>
-            <p className="muted" style={{ fontSize: 13, margin: "6px 0 14px" }}>How much each rollout looks like the source video to V-JEPA 2. The retarget is the kinematic ceiling.</p>
+            <p className="muted" style={{ fontSize: 13, margin: "6px 0 14px" }}>How much each rollout looks like the clip. The retarget is the ceiling.</p>
             <BarChart max={1} bars={[
               ...(run.reference.aligned != null ? [{ label: "retarget", value: run.reference.aligned, color: NEUTRAL, note: "kinematic reference" }] : []),
               ...run.policies.filter((p) => p.metrics.aligned != null).map((p) => ({
@@ -136,7 +136,7 @@ export default function RunPage() {
           </div>
           <div className="card card-pad">
             <div className="eyebrow">DTW similarity vs the motion bank</div>
-            <p className="muted" style={{ fontSize: 13, margin: "6px 0 14px" }}>Policies against the closest other motions in the bank. Rank #1 means the rollout is closer to its source clip than to any other motion.</p>
+            <p className="muted" style={{ fontSize: 13, margin: "6px 0 14px" }}>Rank #1: closer to its own clip than to any other motion.</p>
             <BarChart max={1} bars={[
               ...current.filter((p) => p.metrics.dtw != null).map((p) => ({ label: p.base, value: p.metrics.dtw!, color: policyColor(p.base), note: `rank #${p.metrics.dtw_rank_vs_bank ?? "?"}` })),
               ...run.bank_top5.map(([n, v]) => ({ label: n, value: v, color: NEUTRAL, note: "bank motion" })),
@@ -153,7 +153,7 @@ export default function RunPage() {
             <div>
               <div className="eyebrow">Clips</div>
               <h2 style={{ marginTop: 6 }}>Retargeted clips ({run.clips.length})</h2>
-              <p>Every clip in the run goes through SAM 3.1, pose and IK. They join the motion bank used to distill the reward net and to rank rollouts.</p>
+              <p>Every clip in the run, retargeted. They form the motion bank.</p>
             </div>
           </div>
           <div className="clips">
@@ -175,17 +175,15 @@ export default function RunPage() {
           <div>
             <div className="eyebrow">Downloads</div>
             <h2 style={{ marginTop: 6 }}>Take the skill with you</h2>
-            <p>ONNX policies run anywhere (observation in, 29 joint actions out). Checkpoints are rsl_rl format for mjlab. The motion CSV is the G1 root pose and joint angles per frame.</p>
+            <p>ONNX policies, rsl_rl checkpoints for mjlab, and the G1 motion as CSV.</p>
           </div>
         </div>
         {run.env && (
           <div className="card card-pad" style={{ marginBottom: 14 }}>
             <EnvDownload env={run.env} />
             <p className="faint" style={{ fontSize: 13, marginTop: 10, maxWidth: 820 }}>
-              One file: the person's motion as a G1 reference, its key-moment spec, the variants this pipeline generates for it (kept
-              and dropped, with the physics filter's verdict), the reward config, the source credit, and a loader. What each stored
-              policy actually trained on is in the bundle's manifest and reward config. With mjlab installed, unzip it and run
-              <span className="mono"> python -m a2h_env train</span> to train a tracking policy on it; no access to this server needed.
+              The reference motion, its key moments, variants and reward config. Unzip and run
+              <span className="mono"> python -m a2h_env train</span> with mjlab installed.
             </p>
           </div>
         )}

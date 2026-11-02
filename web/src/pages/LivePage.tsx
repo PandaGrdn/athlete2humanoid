@@ -136,11 +136,7 @@ function LiveStart({ onFile, err }: { onFile: (f: File) => void; err: string | n
       <div className="ex-intro">
         <div className="eyebrow">Live demo</div>
         <h1><Typed text="Watch a video become an RL environment" when="load" /></h1>
-        <p className="lede">
-          Upload any athletic movement. Your clip plays on the left with its pose landmarks; on the right, the
-          Unitree G1 retarget, the key moments and the reward the robot will train against appear as each stage
-          finishes, usually within a minute.
-        </p>
+        <p className="lede">Upload a clip. The pose, the G1 and its task appear stage by stage, in about a minute.</p>
         <div className="live-chips">
           {STEPS.map((s, i) => <span key={s.key} className="pill"><span className="mono faint">{i + 1}</span>{s.label}</span>)}
         </div>
@@ -151,9 +147,7 @@ function LiveStart({ onFile, err }: { onFile: (f: File) => void; err: string | n
       {health && !available && (
         <div className="notice">
           <Icon name="cube" />
-          <div><strong>This deployment can't build environments live.</strong> Its API has no live runner (it may be an
-            older version, or the host lacks the pose and IK models). The <Link to="/research" style={{ color: "var(--accent)" }}>research examples</Link> walk
-            through recorded runs, environments included.</div>
+          <div><strong>This deployment can't build live.</strong> The <Link to="/research" style={{ color: "var(--accent)" }}>research examples</Link> show recorded runs.</div>
         </div>
       )}
       {health && available && (
@@ -170,9 +164,7 @@ function LiveStart({ onFile, err }: { onFile: (f: File) => void; err: string | n
             <input ref={input} type="file" accept={"video/*," + exts.join(",")} hidden onChange={(e) => pick(e.target.files?.[0])} />
           </div>
           {(bad || err) && <div className="error-box" style={{ marginTop: 14 }}>{bad ?? err}</div>}
-          <p className="faint" style={{ fontSize: 12.5, marginTop: 12 }}>
-            Your video is sent only to this site's pipeline API, which keeps uploads for a short while after the build.
-          </p>
+          <p className="faint" style={{ fontSize: 12.5, marginTop: 12 }}>Uploads go only to this site's API and are kept briefly.</p>
         </div>
       )}
       <RecordedBuilds live={!!health && available} />
@@ -201,10 +193,8 @@ function OfflineDrop() {
       <div className="notice" style={{ marginTop: 14 }}>
         <Icon name="cube" />
         <div>
-          {name ? <><strong>{name} stays on your computer.</strong> </> : <><strong>Live builds need the pipeline API, which isn't running right now.</strong> </>}
-          With it, your clip would go through the same stages as the recordings below: video check, pose, retarget onto the
-          G1, then the task environment, in about half a minute; training a policy takes 1–2 h on a GPU. Pick a recording
-          to watch one end to end.
+          {name ? <><strong>{name} stays on your computer.</strong> </> : <><strong>The pipeline API isn't running right now.</strong> </>}
+          Pick a recording below to watch a build end to end.
         </div>
       </div>
     </div>
@@ -218,11 +208,7 @@ function RecordedBuilds({ live }: { live: boolean }) {
   if (index && !index.clips.length) return null;
   return (
     <div className="section" style={{ paddingTop: 28 }}>
-      <div className="eyebrow">{live ? "Or replay a recorded build" : "Recorded builds"}</div>
-      <p className="muted" style={{ fontSize: 14, margin: "6px 0 14px", maxWidth: 720 }}>
-        Each is a real run of this pipeline on a phone video, replayed at the speed it ran, followed by the policies
-        trained on that environment.
-      </p>
+      <div className="eyebrow" style={{ marginBottom: 14 }}>{live ? "Or replay a recorded build" : "Recorded builds"}</div>
       <div className="replay-grid">
         {(index?.clips ?? Array.from({ length: 3 }, () => null)).map((c, i) => c ? (
           <Link key={c.id} to={`/live/demo/${c.id}`} className="card replay-card">
@@ -479,8 +465,7 @@ function TrainOffer({ job, train, onStarted, again = false }: { job: Job; train:
   };
   return (
     <form onSubmit={go} className="bv-train">
-      <p><strong>{again ? "The training stopped." : "The environment is built."}</strong> Train the robot on it {again ? "again" : "now"}: PPO on a Modal GPU, about {train.minutes} min,
-        {" "}and you watch each attempt as it learns.{train.per_day > 0 && !train.code_required ? ` ${train.left_today} of ${train.per_day} free trainings left today.` : ""}</p>
+      <p><strong>{again ? "The training stopped." : "The environment is built."}</strong> Train the robot on it{again ? " again" : ""}: about {train.minutes} min on a GPU, and you watch it learn.{train.per_day > 0 && !train.code_required ? ` ${train.left_today} of ${train.per_day} free today.` : ""}</p>
       <div className="bv-train-row">
         {(needCode || train.code_accepted) && (
           <input type="text" value={code} onChange={(e) => setCode(e.target.value)} placeholder={needCode ? "Invite code" : "Invite code (optional)"}
@@ -548,12 +533,12 @@ function PolicyCard({ job, file, attempts }: { job: Job; file: File | null; atte
         <div className="eyebrow">Policy · {tr.state === "done" ? "trained on a GPU" : going ? "training on a GPU" : tr.state}</div>
         <p className="muted" style={{ fontSize: 14 }}>
           {tr.state === "starting" ? "Uploading the environment to the GPU…"
-            : going ? `PPO in mjlab on a Modal GPU: iteration ${tr.iteration.toLocaleString()} of ${tr.iterations.toLocaleString()}${tr.reward != null ? `, mean reward ${tr.reward.toFixed(2)}` : ""}. An attempt lands every ${tr.attempt_every} iterations; the build view above plays them as they come.`
-            : tr.state === "done" ? `Trained: ${tr.iterations.toLocaleString()} iterations, ${tr.attempts} attempts recorded.${last?.stages_total ? ` The final attempt reaches ${last.stages_completed ?? 0} of ${last.stages_total} key moments${last.fell ? " and falls" : last.success ? " and completes the clip" : ""}.` : ""}`
+            : going ? `Iteration ${tr.iteration.toLocaleString()} of ${tr.iterations.toLocaleString()}${tr.reward != null ? `, mean reward ${tr.reward.toFixed(2)}` : ""}. A new attempt lands above every ${tr.attempt_every} iterations.`
+            : tr.state === "done" ? `${tr.iterations.toLocaleString()} iterations, ${tr.attempts} attempts.${last?.stages_total ? ` The last one reaches ${last.stages_completed ?? 0} of ${last.stages_total} key moments${last.fell ? " and falls" : last.success ? " and completes the clip" : ""}.` : ""}`
             : tr.error ?? job.error ?? "The training stopped."}
         </p>
         {tr.checkpoint && <a className="btn sm" href={url(api.policy(job.id))} download><Icon name="download" size={14} />Download the policy (rsl_rl .pt)</a>}
-        {tr.state === "done" && <p className="faint" style={{ fontSize: 12.5, marginTop: 8 }}>The checkpoint loads in mjlab's play script or <span className="mono">mjlab_rollout.py</span> with this build's training environment. It is kept with the upload for a short while.</p>}
+        {tr.state === "done" && <p className="faint" style={{ fontSize: 12.5, marginTop: 8 }}>Loads in mjlab with this build's training environment.</p>}
       </div>
     );
   }
@@ -573,8 +558,8 @@ function PolicyCard({ job, file, attempts }: { job: Job; file: File | null; atte
       <div className="eyebrow">Policy</div>
       <p className="muted" style={{ fontSize: 14 }}>
         {modal && policy?.status === "skipped"
-          ? <>The environment is built. "Train on a GPU" in the build view above trains a policy on it (PPO in mjlab on a Modal GPU, about {health?.train?.minutes} min) and plays the robot's attempts there as it learns.{health?.train?.code_required ? " It needs an invite code." : ""}</>
-          : <>Training a policy in this environment takes 1–2 h on a GPU (PPO across thousands of simulated G1s){policy?.status !== "skipped" ? "." : colab ? "; this build stops at the environment, and the GPU runner can take it from there." : "; this host has none, so the build stops here."}</>}
+          ? <>Nothing trained yet. "Train on a GPU" above trains a policy in about {health?.train?.minutes} min{health?.train?.code_required ? " (invite code needed)" : ""}.</>
+          : <>Training takes 1–2 h on a GPU{policy?.status !== "skipped" ? "." : colab ? "; the GPU runner can take it from here." : ", which this host lacks."}</>}
       </p>
       {colab ? (
         gpu ? (
@@ -582,11 +567,11 @@ function PolicyCard({ job, file, attempts }: { job: Job; file: File | null; atte
         ) : file ? (
           <div><button className="btn sm primary" onClick={train} disabled={busy}><Icon name="play" size={14} />{busy ? "Uploading…" : "Train a policy on the GPU"}</button></div>
         ) : (
-          <p className="faint" style={{ fontSize: 13 }}>To train on the GPU, <Link to="/live" style={{ color: "var(--accent)" }}>upload the video again</Link> (it isn't kept in this tab after a reload).</p>
+          <p className="faint" style={{ fontSize: 13 }}>To train on the GPU, <Link to="/live" style={{ color: "var(--accent)" }}>upload the video again</Link>.</p>
         )
       ) : modal ? null : (
         <>
-          <p className="faint" style={{ fontSize: 13 }}>Runs already trained against a keypose task like this one:</p>
+          <p className="faint" style={{ fontSize: 13 }}>Runs trained on a task like this one:</p>
           {runs == null ? <div className="skeleton" style={{ height: 40 }} /> : trained.length ? (
             <ul className="live-runs">
               {trained.map((r) => (
@@ -594,7 +579,7 @@ function PolicyCard({ job, file, attempts }: { job: Job; file: File | null; atte
               ))}
             </ul>
           ) : (
-            <p className="faint" style={{ fontSize: 13 }}>None in this gallery yet; the <Link to="/showcase" style={{ color: "var(--accent)" }}>showcase</Link> and <Link to="/research" style={{ color: "var(--accent)" }}>research</Link> pages show trained policies.</p>
+            <p className="faint" style={{ fontSize: 13 }}>None yet; see the <Link to="/showcase" style={{ color: "var(--accent)" }}>showcase</Link>.</p>
           )}
         </>
       )}
@@ -749,13 +734,13 @@ function ReplayPolicies({ replay, job, demoId }: { replay: Replay; job: Job; dem
               <span className={`env-tag ${p.checker.success ? "req" : ""}`}>
                 {p.checker.success ? `passes today's checks: ${p.checker.stages_completed}/${p.checker.stages_total}` : `today's checks: ${p.checker.stages_completed}/${p.checker.stages_total}`}
               </span>
-              {!p.checker.success && <span className="faint" style={{ fontSize: 12 }}>Trained under an earlier, looser checker (it allowed tuck-hops and flicked kicks).</span>}
+              {!p.checker.success && <span className="faint" style={{ fontSize: 12 }}>Trained under an earlier, looser checker.</span>}
               {p.curve && <Curve points={p.curve.points} upTo={Infinity} label="mean episode reward" small />}
             </figcaption>
           </figure>
         ))}
       </div>
-      <p className="faint" style={{ fontSize: 12.5 }}>Solid robot: the trained policy, physically simulated. Green ghost: the reference it was shown.</p>
+      <p className="faint" style={{ fontSize: 12.5 }}>Solid: the trained policy. Green ghost: the reference.</p>
     </div>
   );
 }

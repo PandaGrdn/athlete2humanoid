@@ -373,24 +373,24 @@ function Caption({ k, input, status, pick, accepted, note, learning, canTrain }:
   const spec = input.spec;
   const text: Record<StageKey, ReactNode> = {
     video: input.segmenter
-      ? <>{input.segmenter} segments and tracks the athlete; the pose model sees only the masked person.</>
+      ? <>{input.segmenter} segments and tracks the person.</>
       : !input.poseModel && (status.skeleton === "waiting" || status.skeleton === "working")
-        ? <>The pose stage is still running. SAM 3.1's mask shows here once it is in; a CPU-only build skips it.</>
-        : <>This CPU build skips {"SAM 3.1"}: the pose model reads the whole frame, so film one person.</>,
-    skeleton: <>{input.poseModel ?? "The pose model"} lifts the athlete to 3D: {input.skeleton?.j ?? 17} joints in metres, feet on the floor, in step with the video.</>,
-    retarget: <>mink IK puts the motion on the G1's 29 joints and bone lengths. The lines join each wrist, elbow, knee and ankle to the body it drives{input.retargetCm != null ? <>; mean end-effector error {input.retargetCm.toFixed(1)} cm</> : null}.</>,
-    moments: spec ? <>{spec.counts.moments} key moments{spec.counts.flights ? ` and ${spec.counts.flights} flight${spec.counts.flights > 1 ? "s" : ""}` : ""}, found in the motion itself{spec.named_by ? <>, named by {spec.named_by}</> : null}. The reward pays for reaching them in order; a ring pulses as each passes.</> : null,
-    variants: v ? <>{v.kept} of {v.total} variants kept: mirrored, re-timed and rescaled copies, each passing its own key-moment check and the physics filter{v.trained_on ? "; the stored policies trained on these" : v.trained_on === false ? " (generated from this retarget; its stored policy trained on the clip alone)" : ""}. Ghosts: {v.ghosts.map((g) => g.label).join(", ") || "none"}.</> : null,
+        ? <>The pose stage is still running; the mask shows once it is in.</>
+        : <>This CPU build skips SAM 3.1: the pose model reads the whole frame.</>,
+    skeleton: <>{input.poseModel ?? "The pose model"} lifts the person to 3D: {input.skeleton?.j ?? 17} joints, in step with the video.</>,
+    retarget: <>The motion on the G1's 29 joints{input.retargetCm != null ? <>, mean error {input.retargetCm.toFixed(1)} cm</> : null}.</>,
+    moments: spec ? <>{spec.counts.moments} key moments{spec.counts.flights ? ` and ${spec.counts.flights} flight${spec.counts.flights > 1 ? "s" : ""}` : ""}, found in the motion{spec.named_by ? <>, named by {spec.named_by}</> : null}. The reward pays for reaching them in order.</> : null,
+    variants: v ? <>{v.kept} of {v.total} variants kept: mirrored, re-timed and rescaled copies the robot trains on.</> : null,
     policy: learning ? (input.training && (input.training.state === "starting" || input.training.state === "running")
-      ? <>The policy is training on a GPU now: PPO in mjlab, {input.training.iterations.toLocaleString()} iterations. Every {input.training.attempt_every} iterations the robot tries the clip once and the attempt lands here; the ghost is the retarget it is paid to follow.</>
-      : <>The policy's attempts while it trained, one every {input.attempts?.attempt_every ?? 50} iterations: the robot tries the clip once with the policy as it was then, next to the retarget as a ghost. Early attempts fall at once; later ones follow the ghost. Slide through them, or let them play.</>)
+      ? <>Training on a GPU now, {input.training.iterations.toLocaleString()} iterations. A new attempt lands here every {input.training.attempt_every}.</>
+      : <>One attempt every {input.attempts?.attempt_every ?? 50} iterations, next to the reference as a ghost. Early ones fall; later ones follow.</>)
       : status.policy === "offer" && !accepted && canTrain
-      ? <>Nothing is trained yet. Press "Train on a GPU" to train a policy on this environment (PPO in mjlab on a Modal GPU) and watch the robot's attempts land here every few iterations{pick ? <>, or play the nearest stored policy ({pick.tab.toLowerCase()}) meanwhile</> : null}.</>
+      ? <>Nothing trained yet. Press "Train on a GPU" and watch the attempts land here{pick ? <>, or play the nearest stored policy ({pick.tab.toLowerCase()}) meanwhile</> : null}.</>
       : pick ? (status.policy === "offer" && !accepted
-      ? <>Training a policy on this clip takes PPO in mjlab 1–2 h on a GPU, and this host has none. You can play the nearest stored policy instead ({pick.tab.toLowerCase()}: {pick.why.replace("the nearest stored policy: ", "")}), labelled pre-trained.</>
+      ? <>Training takes 1–2 h on a GPU, which this host lacks. Playing the nearest stored policy instead ({pick.tab.toLowerCase()}), labelled pre-trained.</>
       : pick.own
-      ? <>The policy trained on this clip, rolled out in MuJoCo and recorded. Click it, or press Push, to shove it: you see its recorded recovery.</>
-      : <>Pre-trained, not trained on this clip: {pick.tab.toLowerCase()}, {pick.why}. Click it or press Push to shove it.</>) : null,
+      ? <>The policy trained on this clip. Click it, or press Push, to shove it.</>
+      : <>Pre-trained on {pick.tab.toLowerCase()}, not this clip. Click it or press Push to shove it.</>) : null,
   };
   const waiting: Record<StageKey, string> = {
     video: "Checking the video…", skeleton: "Finding the pose…", retarget: "Retargeting onto the G1…", moments: "Compiling the key moments…",

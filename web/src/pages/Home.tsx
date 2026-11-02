@@ -3,34 +3,31 @@ import { Link, useNavigate } from "react-router";
 import { api, checkVideo, fmt, policyColor, type RunSummary } from "../api";
 import { useHealth, useUiMode } from "../App";
 import { AetherHero } from "../components/aether";
-import { AuroraHero, Figures, MethodTimeline, StackMarquee, Statement } from "../components/aurora";
-import { MethodTable, PixelHero, PixelStatement, Readout, Typed } from "../components/pixel";
+import { AuroraHero, Figures, MethodTimeline, StackMarquee } from "../components/aurora";
+import { MethodTable, PixelHero, Readout, Typed } from "../components/pixel";
 import { Icon, LoopVideo } from "../components/ui";
 import { exUrl } from "../examples";
 import { useExampleIndex } from "./Examples";
 import { startLiveBuild } from "./LivePage";
 
 const PIPELINE = [
-  { title: "Silhouette", text: "Segment and track the person through every frame.", model: "SAM 3.1" },
-  { title: "Pose", text: "3D body keypoints per frame in world space; MediaPipe as the fallback.", model: "SAM 3D Body" },
-  { title: "Retarget", text: "Inverse kinematics onto a 29-DoF Unitree G1.", model: "mink IK" },
-  { title: "Task environment", text: "Key moments, contacts and the reward machine, from the retarget.", model: "key poses" },
-  { title: "Latent reward", text: "Embed video and robot renders; distill a reward net.", model: "V-JEPA 2" },
-  { title: "Policy", text: "Reinforcement learning across 4,096 simulated G1s.", model: "PPO · mjlab" },
-  { title: "Evaluate", text: "Re-render rollouts; score them against the source clip.", model: "V-JEPA 2 · DTW" },
+  { title: "Silhouette", text: "Segment and track the person.", model: "SAM 3.1" },
+  { title: "Pose", text: "3D keypoints per frame.", model: "SAM 3D Body" },
+  { title: "Retarget", text: "IK onto the 29-joint G1.", model: "mink IK" },
+  { title: "Task environment", text: "Key moments and the reward.", model: "key poses" },
+  { title: "Latent reward", text: "Does it look like the clip?", model: "V-JEPA 2" },
+  { title: "Policy", text: "RL across 4,096 simulated G1s.", model: "PPO · mjlab" },
+  { title: "Evaluate", text: "Score rollouts against the clip.", model: "V-JEPA 2 · DTW" },
 ];
 
 const AETHER_HERO = "squat-jump-variants/policy_tracking_var.mp4";
 
 const FIGURES = [
-  { v: "7", k: "Stages", sub: "From the first frame of video to an evaluated policy, all automatic." },
-  { v: "29", k: "Degrees of freedom", sub: "Every joint of the Unitree G1 is driven by the trained network." },
-  { v: "4,096", k: "Simulated robots", sub: "G1s learning in parallel in mjlab on one GPU." },
-  { v: "82%", k: "Held-out variants", sub: "Squat-jump variants the policy never trained on, completed." },
+  { v: "7", k: "Stages", sub: "Video in, evaluated policy out, all automatic." },
+  { v: "29", k: "Degrees of freedom", sub: "Every joint of the G1, driven by the network." },
+  { v: "4,096", k: "Simulated robots", sub: "Learning in parallel on one GPU." },
+  { v: "82%", k: "Held-out variants", sub: "Completed without ever training on them." },
 ];
-
-const STATEMENT = "The robot is rewarded for looking like the clip, not only for matching its joint angles. The judge is Meta's V-JEPA 2, a model that learned how the world moves by watching video.";
-const FIGURES_LEDE = "Each upload goes through segmentation, pose, retargeting and a learned reward before PPO trains the G1. These are the numbers behind one run.";
 
 export default function Home() {
   const [runs, setRuns] = useState<RunSummary[] | null>(null);
@@ -69,12 +66,7 @@ export default function Home() {
             <span className="pill">Unitree G1</span>
           </div>
           <h1>Any video in.<br /><em>A humanoid skill</em> out.</h1>
-          <p className="lede">
-            Film a person moving. The pipeline retargets the motion to a Unitree G1 and trains a control
-            policy whose reward comes from Meta's V-JEPA 2 video model: the robot is rewarded for looking
-            like the clip, not only for matching its joint angles.
-          </p>
-          <div className="cta">
+          <div className="cta" style={{ marginTop: 24 }}>
             <Link className="btn primary" to="/showcase"><Icon name="cube" size={16} />Push the robot, in 3D</Link>
             <a className="btn" href="#run"><Icon name="upload" size={16} />Run a video</a>
             {featured && <Link className="btn ghost" to={`/runs/${featured.id}`}>Latest run <Icon name="arrow" size={16} /></Link>}
@@ -102,11 +94,9 @@ export default function Home() {
       </section>
 
       </div>
-      {aurora && <Statement eyebrow="The idea" text={STATEMENT} />}
-      {pixel && <PixelStatement text={STATEMENT} />}
       <div className="container">
-      {aurora && <Figures title="One clip, a whole training run" items={FIGURES} lede={FIGURES_LEDE} />}
-      {pixel && <Readout title="One clip, a whole training run" items={FIGURES} lede={FIGURES_LEDE} />}
+      {aurora && <Figures title="One clip, a whole training run" items={FIGURES} />}
+      {pixel && <Readout title="One clip, a whole training run" items={FIGURES} />}
       {pixel ? <MethodTable steps={PIPELINE} /> : aurora ? <MethodTimeline steps={PIPELINE} /> : <section className="section" id="how">
         <div className="section-head">
           <div>
@@ -131,23 +121,20 @@ export default function Home() {
           <div>
             <div className="eyebrow">Run</div>
             <h2 style={{ marginTop: 6 }}><Typed text="Start a job" /></h2>
-            <p>Upload a clip of one person, full body in frame, or replay one of the finished runs below.</p>
           </div>
         </div>
         {offline && (
           <div className="notice" style={{ marginBottom: 16 }}>
             <Icon name="cube" />
-            <div><strong>The live pipeline is offline right now.</strong> The hosted API sleeps when idle; this page
-              keeps checking and uploads come back when it answers. Everything under{" "}
-              <Link to="/showcase" style={{ color: "var(--accent)" }}>Showcase</Link> works without it.</div>
+            <div><strong>The pipeline API is asleep.</strong> Uploads work once it answers; the{" "}
+              <Link to="/showcase" style={{ color: "var(--accent)" }}>showcase</Link> works now.</div>
           </div>
         )}
         <Link to="/live" className="card live-cta">
           <span className="live-cta-ico"><Icon name="cube" size={20} /></span>
           <span style={{ flex: 1, minWidth: 0 }}>
             <strong>Watch it build live.</strong>{" "}
-            <span className="muted">Upload any athletic movement and see the pose, the G1 retarget and its RL task
-              environment appear next to your video, stage by stage.</span>
+            <span className="muted">Your video becomes a robot and its task, stage by stage.</span>
           </span>
           <span className="btn sm primary">Open live demo <Icon name="arrow" size={14} /></span>
         </Link>
@@ -156,17 +143,16 @@ export default function Home() {
           <div className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div className="eyebrow">What a job produces</div>
             <ul style={{ margin: 0, paddingLeft: 18, color: "var(--text-2)", fontSize: 14, display: "grid", gap: 8 }}>
-              <li>The clip retargeted onto the G1, side by side with the source</li>
-              <li>Three policies: joint tracking, hybrid, and V-JEPA latent reward</li>
-              <li>V-JEPA 2 alignment, DTW rank against a bank of other motions, falls, torso error</li>
-              <li>Robustness under pushes, noisy starts, friction, mass and speed changes</li>
-              <li>Downloads: policy checkpoints (and ONNX), the G1 motion as CSV</li>
+              <li>The clip retargeted onto the G1</li>
+              <li>Three trained policies</li>
+              <li>V-JEPA 2 and DTW scores, falls</li>
+              <li>Robustness under pushes and noise</li>
+              <li>Checkpoints, ONNX, motion CSV</li>
             </ul>
             {health && !health.runners.includes("colab") && (
               <div className="notice" style={{ marginTop: "auto" }}>
                 <Icon name="cube" />
-                <div><strong>Hosted demo.</strong> This deployment has no GPU, so jobs replay a recorded A100 run
-                  with its real logs and training curves on a ~{Math.round(health.demo_seconds)}-second clock. A full run takes about 3 hours.</div>
+                <div><strong>Hosted demo.</strong> Jobs replay a recorded A100 run in about {Math.round(health.demo_seconds)} s.</div>
               </div>
             )}
           </div>
@@ -178,12 +164,11 @@ export default function Home() {
           <div>
             <div className="eyebrow">Gallery</div>
             <h2 style={{ marginTop: 6 }}><Typed text="Finished runs" /></h2>
-            <p>Each was trained on a Colab A100 from ordinary video clips. Open one for the full results.</p>
           </div>
         </div>
         {err && <div className="error-box">Couldn't load runs: {err}</div>}
         {offline && !runs && (
-          <div className="notice">The run gallery needs the pipeline API, which is asleep. The recorded results are
+          <div className="notice">The gallery needs the pipeline API, which is asleep. Results are
             on the <Link to="/research" style={{ color: "var(--accent)" }}>research page</Link>.</div>
         )}
         {!runs && !err && !offline && <div className="gallery">{[0, 1].map((i) => <div key={i} className="skeleton" style={{ height: 380 }} />)}</div>}
@@ -206,10 +191,7 @@ function ShowcaseTeaser({ more }: { more: number | null }) {
       <div className="home-sc-body">
         <div className="eyebrow">Showcase</div>
         <h2><Typed text="Push the robot" /></h2>
-        <p>
-          The squat-jump policy in 3D, next to the phone video it learned from. Orbit it, zoom in, and click it: it
-          plays the trained policy's recorded response to a shove from that side.
-        </p>
+        <p>The trained policy in 3D. Orbit it, then click it to shove it.</p>
         <div className="home-sc-cta">
           <Link className="btn primary" to="/showcase"><Icon name="cube" size={15} />Open the showcase</Link>
           <Link className="btn ghost" to="/research">All results{more ? ` (${more})` : ""} <Icon name="arrow" size={14} /></Link>
@@ -318,7 +300,7 @@ function UploadPanel({ offline }: { offline: boolean }) {
       >
         <div className="icon"><Icon name="upload" size={22} /></div>
         <h3>{busy && live ? "Uploading…" : "Drop a video, or click to choose"}</h3>
-        <p>{exts.join(" ")} · up to {maxMb} MB · one person, full body, 5–20 s works best</p>
+        <p>{exts.join(" ")} · up to {maxMb} MB · one person, full body, 5–20 s</p>
         <input ref={input} type="file" accept={exts.join(",") + ",video/*"} hidden onChange={(e) => pick(e.target.files?.[0])} />
       </div>
       {file && preview && (

@@ -61,15 +61,10 @@ export function ExamplesIndex() {
       <section className="ex-intro">
         <div className="eyebrow">Research</div>
         <h1><Typed text="What the robot was shown, what it learned, and how we know" when="load" /></h1>
-        <p className="lede">
-          Recorded results from the full pipeline: phone videos in, simulated Unitree G1 policies out. Every number
-          is read from the runs' own evaluation files. These pages need no server, so they work even when the live
-          pipeline is asleep.
-        </p>
+        <p className="lede">Recorded results: phone videos in, G1 policies out. Every number comes from the runs' own files.</p>
       </section>
       <div className="card ex-showcase">
-        <p><strong>In 3D:</strong> the squat-jump policy next to its source video, with recorded responses to pushes you
-          trigger by clicking it.</p>
+        <p><strong>In 3D:</strong> the trained policies, next to their videos. Click one to push it.</p>
         <Link className="btn sm" to="/showcase">Open the showcase <Icon name="arrow" size={14} /></Link>
       </div>
       <ExampleCards {...idx} />
