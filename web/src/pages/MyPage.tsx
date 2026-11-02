@@ -63,11 +63,7 @@ function MyList() {
       <div className="ex-intro">
         <div className="eyebrow">My environments</div>
         <h1><Typed text="Your builds and trainings" when="load" /></h1>
-        <p className="lede">
-          Every environment this browser built and every policy it trained, kept by the site so they are here after you
-          close it. No account: a key made on your first visit identifies you. Take the link below to another device to
-          see the same list there.
-        </p>
+        <p className="lede">Everything this browser built and trained, kept for you. No account: a key identifies you.</p>
       </div>
 
       <div className="card card-pad" style={{ maxWidth: 820, marginBottom: 20 }}>
@@ -76,9 +72,7 @@ function MyList() {
           <input className="my-key mono" type="text" readOnly value={link} aria-label="A link that restores your key" onFocus={(e) => e.currentTarget.select()} />
           <button className="btn sm" onClick={copy}><Icon name="file" size={14} />{copied ? "Copied" : "Copy link"}</button>
         </div>
-        <p className="faint" style={{ fontSize: 12.5, marginTop: 8 }}>
-          Anyone with this link sees this list, so share it only with yourself. Have a key from another device?
-        </p>
+        <p className="faint" style={{ fontSize: 12.5, marginTop: 8 }}>Open this link on another device to see the same list there. Keep it to yourself.</p>
         <form onSubmit={useKey} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <input className="my-key mono" type="text" value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="Paste a key or a link" aria-label="A key or link from another device" />
           <button className="btn sm" type="submit" disabled={!paste.trim()}>Use this key</button>
@@ -87,11 +81,11 @@ function MyList() {
       </div>
 
       {!health && apiError && <div className="notice"><Icon name="cube" /><div>The pipeline API isn't reachable, so the list can't load right now.</div></div>}
-      {health && !health.store?.durable && <div className="notice"><Icon name="cube" /><div>This deployment keeps builds and trainings only while its API instance lives: they stay until it restarts or their upload expires.</div></div>}
+      {health && !health.store?.durable && <div className="notice"><Icon name="cube" /><div>This deployment keeps builds only until its API restarts.</div></div>}
       {err && <div className="error-box">{err}</div>}
       {jobs && jobs.length === 0 && (
         <div className="card card-pad" style={{ maxWidth: 820 }}>
-          <p className="muted" style={{ fontSize: 14 }}>Nothing yet. <Link to="/live" style={{ color: "var(--accent)" }}>Upload a video</Link> to build its environment; it lands here.</p>
+          <p className="muted" style={{ fontSize: 14 }}>Nothing yet. <Link to="/live" style={{ color: "var(--accent)" }}>Upload a video</Link> and it lands here.</p>
         </div>
       )}
       {jobs && jobs.length > 0 && (

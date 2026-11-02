@@ -78,18 +78,15 @@ export default function BuildPage() {
                 {run && <Link className="btn sm ghost" to={`/runs/${run.id}`}>Results <Icon name="arrow" size={14} /></Link>}
               </div>
               <p className="muted" style={{ fontSize: 14, maxWidth: 820, margin: "0 0 14px" }}>
-                Each stage of the pipeline, from this run's own files, shown in the order it ran: the video and its SAM 3.1 mask,
-                the 3D skeleton, the G1 retargeted onto it, the key moments the reward is built from, the variants it trains on,
-                then the policy learning, attempt by attempt, and the trained policy you can push. Click a stage to look at it;
-                drag to orbit; touch the attempt slider to take over from the replay.
+                Every stage of the build from this run's own files, then the robot learning attempt by attempt. Click a stage; drag to orbit.
               </p>
               <CreditLine credit={run?.credit} />
             </>
           );
         }}
         notes={(run) => ({ policy: run.attempts?.attempts.length
-          ? <>This run trained: {run.policies_trained.join(", ") || "none"} (<Link to={`/runs/${run.id}`}>scores and videos</Link>). The attempts were recorded by training this run's environment again on a Modal GPU, {run.attempts.iterations?.toLocaleString() ?? ""} iterations of mjlab's tracking task on the reference and its variants.</>
-          : <>This run trained: {run.policies_trained.join(", ") || "none"} (<Link to={`/runs/${run.id}`}>scores and videos</Link>). The 3D robot is the showcase recording with pushes.</> })} />
+          ? <>{run.attempts.iterations?.toLocaleString() ?? ""} iterations on a GPU. <Link to={`/runs/${run.id}`}>Scores and videos</Link>.</>
+          : <>Trained: {run.policies_trained.join(", ") || "none"}. <Link to={`/runs/${run.id}`}>Scores and videos</Link>.</> })} />
     </div>
   );
 }

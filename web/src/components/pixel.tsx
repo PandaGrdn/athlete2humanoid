@@ -114,10 +114,10 @@ export function PixelNav() {
 }
 
 const SPEC = [
-  { k: "Input", v: "One video of one person, full body, 5 to 20 seconds" },
-  { k: "Reward", v: "Meta V-JEPA 2, comparing the clip with renders of the robot" },
-  { k: "Training", v: "PPO across 4,096 simulated G1s in mjlab, on one GPU" },
-  { k: "Output", v: "A control policy for the 29-joint Unitree G1, with ONNX" },
+  { k: "Input", v: "One person, full body, 5 to 20 s of video" },
+  { k: "Reward", v: "Meta V-JEPA 2" },
+  { k: "Training", v: "PPO, 4,096 simulated G1s" },
+  { k: "Output", v: "A Unitree G1 control policy" },
 ];
 
 /** The opening: the claim, typed; the spec as a key-value sheet; and, drawn in the glyph field, the recorded clip
@@ -131,11 +131,7 @@ export function PixelHero({ latest }: { latest?: string }) {
       <div className="container px-hero-grid">
         <div className="px-hero-copy">
           <h1><Typed text={"Any video in.\nA humanoid skill out."} when="load" delay={300} caret /></h1>
-          <p className="px-lede">
-            Film a person moving. The pipeline retargets the motion to a Unitree G1 and trains a control policy in
-            simulation, rewarded for looking like your clip.
-          </p>
-          <div className="px-cta">
+          <div className="px-cta" style={{ marginTop: 28 }}>
             <Link className="btn primary" to="/showcase"><Icon name="cube" size={16} />Push the robot in 3D</Link>
             <Link className="btn" to="/live"><Icon name="upload" size={16} />Run your video</Link>
             {latest && <Link className="btn ghost" to={`/runs/${latest}`}>Latest run<Icon name="arrow" size={16} /></Link>}
@@ -168,12 +164,12 @@ export function PixelStatement({ text }: { text: string }) {
 }
 
 /** The numbers behind a run, as an instrument readout: label, dotted leader, value. */
-export function Readout({ title, lede, items }: { title: string; lede: ReactNode; items: { v: string; k: string; sub: string }[] }) {
+export function Readout({ title, lede, items }: { title: string; lede?: ReactNode; items: { v: string; k: string; sub: string }[] }) {
   return (
     <section className="section px-readout">
       <div className="px-head">
         <h2><Typed text={title} /></h2>
-        <p>{lede}</p>
+        {lede && <p>{lede}</p>}
       </div>
       <dl className="px-readout-list">
         {items.map((f) => (
@@ -195,7 +191,6 @@ export function MethodTable({ steps }: { steps: { title: string; text: string; m
     <section className="section px-method" id="how">
       <div className="px-head">
         <h2><Typed text="Seven stages from pixels to a policy" /></h2>
-        <p>Every clip takes the same path. The first four stages run in about a minute; the reward, training and evaluation take a GPU a few hours.</p>
       </div>
       <ol className="px-steps">
         {steps.map((s, i) => (

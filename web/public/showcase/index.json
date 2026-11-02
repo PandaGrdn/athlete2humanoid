@@ -8,9 +8,9 @@
     "learned."
    ],
    "kicker": "One phone video → one policy",
-   "lede": "A person squat-jumping on a phone video became this simulated Unitree G1, controlled by a policy trained with reinforcement learning. It's the policy, not an animation of the video. Push it.",
-   "video": "One clip from a phone: a person squat-jumping, twice. SAM 3.1 segments them, SAM 3D Body lifts their pose to 3D.",
-   "policy": "PPO in mjlab across thousands of simulated G1s, on 36 automatic variants of the clip, with pushes during training. What you see is that network's own run in MuJoCo, recorded.",
+   "lede": "A person squat-jumping on a phone video became this G1. It's the policy, not an animation. Push it.",
+   "video": "One phone clip: two squat jumps.",
+   "policy": "PPO in mjlab on 36 variants of the clip, with pushes during training.",
    "facts": [
     {
      "v": "82%",
@@ -28,9 +28,9 @@
     "learned."
    ],
    "kicker": "One phone video → one policy",
-   "lede": "Two front kicks on a phone video, turned into a policy that balances on one leg through each kick. Push it mid-kick.",
-   "video": "One clip from a phone: two front kicks with the right leg. SAM 3.1 segments the person, SAM 3D Body lifts their pose to 3D.",
-   "policy": "PPO in mjlab on 36 automatic variants of the clip (mirrored, re-timed, rescaled), with pushes during training. The network's own run in MuJoCo, recorded.",
+   "lede": "Two front kicks, turned into a policy that balances on one leg through each. Push it mid-kick.",
+   "video": "One phone clip: two front kicks.",
+   "policy": "PPO in mjlab on 36 variants of the clip, with pushes during training.",
    "facts": [
     {
      "v": "100%",
@@ -48,9 +48,9 @@
     "learned."
    ],
    "kicker": "One phone video → one policy",
-   "lede": "Two slow squats on a phone video. The policy follows the reference within a few degrees per joint, and keeps its feet planted when pushed.",
-   "video": "One clip from a phone: two bodyweight squats. SAM 3.1 segments the person, SAM 3D Body lifts their pose to 3D.",
-   "policy": "PPO in mjlab tracking the retarget, trained on the clip itself (2,000 iterations), with pushes during training. The network's own run in MuJoCo, recorded.",
+   "lede": "Two slow squats. The policy follows the reference within a few degrees and keeps its feet planted when pushed.",
+   "video": "One phone clip: two bodyweight squats.",
+   "policy": "PPO in mjlab on the clip itself, with pushes during training.",
    "facts": [
     {
      "v": "0.06 rad",
@@ -66,9 +66,9 @@
     "on the spot."
    ],
    "kicker": "Free-licence video → one policy",
-   "lede": "A runner filmed side-on in a tracking shot along a lakeside road. The G1 trains on the gait from this video. The clip travels; the G1 runs it in place.",
-   "video": "Pavel Danilyuk's clip (Pexels License). SAM 3.1 segments the person, SAM 3D Body lifts the pose to 3D, and the run's forward travel is taken out.",
-   "policy": "PPO in mjlab on 36 automatic variants of the clip, warm-started from the squat-jump tracker, 1000 iterations. The network's own run in MuJoCo, recorded.",
+   "lede": "A runner filmed along a lakeside road. The G1 runs the gait in place.",
+   "video": "Pavel Danilyuk's clip (Pexels License); the forward travel is taken out.",
+   "policy": "PPO in mjlab on 36 variants of the clip, warm-started from the squat-jump tracker.",
    "facts": [
     {
      "v": "100%",
@@ -93,9 +93,9 @@
     "learned."
    ],
    "kicker": "One phone video → one policy",
-   "lede": "A dance on a phone video: the arms and hands carry the moves. Watch the robot build its environment and learn, attempt by attempt, then push the trained policy.",
-   "video": "A phone video of a dance, the project's own recording. SAM 3.1 segments the person, SAM 3D Body lifts the pose to 3D.",
-   "policy": "PPO in mjlab on 36 automatic variants of the clip, warm-started from the squat-jump tracker, 1500 iterations. The network's own run in MuJoCo, recorded.",
+   "lede": "A dance on a phone video. Watch the robot learn it attempt by attempt, then push the trained policy.",
+   "video": "The project's own phone recording.",
+   "policy": "PPO in mjlab on 36 variants of the clip, 1,500 iterations.",
    "facts": [
     {
      "v": "0%",
@@ -111,7 +111,7 @@
     "url": "",
     "licence": "own recording"
    },
-   "caveat": "Tracks the moves closely and stays up, but passes 3 of 9 key-moment stages: not a success by the spec yet",
+   "caveat": "Stays up and tracks the moves, but passes 3 of 9 key moments",
    "replay_build": "latent_ra_dance"
   }
  ]

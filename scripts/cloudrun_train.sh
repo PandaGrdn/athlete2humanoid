@@ -36,6 +36,7 @@ gcloud secrets add-iam-policy-binding "$name" --project "$PROJECT" --member "ser
 say "Cloud Run service $SERVICE: A2H_RUNNERS=demo,modal, $ITERS iterations, an attempt every $EVERY, $PER_DAY free a day"
 gcloud run services update "$SERVICE" --project "$PROJECT" --region "$REGION" --quiet \
   --update-secrets "A2H_TRAIN_CODE=$name:latest" \
-  --update-env-vars "A2H_RUNNERS=demo,modal,A2H_TRAIN_PER_DAY=$PER_DAY,A2H_TRAIN_ITERS=$ITERS,A2H_TRAIN_ATTEMPT_EVERY=$EVERY,A2H_TRAIN_TIMEOUT_H=$TIMEOUT_H,A2H_TRAIN_BRANCH=$BRANCH"
+  --update-env-vars "^:^A2H_RUNNERS=demo,modal:A2H_TRAIN_PER_DAY=$PER_DAY:A2H_TRAIN_ITERS=$ITERS:A2H_TRAIN_ATTEMPT_EVERY=$EVERY:A2H_TRAIN_TIMEOUT_H=$TIMEOUT_H:A2H_TRAIN_BRANCH=$BRANCH"
+  # ^:^ makes ':' the separator (gcloud topic escaping): the runner list itself contains a comma
 URL="$(gcloud run services describe "$SERVICE" --project "$PROJECT" --region "$REGION" --format 'value(status.url)')"
 say "Done. Check: curl -s $URL/api/health | grep -o '\"train\":{[^}]*}'   (expects \"backend\":\"modal\")"

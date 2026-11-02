@@ -162,12 +162,12 @@ function CountUp({ value }: { value: string }) {
   return <span ref={ref} aria-label={value}>{shown}</span>;
 }
 
-export function Figures({ title, lede, items }: { title: string; lede: ReactNode; items: { v: string; k: string; sub: string }[] }) {
+export function Figures({ title, lede, items }: { title: string; lede?: ReactNode; items: { v: string; k: string; sub: string }[] }) {
   return (
     <section className="section au-figures">
       <div className="au-split-head">
         <h2>{title}</h2>
-        <p>{lede}</p>
+        {lede && <p>{lede}</p>}
       </div>
       <div className="au-figure-grid">
         {items.map((f) => (

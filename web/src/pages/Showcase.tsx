@@ -123,8 +123,7 @@ export default function Showcase() {
             head={(run, restart) => (
               <div className="job-head" style={{ marginTop: 18 }}>
                 <p className="muted" style={{ flex: 1, minWidth: 240, fontSize: 14, margin: 0 }}>
-                  The whole pipeline on this clip, replayed from its own files in about {Math.round(run?.replay?.seconds ?? 28)} s: the stages, then the policy
-                  learning attempt by attempt, then the trained policy, which you can push. Touch the attempt slider to take over.
+                  The whole pipeline in {Math.round(run?.replay?.seconds ?? 28)} s, then the robot learning attempt by attempt.
                 </p>
                 <button className="btn sm" onClick={restart}><Icon name="play" size={14} />Replay</button>
                 <Link className="btn sm ghost" to={`/build/${replayTab}`}>Full build view <Icon name="arrow" size={14} /></Link>
@@ -154,8 +153,7 @@ export default function Showcase() {
           <div className="sc-step">
             <span className="sc-n mono">02</span>
             <h3>Retarget</h3>
-            <p>Inverse kinematics puts the motion on the G1's 29 joints and bone lengths. Turn on <em>Retarget</em> to see it
-              as a ghost: the reference the policy tracks.</p>
+            <p>The motion on the G1's 29 joints. Turn on <em>Retarget</em> to see it as a ghost.</p>
           </div>
           <div className="sc-step">
             <span className="sc-n mono">03</span>
@@ -175,34 +173,8 @@ export default function Showcase() {
         <section className="sc-honest card card-pad">
           <div className="eyebrow">What you're watching</div>
           <p>
-            Recorded responses of the trained policy, replayed in your browser: nothing is simulated live. The robot's
-            pose comes from the policy's own rollout in mjlab (checkpoint <span className="mono">{show?.pushes.checkpoint ?? "model_1499.pt"}</span>,
-            50 Hz), drawn with the G1's meshes from MuJoCo Menagerie.
+            The trained policy's own rollouts in mjlab, recorded and replayed here{show ? <>: {nPushes} pushes from {show.pushes.directions} directions at {show.pushes.strengths_mps.join(" or ")} m/s. A click plays the nearest one</> : null}.
           </p>
-          {show && (() => {
-            const p = show.pushes;
-            const gap = (p.moments[1]?.step - p.moments[0]?.step) / show.fps || 0.25;
-            const lead = (gap + 6 / show.fps).toFixed(2);
-            return (
-              <>
-                <p>
-                  Pushes: {nPushes} rollouts of the same policy, each shoved once ({p.kind}) at one of {p.moments.length} moments
-                  {" "}{gap} s apart, from one of {p.directions} directions, at {p.strengths_mps.join(" or ")} m/s. A click plays the
-                  recording for the next moment (up to {lead} s later), from the recorded direction nearest the one you pushed.
-                  The arrow shows that direction.
-                </p>
-                <p>
-                  Joins: parallel runs of one policy drift apart a little through the jumps (float noise; median
-                  {" "}{p.drift.median.toFixed(2)}, at most {p.drift.max.toFixed(2)} in qpos before their push), so each recording starts
-                  {" "}{(p.pre_frames / show.fps).toFixed(1)} s before its push and the view crossfades into it. A recording ends at the
-                  clip's end, {p.after_fall_s} s after a fall, or once the robot is back within {Math.round(p.rejoin.m * 100)} cm and
-                  {" "}{Math.round((p.rejoin.rad * 180) / Math.PI)}° of every joint of the unpushed run, which {pct(p.rejoined)} of the upright
-                  ones do; it then eases back onto that run. Most keep the ground they lost: the policy recovers its balance and the
-                  motion, not its spot.
-                </p>
-              </>
-            );
-          })()}
           <div className="sc-links">
             {entry?.research && <Link className="btn sm" to={entry.research}>The numbers behind it <Icon name="arrow" size={14} /></Link>}
             <Link className="btn sm ghost" to="/research">More results <Icon name="arrow" size={14} /></Link>
