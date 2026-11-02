@@ -332,14 +332,17 @@ def test_lost_contact_is_not_a_failed_job(train_client):
 
     class Unavailable(Exception):
         pass
-    fake.state = lambda call_id: (_ for _ in ()).throw(Unavailable("UNAVAILABLE"))
+    fake.state_ = "unknown"  # what the real backend answers to a gRPC-style error (below)
     real = T.ModalBackend()
     real._call = lambda cid: type("C", (), {"get": lambda self, timeout=0: (_ for _ in ()).throw(Unavailable("x"))})()
     assert real.state("fc-1") == "unknown"
     real._call = lambda cid: type("C", (), {"get": lambda self, timeout=0: (_ for _ in ()).throw(ValueError("cancelled"))})()
     assert real.state("fc-1") == "failed"
+    time.sleep(0.3)  # several polls of "unknown"
     j = c.get(f"/api/jobs/{jid}").json()
-    assert j["training"]["state"] == "running"
+    assert j["training"]["state"] == "running" and fake.cancelled == []
+    fake.finish(f"live_{jid[:12]}")
+    assert wait_done(c, jid)["training"]["state"] == "done"
 
 
 def test_shutdown_cancels_running_trainings(train_client):
@@ -351,7 +354,7 @@ def test_shutdown_cancels_running_trainings(train_client):
     c.app.state.jobs.close()
     j = c.app.state.jobs.get(jid)
     assert j.training["state"] == "failed" and "server stopped" in j.error and j.status == "succeeded"
-    assert fake.cancelled == ["fc-1"] and f"live_{jid[:12]}" in fake.removed
+    assert set(fake.cancelled) == {"fc-1"} and f"live_{jid[:12]}" in fake.removed  # (the follow thread's exit cancels too)
 
 
 def test_train_requests_are_rate_limited_per_client(train_client):
@@ -369,14 +372,18 @@ def test_restart_stops_a_training_it_cannot_follow(tmp_path, runs_dir):
     body = {"id": "a" * 32, "runner": "live", "status": "running", "stage": "policy", "stages": [], "logs": [], "curves": {},
             "created_at": 1.0, "updated_at": 2.0, "version": 3,
             "training": {"backend": "modal", "state": "running", "session": "live_aaaaaaaaaaaa", "call_id": "fc-9",
-                         "started_at": 1.0, "attempts": 1}}
+                         "started_at": time.time() - 100, "attempts": 1}}
     journal.save([("a" * 32, "running", 1.0, 2.0, None, body)])
     fake = FakeBackend()
     store = JobStore(s, journal, train_backend=fake)
     j = store.get("a" * 32)
     # (2) the training is marked failed, the build stays succeeded, nothing counts as running any more
     assert j.status == "succeeded" and "GPU job was stopped" in j.error and j.training["state"] == "failed"
-    assert fake.cancelled == ["fc-9"] and fake.removed == ["live_aaaaaaaaaaaa"] and store.train.active() == []
+    assert fake.cancelled == ["fc-9"] and fake.removed == ["live_aaaaaaaaaaaa"] and store.train.active_count() == 0
+    # (A) ... and the store says so too, so the job doesn't come back as "training" once it leaves memory
+    rec = store.persist.get_record("a" * 32)
+    assert rec["training"]["state"] == "failed" and rec["status"] == "succeeded"
+    assert [r["state"] for r in store.persist.trainings(0)] == ["failed"]
     store.close()
     journal.close()
 

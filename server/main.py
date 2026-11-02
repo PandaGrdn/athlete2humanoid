@@ -19,10 +19,11 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import live, logs, runs, train
+from . import live, logs, runs, store as persist, train
 from .config import Settings
 from .journal import Journal
 from .jobs import TERMINAL, JobStore, job_event
@@ -83,7 +84,7 @@ def create_app(settings=None):
     app.state.streams = 0
     # outermost first: hardening sees every response (even 413/429), then limits, then CORS
     app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["GET", "POST"],
-                       allow_headers=["Content-Type", "Range"], max_age=600,
+                       allow_headers=["Content-Type", "Range", "X-A2H-Owner"], max_age=600,
                        expose_headers=["Content-Length", "Content-Range", "Accept-Ranges", "Retry-After", "X-Request-ID"])
     app.add_middleware(BodyLimit, limit=NON_UPLOAD_BODY, upload_limit=settings.max_upload_bytes + MULTIPART_SLACK)
     app.add_middleware(RateLimit, limiter=RateLimiter(), settings=settings)
@@ -118,9 +119,9 @@ def create_app(settings=None):
         per_day = settings.train_per_day
         return {"backend": "modal", "code_required": bool(settings.train_code) and per_day <= 0,
                 "code_accepted": bool(settings.train_code), "per_day": per_day,
-                "left_today": max(0, per_day - store.train.today()) if per_day > 0 else 0,
+                "left_today": max(0, per_day - store.train.today(cached=True)) if per_day > 0 else 0,
                 "iterations": settings.train_iters, "attempt_every": settings.train_attempt_every,
-                "minutes": store.train.eta_min(), "busy": len(store.train.active()) >= settings.train_concurrency}
+                "minutes": store.train.eta_min(), "busy": store.train.active_count(cached=True) >= settings.train_concurrency}
 
     @app.get("/healthz", include_in_schema=False)
     def healthz():
@@ -142,12 +143,16 @@ def create_app(settings=None):
             checks["journal"] = journal.ping()
         except Exception:
             checks["journal"] = False
+        try:
+            checks["store"] = store.persist.ping()
+        except Exception:
+            checks["store"] = False
         gpu_ok, gpu_why = gpu_backend_status(settings)
         tr_ok, tr_why = store.train.available()
         ok = all(checks.values())
         body = {"ok": ok, "checks": checks, "gpu_backend": "ok" if gpu_ok else gpu_why,
                 "train_backend": "ok" if tr_ok else tr_why, "active_jobs": store.active_count(),
-                "trainings": len(store.train.active())}
+                "trainings": store.train.active_count(cached=True)}
         return JSONResponse(body, status_code=200 if ok else 503)
 
     @app.get("/api/health")
@@ -168,6 +173,9 @@ def create_app(settings=None):
                      "pose": settings.live_pose}  # "modal": SAM 3.1 + SAM 3D Body on a GPU; "cpu": MediaPipe here
             if settings.live_ok else None,
             "train": train_status(),  # the modal runner: a live build trained on a GPU, when this host offers it
+            # where finished builds and trainings are kept (server/store.py); durable: past this host's lifetime (a
+            # bucket, or local files on a machine with a disk; not /tmp on a hosted instance)
+            "store": {"kind": store.persist.kind, "durable": bool(store.persist.durable or not settings.hosted)},
         }
 
     @app.get("/api/runs")
@@ -225,6 +233,7 @@ def create_app(settings=None):
     async def create_job(request: Request, file: UploadFile | None = File(None), run_id: str | None = Form(None),
                          runner: str = Form("demo")):
         owner = anon(client_ip(request.scope, settings.proxy_hops))
+        owner_key = persist.owner_key(request.headers)  # the browser's own key: what "My environments" lists by
         if runner == "modal":
             raise HTTPException(400, "the modal runner trains a finished live build: upload with runner=live, then "
                                      "POST /api/jobs/{id}/train")
@@ -253,7 +262,7 @@ def create_app(settings=None):
                 upload[0].unlink(missing_ok=True)
             raise HTTPException(503, "no finished runs available to replay")
         job = store.create(runner, source_run=source if runner == "demo" else None, upload=upload and upload[1],
-                           owner=owner)
+                           owner=owner, owner_key=owner_key)
         if upload:
             tmp, meta = upload
             dest = store.upload_dir(job.id)
@@ -272,6 +281,25 @@ def create_app(settings=None):
         with store.lock:
             js = sorted(store.jobs.values(), key=lambda j: j.created_at, reverse=True)[:20]
             return [{k: v for k, v in j.public().items() if k not in ("logs", "curves", "input")} for j in js]
+
+    @app.get("/api/my/jobs")
+    def my_jobs(request: Request):
+        """This visitor's builds and trainings (the X-A2H-Owner key the browser made), kept past restarts by the store."""
+        key = persist.owner_key(request.headers)
+        if not key:
+            raise HTTPException(400, "send your key as X-A2H-Owner (32 hex characters)")
+        out = []
+        for r in store.mine(key)[:200]:
+            jid = r["id"]
+            kept = r.get("kept") or []
+            env = "env.zip" in kept or runs.safe_path(store.upload_dir(jid) / live.LIVE_DIR, runs.ENV_ZIP) is not None
+            tr = r.get("training") or None
+            out.append({"id": jid, "runner": r.get("runner"), "status": r.get("status"), "created_at": r.get("created_at"),
+                        "updated_at": r.get("updated_at"), "filename": r.get("filename"), "summary": r.get("summary"),
+                        "duration_s": r.get("duration_s"), "error": r.get("error"), "kept": bool(kept),
+                        "env": {"url": f"/api/jobs/{jid}/env.zip", "filename": live.env_filename(jid), "size": None} if env else None,
+                        "training": {k: tr.get(k) for k in ("state", "iterations", "attempt_every", "attempts", "iteration", "reward", "checkpoint")} if tr else None})
+        return {"owner": key, "jobs": out}
 
     @app.get("/api/jobs/{jid}")
     def get_job(jid: str):
@@ -292,7 +320,7 @@ def create_app(settings=None):
     @app.get("/api/jobs/{jid}/events")
     async def job_events(jid: str, request: Request):
         """Server-sent events: the full job on every change, until it finishes."""
-        if store.get(jid) is None:
+        if await run_in_threadpool(store.get, jid) is None:  # may read the store (a kept job): off the event loop
             raise HTTPException(404, "job not found")
         if app.state.streams >= settings.max_streams:
             # the client falls back to polling GET /api/jobs/{id}
@@ -309,7 +337,7 @@ def create_app(settings=None):
         async def _events():
             last = -1
             while True:
-                job = store.get(jid)
+                job = store.peek(jid)  # in memory now (just revived if need be); never the store from the loop
                 if job is None or await request.is_disconnected():
                     return
                 if job.version != last:
@@ -351,7 +379,7 @@ def create_app(settings=None):
             if not with_code and store.train.today() >= settings.train_per_day:
                 raise HTTPException(403, f"today's {settings.train_per_day} free training{'s are' if settings.train_per_day != 1 else ' is'} "
                                          f"used up" + ("; an invite code starts one" if settings.train_code else ""))
-            if len(store.train.active()) >= settings.train_concurrency:
+            if store.train.active_count() >= settings.train_concurrency:
                 raise HTTPException(429, f"another visitor's policy is training right now (about {store.train.eta_min()} min); "
                                          f"try again when it's done", headers={"Retry-After": "600"})
             store.train.start(job)

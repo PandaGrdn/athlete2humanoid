@@ -569,3 +569,12 @@ button.env-mark:focus-visible { outline: 2px solid var(--accent); outline-offset
   .home-sc { grid-template-columns: 1fr; }
   .home-sc-body { padding: 22px 18px 24px; }
 }
+
+/* /my: this visitor's environments and trainings (pages/MyPage.tsx) */
+.my-key { flex: 1 1 320px; min-width: 200px; height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-sm, 8px);
+  background: var(--surface-1, transparent); color: var(--text); font: inherit; font-size: 12.5px; }
+.my-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; max-width: 820px; }
+.my-card { display: flex; flex-direction: column; gap: 8px; }
+.my-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.my-head h3 { margin: 0; font-size: 16px; }
+.my-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }

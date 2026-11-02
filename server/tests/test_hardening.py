@@ -248,7 +248,7 @@ def test_health_endpoints(make_client, tmp_path):
     c = make_client()
     assert c.get("/healthz").json() == {"ok": True}
     r = c.get("/readyz")
-    assert r.status_code == 200 and r.json()["checks"] == {"runs": True, "data_dir_writable": True, "journal": True}
+    assert r.status_code == 200 and r.json()["checks"] == {"runs": True, "data_dir_writable": True, "journal": True, "store": True}
     empty = tmp_path / "empty"
     empty.mkdir()
     r = make_client(runs_dir=empty).get("/readyz")

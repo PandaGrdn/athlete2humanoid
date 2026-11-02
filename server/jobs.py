@@ -27,6 +27,7 @@ from . import runs
 from .config import REPO
 from .live import LIVE_DIR, LiveRunner
 from .stages import LIVE_STAGES, STAGES, classify, redact
+from .store import MAX_RECORD_LOGS, store_for
 from .train import TrainRunner
 
 log = logging.getLogger("a2h.jobs")
@@ -65,6 +66,7 @@ class Job:
     source_run: str | None = None  # the run a demo job replays
     result_run: str | None = None  # the run to show when it's done
     training: dict | None = None  # a live job's GPU training (server/train.py): state, iterations, attempts so far
+    kept: list = field(default_factory=list)  # files of this job in the durable store (server/store.py), by path
     error: str | None = None
     created_at: float = field(default_factory=_now)
     updated_at: float = field(default_factory=_now)
@@ -73,12 +75,14 @@ class Job:
     def public(self):
         d = asdict(self)
         d["demo"] = self.runner == "demo"
+        d["kept"] = bool(self.kept)
         return d
 
 
 def _job_from_dict(d):
     names = {f.name for f in fields(Job)}
-    job = Job(**{k: v for k, v in d.items() if k in names and k != "stages"})
+    job = Job(**{k: v for k, v in d.items() if k in names and k not in ("stages", "kept")})
+    job.kept = [x for x in d.get("kept") or [] if isinstance(x, str)] if isinstance(d.get("kept"), list) else []
     job.stages = [Stage(**{k: v for k, v in st.items() if k in Stage.__dataclass_fields__}) for st in d.get("stages") or []]
     return job
 
@@ -95,6 +99,9 @@ class JobStore:
         self.settings = settings
         self.jobs = {}
         self.owner = {}  # job id -> client pseudonym (never sent to clients)
+        self.owner_key = {}  # job id -> the visitor's key (X-A2H-Owner), when the browser sent one
+        self._restoring = {}  # job id -> the lock one restore of its files holds
+        self.persist = settings.store_backend or store_for(settings)  # finished builds and trainings, past a restart
         self.lock = threading.RLock()
         self.cancel = {}
         self.journal = journal
@@ -111,6 +118,11 @@ class JobStore:
         for job in self._stop_training:
             self.train.recover(job)
             self.dirty.add(job.id)
+            self.save_record(job)  # the store's record and index say it ended too, not "running" for ever
+            try:
+                self.persist.put_training(job.training["session"], self.train.training_info(job))
+            except Exception:  # noqa: BLE001
+                log.exception("training index write failed", extra={"fields": {"job": job.id}})
         self._stop_training = []
 
     def start_background(self, interval=1.0):
@@ -137,6 +149,8 @@ class JobStore:
             except TypeError:
                 continue
             self.jobs[job.id], self.owner[job.id] = job, owner
+            if d.get("owner_key"):
+                self.owner_key[job.id] = d["owner_key"]
             self.cancel[job.id] = threading.Event()
             if job.training and job.training.get("state") in ("starting", "running"):
                 # the build had finished; its training can't be followed any more (and is cancelled once the runner is up)
@@ -154,7 +168,8 @@ class JobStore:
             log.info("jobs recovered", extra={"fields": {"jobs": len(self.jobs), "interrupted": n}})
 
     def _row(self, job):
-        return (job.id, job.status, job.created_at, job.updated_at, self.owner.get(job.id), asdict(job))
+        return (job.id, job.status, job.created_at, job.updated_at, self.owner.get(job.id),
+                asdict(job) | {"owner_key": self.owner_key.get(job.id)})
 
     def flush(self):
         if not self.journal:
@@ -225,14 +240,16 @@ class JobStore:
         return sum(f.stat().st_size for f in root.rglob("*") if f.is_file())
 
     def _forget(self, jid):
+        """Out of memory and off this host's disk; a kept job's record and files stay in the store (get() revives it)."""
         shutil.rmtree(self.upload_dir(jid), ignore_errors=True)
         self.jobs.pop(jid, None)
         self.cancel.pop(jid, None)
         self.owner.pop(jid, None)
+        self.owner_key.pop(jid, None)
         self.dirty.discard(jid)
 
     # --- bookkeeping -------------------------------------------------------------------------
-    def create(self, runner, source_run=None, upload=None, owner=None):
+    def create(self, runner, source_run=None, upload=None, owner=None, owner_key=None):
         jid = uuid.uuid4().hex  # 128 bits: a job id is the only key to its upload
         table = LIVE_STAGES if runner == "live" else STAGES
         job = Job(id=jid, runner=runner, source_run=source_run,
@@ -242,6 +259,8 @@ class JobStore:
         with self.lock:
             self.jobs[jid] = job
             self.owner[jid] = owner
+            if owner_key:
+                self.owner_key[jid] = owner_key
             self.cancel[jid] = threading.Event()
             self._prune()
             self.dirty.add(jid)
@@ -294,16 +313,131 @@ class JobStore:
 
     def live_dir(self, job):
         """A live job's outputs (server/live_worker.py): processed.mp4, live.json, task_spec.json. They are
-        part of the upload, so they expire with it (A2H_UPLOAD_TTL_H)."""
-        return self.upload_dir(job.id) / LIVE_DIR
+        part of the upload, so they expire with it (A2H_UPLOAD_TTL_H); a kept job's come back from the store."""
+        d = self.upload_dir(job.id) / LIVE_DIR
+        if job.kept and any(not (d / rel).is_file() for rel in job.kept):
+            with self._restore_lock(job.id):  # the page asks for five files at once: one restore, not five
+                self.persist.materialize(job.id, d, job.kept)
+        return d
 
-    def get(self, jid):
+    def _restore_lock(self, jid):
+        with self.lock:
+            return self._restoring.setdefault(jid, threading.Lock())
+
+    def peek(self, jid):
+        """The job if it is in memory; never touches the store (for code on the event loop)."""
         with self.lock:
             return self.jobs.get(jid)
 
-    def snapshot(self, jid):
+    def get(self, jid):
         with self.lock:
-            j = self.jobs.get(jid)
+            job = self.jobs.get(jid)
+        return job if job is not None else self._revive(jid)
+
+    # --- the durable store -------------------------------------------------------------------
+    def _record(self, job):
+        """What the store keeps about a job: its public JSON with a short log, and what the page lists it by."""
+        d = job.public()
+        d["logs"] = d["logs"][-MAX_RECORD_LOGS:]
+        d["kept"] = list(job.kept)
+        d["owner"] = self.owner_key.get(job.id)
+        live = self.upload_dir(job.id) / LIVE_DIR
+        spec = runs.read_json(live / "task_spec.json") if (live / "task_spec.json").is_file() else None
+        data = runs.read_json(live / "live.json") if (live / "live.json").is_file() else None
+        d["summary"] = str(spec.get("summary", ""))[:300] if isinstance(spec, dict) else None
+        d["duration_s"] = data.get("duration_s") if isinstance(data, dict) else None
+        d["filename"] = (job.input or {}).get("filename")
+        return d
+
+    def keep(self, job):
+        """A finished live job's files and record into the store (best effort: the job is done either way)."""
+        if job.runner != "live" or not re.fullmatch(r"[a-f0-9]{32}", job.id):
+            return
+        live = self.upload_dir(job.id) / LIVE_DIR
+        if not (live / "live.json").is_file():
+            return
+        try:
+            rels = self.persist.keep(job.id, live)
+            with self.lock:
+                job.kept = sorted(set(job.kept) | set(rels))
+                self.dirty.add(job.id)
+            self.persist.save_record(job.id, self.owner_key.get(job.id), self._record(job))
+        except Exception:  # noqa: BLE001
+            log.exception("keep failed", extra={"fields": {"job": job.id, "store": self.persist.kind}})
+
+    def _revive(self, jid):
+        """A job that is not in memory (pruned, or from before a restart) from the store's record, if it has one."""
+        if not re.fullmatch(r"[a-f0-9]{32}", jid):
+            return None
+        try:
+            rec = self.persist.get_record(jid)
+        except Exception:  # noqa: BLE001
+            log.exception("record read failed", extra={"fields": {"job": jid}})
+            return None
+        if not rec:
+            return None
+        try:
+            job = _job_from_dict(rec)
+        except TypeError:
+            return None
+        running = job.training and job.training.get("state") in ("starting", "running")
+        row = self.train.row_for(job) if running else None
+        # recorded mid-training: a stray (no row, or a heartbeat gone stale: its process died) is stopped here; a
+        # training another live instance of this service follows (a fresh heartbeat) is left to it
+        stray = running and (row is None or self.train.stale(row))
+        if stray:
+            job.training.update(state="failed", finished_at=_now(), error="the server restarted while the policy was training; the GPU job was stopped")
+            job.error = job.training["error"]
+            for st in job.stages:
+                if st.key == "policy":
+                    st.status = "failed"
+            if job.status not in TERMINAL:
+                job.status = "succeeded"  # the build had finished for the training to start
+        if job.status not in TERMINAL:  # recorded mid-way: it can't be running any more
+            job.status, job.error = "failed", "the server restarted while this job was running"
+        job.updated_at = _now()  # not the record's: the sweep must not expire it the moment it is back
+        with self.lock:
+            if jid in self.jobs:
+                return self.jobs[jid]
+            self.jobs[jid] = job
+            self.cancel[jid] = threading.Event()
+            if rec.get("owner"):
+                self.owner_key[jid] = rec["owner"]
+            self.dirty.add(jid)
+        if stray:
+            self.train.recover(job)  # cancels its call, removes its Volume folder (best effort)
+            self.save_record(job)
+            try:
+                self.persist.put_training(job.training["session"], self.train.training_info(job))  # the index says it ended too
+            except Exception:  # noqa: BLE001
+                log.exception("training index write failed", extra={"fields": {"job": jid}})
+        return job
+
+    def save_record(self, job):
+        """The job's record alone (no files): what a training start or end changes."""
+        if job.runner != "live" or not re.fullmatch(r"[a-f0-9]{32}", job.id):
+            return
+        try:
+            self.persist.save_record(job.id, self.owner_key.get(job.id), self._record(job))
+        except Exception:  # noqa: BLE001
+            log.exception("record write failed", extra={"fields": {"job": job.id, "store": self.persist.kind}})
+
+    def mine(self, owner_key):
+        """The visitor's jobs: the store's records and the ones in memory (running ones have no record yet), newest first."""
+        with self.lock:
+            here = {j.id: self._record(j) for j in self.jobs.values() if self.owner_key.get(j.id) == owner_key}
+        try:
+            stored = {r["id"]: r for r in self.persist.records_for(owner_key) if isinstance(r, dict) and r.get("id")}
+        except Exception:  # noqa: BLE001
+            log.exception("records read failed", extra={"fields": {"store": self.persist.kind}})
+            stored = {}
+        out = list((stored | here).values())
+        out.sort(key=lambda r: r.get("created_at", 0), reverse=True)
+        return out
+
+    def snapshot(self, jid):
+        j = self.get(jid)  # a kept job comes back from the store when it isn't in memory
+        with self.lock:
             return j.public() if j else None
 
     def update(self, job, **kw):
@@ -370,13 +504,15 @@ class JobStore:
         self.flush()
         log.info("job finished", extra={"fields": {"job": job.id, "runner": job.runner, "status": status,
                                                    "seconds": round(job.updated_at - job.created_at, 1)}})
+        self.keep(job)
+        self.flush()
 
     def finish_training(self, job, state, error=None, persist=True):
         """A live job's training ends: done | failed | cancelled. The job's status returns to the build's (succeeded),
         the policy stage records the outcome, and the training's own state and error are kept apart from the job's."""
         with self.lock:
-            if not job.training:
-                return
+            if not job.training or job.training.get("state") not in ("starting", "running"):
+                return  # already ended (a shutdown's cancel racing the follow thread): the first word stands
             job.training.update(state=state, finished_at=_now(), error=error)
             for s in job.stages:
                 if s.key == "policy":
@@ -389,6 +525,12 @@ class JobStore:
         self.flush()
         log.info("training finished", extra={"fields": {"job": job.id, "state": state, "error": error,
                                                         "seconds": round(job.updated_at - (job.training.get("started_at") or job.updated_at), 1)}})
+        if persist:
+            try:
+                self.persist.put_training(job.training["session"], self.train.training_info(job))
+            except Exception:  # noqa: BLE001
+                log.exception("training index write failed", extra={"fields": {"job": job.id}})
+            self.keep(job)
 
     # --- running -----------------------------------------------------------------------------
     def start(self, job):
