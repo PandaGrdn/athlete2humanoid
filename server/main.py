@@ -55,7 +55,7 @@ def gpu_backend_status(settings):
     return True, "ok"
 
 
-ATTEMPT_HEADERS = {"Cache-Control": "public, max-age=86400, immutable", "X-Content-Type-Options": "nosniff"}
+ATTEMPT_HEADERS = {"Cache-Control": "private, max-age=86400, immutable", "X-Content-Type-Options": "nosniff"}  # the job id is the only key: no shared caches
 
 
 def create_app(settings=None):
@@ -334,21 +334,23 @@ def create_app(settings=None):
             raise HTTPException(503, "this host can't train policies (no GPU backend)")
         if not store.train.available()[0]:
             raise HTTPException(503, "the GPU backend isn't reachable right now; try again in a few minutes")
-        if job.training is not None:
-            raise HTTPException(409, "this build's policy is already training (or has trained)")
-        if job.status != "succeeded" or runs.safe_path(store.live_dir(job), runs.ENV_ZIP) is None:
-            raise HTTPException(409, "the environment isn't built yet; training starts from a finished build")
         code = (code or "").strip()[:200]
-        if settings.train_code and code:
-            if not secrets.compare_digest(code.encode(), settings.train_code.encode()):
-                raise HTTPException(403, "that invite code isn't right")
-        elif settings.train_per_day > 0:
-            if store.train.today() >= settings.train_per_day:
+        with_code = bool(settings.train_code and code)
+        if with_code and not secrets.compare_digest(code.encode(), settings.train_code.encode()):
+            raise HTTPException(403, "that invite code isn't right")
+        if not with_code and settings.train_per_day <= 0:
+            raise HTTPException(403, "training needs an invite code")
+        with store.train.lock:  # the checks that spend: one per job, the day's allowance, the queue, all under one lock
+            state = (job.training or {}).get("state")
+            if state in ("starting", "running"):
+                raise HTTPException(409, "this build's policy is training already")
+            if state == "done":
+                raise HTTPException(409, "this build's policy is trained; download it below")
+            if job.status != "succeeded" or runs.safe_path(store.live_dir(job), runs.ENV_ZIP) is None:
+                raise HTTPException(409, "the environment isn't built yet; training starts from a finished build")
+            if not with_code and store.train.today() >= settings.train_per_day:
                 raise HTTPException(403, f"today's {settings.train_per_day} free training{'s are' if settings.train_per_day != 1 else ' is'} "
                                          f"used up" + ("; an invite code starts one" if settings.train_code else ""))
-        else:
-            raise HTTPException(403, "training needs an invite code")
-        with store.train.lock:
             if len(store.train.active()) >= settings.train_concurrency:
                 raise HTTPException(429, f"another visitor's policy is training right now (about {store.train.eta_min()} min); "
                                          f"try again when it's done", headers={"Retry-After": "600"})
@@ -374,7 +376,7 @@ def create_app(settings=None):
     def job_attempt(jid: str, name: str):
         """One attempt: iter_NNNN.npz (qpos (T, 36) float32 at 50 Hz, reward, stages, fell)."""
         job = store.get(jid)
-        if job is None or job.runner != "live" or job.training is None or not train.NPZ.match(name):
+        if job is None or job.runner != "live" or job.training is None or not train.NPZ.fullmatch(name):
             raise HTTPException(404, "no such attempt")
         p = runs.safe_path(store.train.train_dir(job) / train.ATTEMPTS, name)
         if p is None:

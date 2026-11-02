@@ -94,7 +94,7 @@ def train_client(live_client):
     def make(**kw):
         fake = FakeBackend()
         opts = dict(runners=["demo", "modal"], modal_token=True, train_code=CODE, train_backend=fake, train_poll_s=0.05,
-                    train_attempt_every=50, train_iters=1000) | kw
+                    train_attempt_every=50, train_iters=1000, rate_train_per_hour=100000) | kw
         c = live_client(**opts)
         return c, fake
     return make
@@ -186,7 +186,8 @@ def test_training_follows_the_gpu_job(train_client):
     jid = built(c)
     j = c.post(f"/api/jobs/{jid}/train", data={"code": CODE}).json()
     assert j["status"] == "running" and j["training"]["state"] in ("starting", "running") and j["training"]["iterations"] == 1000
-    assert c.post(f"/api/jobs/{jid}/train", data={"code": CODE}).status_code == 409
+    r = c.post(f"/api/jobs/{jid}/train", data={"code": CODE})
+    assert r.status_code == 409 and "training already" in r.json()["detail"]
     assert c.get("/api/health").json()["train"]["busy"] is True
     session = f"live_{jid[:12]}"
     wait_for(lambda: fake.spawned)
@@ -218,7 +219,7 @@ def test_training_follows_the_gpu_job(train_client):
     assert {k: a["attempts"][0][k] for k in want} == want
     assert a["curve"][-1] == [100, 1.0] and a["training"]["state"] == "running"
     r = c.get(f"/api/jobs/{jid}/attempts/iter_0050.npz")
-    assert r.status_code == 200 and r.content == b"PK\x03\x04npz-50" and "immutable" in r.headers["cache-control"]
+    assert r.status_code == 200 and r.content == b"PK\x03\x04npz-50" and r.headers["cache-control"] == "private, max-age=86400, immutable"
     assert c.get(f"/api/jobs/{jid}/attempts/iter_0075.npz").status_code == 404
     assert c.get(f"/api/jobs/{jid}/attempts/../index.json").status_code == 404
     assert c.get(f"/api/jobs/{jid}/policy.pt").status_code == 404
@@ -249,8 +250,12 @@ def test_cancel_stops_the_gpu_job(train_client):
     wait_for(lambda: fake.spawned)
     c.post(f"/api/jobs/{jid}/cancel")
     j = wait_done(c, jid)
-    assert j["status"] == "cancelled" and j["training"]["state"] == "cancelled"
+    # the build stays succeeded; the training is the thing cancelled, and it can be started again
+    assert j["status"] == "succeeded" and j["training"]["state"] == "cancelled" and j["stages"][-1]["status"] == "skipped"
     assert fake.cancelled == ["fc-1"] and fake.removed == [f"live_{jid[:12]}"]
+    assert c.post(f"/api/jobs/{jid}/train", data={"code": CODE}).status_code == 200
+    wait_for(lambda: len(fake.spawned) == 2)
+    assert fake.spawned[1][0] == f"live_{jid[:12]}_1"  # its own folder on the Volume
 
 
 def test_a_failed_gpu_job_fails_the_training(train_client):
@@ -262,9 +267,20 @@ def test_a_failed_gpu_job_fails_the_training(train_client):
     fake.put(session, f"jobs/{session}/status.json", json.dumps({"state": "failed", "returncode": 1}))
     fake.state_ = "failed"
     j = wait_done(c, jid)
-    assert j["status"] == "failed" and j["error"] == "the GPU job failed (job state failed); no policy came back"
+    assert j["status"] == "succeeded" and j["training"]["state"] == "failed"
+    assert j["error"] == j["training"]["error"] == "the GPU job failed (job state failed); no policy came back"
     assert j["stages"][-1]["status"] == "failed" and fake.removed == [session]
-    assert c.post(f"/api/jobs/{jid}/train", data={"code": CODE}).status_code == 409
+    assert c.get(f"/api/jobs/{jid}/env.zip").status_code == 200  # the build is still there
+    # a failed training can be tried again (9); a trained one can't
+    assert c.post(f"/api/jobs/{jid}/train", data={"code": CODE}).status_code == 200
+    wait_for(lambda: len(fake.spawned) == 2)
+    j = c.get(f"/api/jobs/{jid}").json()
+    assert j["training"]["state"] in ("starting", "running") and j["training"]["history"][0]["state"] == "failed"
+    fake.finish(f"live_{jid[:12]}_1")
+    j = wait_done(c, jid)
+    assert j["training"]["state"] == "done" and j["status"] == "succeeded" and j["error"] is None
+    r = c.post(f"/api/jobs/{jid}/train", data={"code": CODE})
+    assert r.status_code == 409 and "trained" in r.json()["detail"]
 
 
 def test_a_refused_spawn_cleans_up(train_client):
@@ -273,7 +289,7 @@ def test_a_refused_spawn_cleans_up(train_client):
     jid = built(c)
     c.post(f"/api/jobs/{jid}/train", data={"code": CODE})
     j = wait_done(c, jid)
-    assert j["status"] == "failed" and "didn't take the job" in j["error"] and fake.removed == [f"live_{jid[:12]}"]
+    assert j["training"]["state"] == "failed" and "didn't take the job" in j["error"] and fake.removed == [f"live_{jid[:12]}"]
 
 
 def test_one_training_at_a_time(train_client):
@@ -293,7 +309,57 @@ def test_timeout_stops_a_runaway_job(train_client):
     c.app.state.settings.train_timeout_h = 0.00001  # 36 ms (too small for the startup check, set after it)
     c.post(f"/api/jobs/{jid}/train", data={"code": CODE})
     j = wait_done(c, jid)
-    assert j["status"] == "failed" and "ran past" in j["error"] and fake.cancelled == ["fc-1"]
+    assert j["training"]["state"] == "failed" and "ran past" in j["error"] and fake.cancelled == ["fc-1"] and fake.removed == [f"live_{jid[:12]}"]
+
+
+def test_a_crash_after_the_spawn_cancels_the_gpu_job(train_client):
+    """(3) Whatever ends the follow loop, the call is cancelled unless it is known to have finished."""
+    c, fake = train_client()
+    jid = built(c)
+    fake.read = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+    c.post(f"/api/jobs/{jid}/train", data={"code": CODE})
+    j = wait_done(c, jid)
+    assert j["training"]["state"] == "failed" and "internal error" in j["error"]
+    assert fake.cancelled == ["fc-1"] and fake.removed == [f"live_{jid[:12]}"]
+
+
+def test_lost_contact_is_not_a_failed_job(train_client):
+    """(3) A gRPC-style error from the call is this host's problem: the follow goes on, and a long loss stops the job."""
+    c, fake = train_client()
+    jid = built(c)
+    c.post(f"/api/jobs/{jid}/train", data={"code": CODE})
+    wait_for(lambda: fake.spawned)
+
+    class Unavailable(Exception):
+        pass
+    fake.state = lambda call_id: (_ for _ in ()).throw(Unavailable("UNAVAILABLE"))
+    real = T.ModalBackend()
+    real._call = lambda cid: type("C", (), {"get": lambda self, timeout=0: (_ for _ in ()).throw(Unavailable("x"))})()
+    assert real.state("fc-1") == "unknown"
+    real._call = lambda cid: type("C", (), {"get": lambda self, timeout=0: (_ for _ in ()).throw(ValueError("cancelled"))})()
+    assert real.state("fc-1") == "failed"
+    j = c.get(f"/api/jobs/{jid}").json()
+    assert j["training"]["state"] == "running"
+
+
+def test_shutdown_cancels_running_trainings(train_client):
+    """(1) A Cloud Run instance going away must not leave its GPU job running unwatched."""
+    c, fake = train_client()
+    jid = built(c)
+    c.post(f"/api/jobs/{jid}/train", data={"code": CODE})
+    wait_for(lambda: fake.spawned)
+    c.app.state.jobs.close()
+    j = c.app.state.jobs.get(jid)
+    assert j.training["state"] == "failed" and "server stopped" in j.error and j.status == "succeeded"
+    assert fake.cancelled == ["fc-1"] and f"live_{jid[:12]}" in fake.removed
+
+
+def test_train_requests_are_rate_limited_per_client(train_client):
+    """(11) Guessing the invite code is bounded by its own bucket, not the general one."""
+    c, fake = train_client(rate_train_per_hour=3)
+    jid = built(c)
+    codes = [c.post(f"/api/jobs/{jid}/train", data={"code": "nope"}).status_code for _ in range(5)]
+    assert codes[:3] == [403, 403, 403] and codes[3] == 429 and codes[4] == 429
 
 
 def test_restart_stops_a_training_it_cannot_follow(tmp_path, runs_dir):
@@ -308,8 +374,9 @@ def test_restart_stops_a_training_it_cannot_follow(tmp_path, runs_dir):
     fake = FakeBackend()
     store = JobStore(s, journal, train_backend=fake)
     j = store.get("a" * 32)
-    assert j.status == "failed" and "GPU job was stopped" in j.error and j.training["state"] == "failed"
-    assert fake.cancelled == ["fc-9"] and fake.removed == ["live_aaaaaaaaaaaa"]
+    # (2) the training is marked failed, the build stays succeeded, nothing counts as running any more
+    assert j.status == "succeeded" and "GPU job was stopped" in j.error and j.training["state"] == "failed"
+    assert fake.cancelled == ["fc-9"] and fake.removed == ["live_aaaaaaaaaaaa"] and store.train.active() == []
     store.close()
     journal.close()
 

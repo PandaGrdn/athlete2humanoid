@@ -37,6 +37,7 @@ A2H_TRAIN_NUM_ENVS  parallel environments (default: 4096)
 A2H_TRAIN_TIMEOUT_H a training still running after this many hours is cancelled (default: 3)
 A2H_TRAIN_BRANCH    the repository branch the GPU job runs (default: main)
 A2H_TRAIN_CONCURRENCY  trainings at once (default: 1; each one is a GPU)
+A2H_RATE_TRAIN      POST /api/jobs/{id}/train per client per hour (default: 12; bounds invite-code guessing)
 """
 
 import os
@@ -140,6 +141,7 @@ class Settings:
     train_branch: str = field(default_factory=lambda: _env("A2H_TRAIN_BRANCH", "main"))
     train_concurrency: int = field(default_factory=lambda: _num("A2H_TRAIN_CONCURRENCY", 1, int))
     train_poll_s: float = field(default_factory=lambda: _num("A2H_TRAIN_POLL_S", 30))  # how often the GPU job is read
+    rate_train_per_hour: float = field(default_factory=lambda: _num("A2H_RATE_TRAIN", 12))
     modal_token: bool = field(default_factory=lambda: bool(os.environ.get("MODAL_TOKEN_ID") and os.environ.get("MODAL_TOKEN_SECRET")))
     train_backend: object = field(default=None, repr=False)  # tests: a stand-in for server/train.py's ModalBackend
     colab_policies: list = field(default_factory=lambda: _list("A2H_COLAB_POLICIES", "task"))
@@ -186,7 +188,8 @@ class Settings:
                             ("A2H_LIVE_CONCURRENCY", self.live_concurrency, 1), ("A2H_LIVE_MEMORY_MB", self.live_memory_mb, 0),
                             ("A2H_TRAIN_PER_DAY", self.train_per_day, 0), ("A2H_TRAIN_ITERS", self.train_iters, 1),
                             ("A2H_TRAIN_ATTEMPT_EVERY", self.train_attempt_every, 1), ("A2H_TRAIN_NUM_ENVS", self.train_num_envs, 1),
-                            ("A2H_TRAIN_TIMEOUT_H", self.train_timeout_h, 0.01), ("A2H_TRAIN_CONCURRENCY", self.train_concurrency, 1)]:
+                            ("A2H_TRAIN_TIMEOUT_H", self.train_timeout_h, 0.01), ("A2H_TRAIN_CONCURRENCY", self.train_concurrency, 1),
+                            ("A2H_RATE_TRAIN", self.rate_train_per_hour, 1)]:
             if v < lo:
                 errs.append(f"{name} must be >= {lo:g}, got {v:g}")
         if unknown := sorted(set(self.runners) - RUNNERS):

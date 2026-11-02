@@ -263,7 +263,10 @@ trains. Every 50 iterations the trainer rolls the policy out once on the clip (`
 retarget as a ghost, with the reward curve under it, as they arrive. At the end the checkpoint comes back
 (`GET /api/jobs/{id}/policy.pt`), the Volume folder is deleted, and the job's policy stage is done. About 20-30 min
 and $1 of GPU per training; the server cancels the Modal call if the visitor cancels the job, if the training runs
-past `A2H_TRAIN_TIMEOUT_H`, or if the server restarts under it.
+past `A2H_TRAIN_TIMEOUT_H`, if the follow loop ends any other way than the call finishing, or when the process stops
+or restarts under it. A failed or cancelled training leaves the build as it was (the job stays succeeded, the policy
+stage says what happened) and can be started again; a trained one can't. `A2H_RATE_TRAIN` (12 an hour per client)
+bounds invite-code guessing.
 
 No secret goes up with a training (it needs no Hugging Face token), and nobody can start one without the gate: an
 invite code (`A2H_TRAIN_CODE`) the visitor types on the page, or a daily allowance (`A2H_TRAIN_PER_DAY`), or both.

@@ -199,7 +199,10 @@ export class LearnActor {
 
   update(dt: number, slotY: number) {
     const fr = this.frames;
-    if (!fr) return;
+    if (!fr) { // an attempt with no frames (the robot fell on its first step): over at once, so Play all moves on
+      if (this.state.playing && !this.state.ended) { this.emit({ ended: true }); if (!this.loop) this.onEnd?.(); }
+      return;
+    }
     let { t } = this.state;
     const dur = this.state.duration;
     let ended = this.state.ended;

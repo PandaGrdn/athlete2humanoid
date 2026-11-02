@@ -40,7 +40,7 @@ INPUTS = ("env.zip", "task_spec.json", "qpos.npy", "processed.mp4")
 MAX_INDEX_BYTES = 1 << 20
 MAX_ATTEMPT_BYTES = 4 << 20
 MAX_LOG_BYTES = 8 << 20
-NPZ = re.compile(r"^iter_\d{4,6}\.npz$")
+NPZ = re.compile(r"iter_\d{4,6}\.npz")  # used with fullmatch: no trailing newline slips through
 _ITER = re.compile(r"Learning iteration (\d+)/(\d+)")
 _REWARD = re.compile(r"Mean reward:\s*(-?[\d.]+)")
 _ATTEMPT = re.compile(r"^\[a2h_env\] attempt at iteration")
@@ -108,8 +108,10 @@ class ModalBackend:
         except TimeoutError:
             return "running"
         except Exception as e:  # noqa: BLE001  (the container died, was cancelled, timed out)
-            if isinstance(e, (ConnectionError, OSError)) or "Connection" in type(e).__name__ or "Deadline" in str(e):
-                return "unknown"
+            name = type(e).__name__
+            if (isinstance(e, (ConnectionError, OSError)) or "Deadline" in str(e)
+                    or any(w in name for w in ("Connection", "Unavailable", "ClientClosed", "Grpc", "Timeout", "Auth"))):
+                return "unknown"  # this host's problem, not the job's: it runs on
             log.warning("modal call ended", extra={"fields": {"call": call_id, "error": f"{type(e).__name__}: {str(e)[-200:]}"}})
             return "failed"
         return "done" if rc == 0 else "failed"
@@ -170,6 +172,20 @@ class TrainRunner:
         with self.store.lock:
             return [j for j in self.store.jobs.values() if j.training and j.training.get("state") in ("starting", "running")]
 
+    def shutdown(self):
+        """The process is stopping (a Cloud Run instance going away): stop the GPU jobs it can no longer follow, now,
+        and say so in their records. Without this a call would run on unwatched until its own time limit."""
+        for job in self.active():
+            tr = job.training
+            try:
+                if tr.get("call_id"):
+                    self.backend.cancel(tr["call_id"])
+                if tr.get("session"):
+                    self.backend.remove(tr["session"])
+            except Exception:  # noqa: BLE001
+                log.warning("could not stop a training at shutdown", extra={"fields": {"job": job.id}})
+            self._end(job, "failed", "the server stopped while the policy was training; the GPU job was stopped")
+
     def started_since(self, since):
         with self.store.lock:
             return sum(1 for j in self.store.jobs.values() if j.training and (j.training.get("started_at") or 0) >= since)
@@ -187,9 +203,11 @@ class TrainRunner:
     # --- running -------------------------------------------------------------------------------
     def start(self, job):
         s = self.settings
-        session = f"live_{job.id[:12]}"
+        n = sum(1 for _ in (job.training or {}).get("history", [])) + (1 if job.training else 0)
+        session = f"live_{job.id[:12]}" + (f"_{n}" if n else "")  # a retry gets its own folder on the Volume
         with self.store.lock:
-            job.training = {"backend": "modal", "state": "starting", "session": session, "call_id": None,
+            history = ((job.training or {}).get("history") or []) + ([{k: job.training.get(k) for k in ("state", "started_at", "finished_at", "error", "attempts")}] if job.training else [])
+            job.training = {"backend": "modal", "state": "starting", "session": session, "call_id": None, "history": history,
                             "iterations": s.train_iters, "attempt_every": s.train_attempt_every, "num_envs": s.train_num_envs,
                             "started_at": time.time(), "finished_at": None, "attempts": 0, "iteration": 0,
                             "reward": None, "last": None, "checkpoint": None, "error": None}
@@ -199,6 +217,7 @@ class TrainRunner:
             job.status, job.error = "running", None
             self.store._recompute(job)
         self.store.set_stage(job, "policy", 0.0, status="running")
+        self.store.cancel[job.id].clear()  # a cancelled training's flag must not stop the next one at once
         self.store.flush()
         threading.Thread(target=self._run, args=(job,), daemon=True, name=f"train-{job.id}").start()
         return job
@@ -243,32 +262,54 @@ class TrainRunner:
         store.flush()
         store.log(job, "policy", f"running on a Modal GPU (call {call_id}); the robot's first attempt arrives after "
                                  f"{tr['attempt_every']} iterations")
+        state = "running"
+        try:
+            state, index_seen, job_state, got = self._follow(job, session, call_id)
+        finally:
+            # whatever ended the follow (a cancel, the time limit, a crash in this thread, lost contact): the GPU
+            # job is stopped unless it is known to have finished, and its folder goes; it must never bill unwatched
+            if state != "done":
+                try:
+                    be.cancel(call_id)
+                except Exception:  # noqa: BLE001
+                    log.warning("cancel failed", extra={"fields": {"job": job.id, "call": call_id}})
+            be.remove(session)
+        if state == "cancelled":
+            return self._end(job, "cancelled")
+        if state == "timeout":
+            return self._end(job, "failed", f"the GPU job ran past {s.train_timeout_h:g} h and was stopped")
+        if state == "lost":
+            return self._end(job, "failed", "lost contact with the GPU job; it was stopped")
+        if state == "done" and got:
+            n = len(index_seen)
+            last = job.training.get("last") or {}
+            store.log(job, "policy", f"training finished: {n} attempt{'s' if n != 1 else ''} recorded"
+                                     + (f", final reward {last['reward']:.2f}" if isinstance(last.get("reward"), (int, float)) else ""))
+            return self._end(job, "succeeded")
+        self._end(job, "failed", "the GPU job failed" + (f" (job state {job_state})" if job_state else "")
+                  + ("" if got else "; no policy came back"))
+
+    def _follow(self, job, session, call_id):
+        """Poll the call, the log and the attempts until the call ends; -> (state, attempts seen, job state, got policy).
+        state: done | failed | cancelled | timeout | lost."""
+        be, s = self.backend, self.settings
+        cancel = self.store.cancel[job.id]
         deadline = time.monotonic() + s.train_timeout_h * 3600
         log_off, index_seen, last_line, unknown = 0, set(), None, 0
         state = "running"
         while True:
             if cancel.wait(self.poll_s if state == "running" else 0):
-                try:
-                    be.cancel(call_id)
-                except Exception:  # noqa: BLE001
-                    pass
-                be.remove(session)
-                return self._end(job, "cancelled")
+                return "cancelled", index_seen, None, False
             log_off, last_line = self._follow_log(job, session, log_off, last_line)
             index_seen = self._mirror_attempts(job, session, index_seen)
             state = be.state(call_id)
             unknown = unknown + 1 if state == "unknown" else 0
             if state in ("done", "failed"):
                 break
-            if time.monotonic() > deadline or unknown >= 20:
-                try:
-                    be.cancel(call_id)
-                except Exception:  # noqa: BLE001
-                    pass
-                be.remove(session)
-                why = (f"the GPU job ran past {s.train_timeout_h:g} h and was stopped" if state != "unknown"
-                       else "lost contact with the GPU job; it was stopped")
-                return self._end(job, "failed", why)
+            if time.monotonic() > deadline:
+                return "timeout", index_seen, None, False
+            if unknown >= 20:
+                return "lost", index_seen, None, False
         # the last commit may land after the call returns: one more pass for the log and the attempts
         self._follow_log(job, session, log_off, last_line)
         index_seen = self._mirror_attempts(job, session, index_seen)
@@ -278,16 +319,7 @@ class TrainRunner:
             job_state = json.loads(raw)["state"] if raw else None
         except (ValueError, KeyError, TypeError):
             pass
-        got = self._fetch_results(job, session)
-        be.remove(session)
-        if state == "done" and got:
-            n = len(index_seen)
-            last = job.training.get("last") or {}
-            store.log(job, "policy", f"training finished: {n} attempt{'s' if n != 1 else ''} recorded"
-                                     + (f", final reward {last['reward']:.2f}" if isinstance(last.get("reward"), (int, float)) else ""))
-            return self._end(job, "succeeded")
-        self._end(job, "failed", "the GPU job failed" + (f" (job state {job_state})" if job_state else "")
-                  + ("" if got else "; no policy came back"))
+        return state, index_seen, job_state, self._fetch_results(job, session)
 
     def _follow_log(self, job, session, offset, last_line):
         """New lines of the job's log: a progress line every few iterations, the reward curve, the attempts' lines."""
@@ -341,7 +373,7 @@ class TrainRunner:
             return seen
         try:
             index = json.loads(raw)
-            rows = [r for r in index.get("attempts", []) if isinstance(r, dict) and NPZ.match(str(r.get("file", "")))]
+            rows = [r for r in index.get("attempts", []) if isinstance(r, dict) and NPZ.fullmatch(str(r.get("file", "")))]
         except (ValueError, AttributeError):
             return seen
         out = self.train_dir(job) / ATTEMPTS
@@ -391,15 +423,14 @@ class TrainRunner:
         return False
 
     def _end(self, job, status, error=None):
-        self._set(job, state=status if status != "succeeded" else "done", finished_at=time.time(), error=error)
-        if status == "succeeded":
-            self.store.set_stage(job, "policy", status="done")
-        self.store.finish(job, status, error=error)
+        """The training ends (done | failed | cancelled). The build stays succeeded: the job's status goes back to it,
+        the policy stage says how the training went, and a failed or cancelled one can be started again."""
+        self.store.finish_training(job, "done" if status == "succeeded" else status, error)
 
     def recover(self, job):
         """A job journalled mid-training when the process died: best effort, stop its GPU job (it bills otherwise)."""
         tr = job.training or {}
-        if tr.get("state") not in ("starting", "running"):
+        if not tr:
             return False
         call_id = tr.get("call_id")
         try:
@@ -409,7 +440,6 @@ class TrainRunner:
                 self.backend.remove(tr["session"])
         except Exception:  # noqa: BLE001
             log.warning("could not stop a recovered training", extra={"fields": {"job": job.id, "call": call_id}})
-        tr["state"], tr["finished_at"] = "failed", time.time()
         return True
 
 

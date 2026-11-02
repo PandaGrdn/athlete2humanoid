@@ -53,21 +53,36 @@ def train(bundle, out, iters=1500, num_envs=4096, variant="train", device=None, 
                             device=device, log=log)
         logged = runner.logger.log
 
+        def record(done):
+            """An attempt; anything wrong with it (the play env, the score) is logged and turns attempts off, never
+            stops the training."""
+            nonlocal attempts
+            try:
+                attempts.record(runner, done)
+            except Exception as e:  # noqa: BLE001
+                log(f"[a2h_env] attempt at iteration {done} failed ({type(e).__name__}: {str(e)[:200]}); no more attempts this run")
+                try:
+                    attempts.close()
+                except Exception:  # noqa: BLE001
+                    pass
+                attempts = None
+
         def log_and_attempt(*a, **kw):  # rsl_rl calls logger.log(it=...) at the end of every iteration
             logged(*a, **kw)
             it = kw.get("it", a[0] if a else None)
-            if it is None:
+            if it is None or attempts is None:
                 return
             attempts.note_iteration(runner)
             done = int(it) + 1  # updates so far
             if done % attempt_every == 0 and done < iters:
-                attempts.record(runner, done)
+                record(done)
         runner.logger.log = log_and_attempt
     t0 = time.time()
     runner.learn(num_learning_iterations=iters, init_at_random_ep_len=True)
     took = time.time() - t0
     if attempts is not None:
-        attempts.record(runner, iters)  # the policy as trained
+        record(iters)  # the policy as trained
+    if attempts is not None:
         attempts.close()
     ckpts = sorted(log_dir.glob("model_*.pt"), key=lambda p: int(p.stem.split("_")[1]))
     if not ckpts:  # rsl_rl saves on its interval and at the end; make sure something is there

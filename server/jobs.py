@@ -121,6 +121,7 @@ class JobStore:
 
     def close(self):
         self.stop.set()
+        self.train.shutdown()  # GPU jobs this process can no longer follow are cancelled, synchronously
         for ev in list(self.cancel.values()):
             ev.set()
         self.flush()
@@ -137,13 +138,16 @@ class JobStore:
                 continue
             self.jobs[job.id], self.owner[job.id] = job, owner
             self.cancel[job.id] = threading.Event()
-            if job.status not in TERMINAL:
+            if job.training and job.training.get("state") in ("starting", "running"):
+                # the build had finished; its training can't be followed any more (and is cancelled once the runner is up)
+                self._stop_training.append(job)
+                self.finish_training(job, "failed", "the server restarted while the policy was training; the GPU job was stopped",
+                                     persist=False)
+                n += 1
+            elif job.status not in TERMINAL:
                 msg = "the server restarted while this job was running; start it again"
                 if job.runner == "colab":
                     msg += " (the remote GPU job may still be running: see its runner.log under outputs/)"
-                if job.training and job.training.get("state") in ("starting", "running"):
-                    msg = "the server restarted while the policy was training; the GPU job was stopped"
-                    self._stop_training.append(job)
                 self.finish(job, "failed", error=msg)
                 n += 1
         if self.jobs:
@@ -366,6 +370,25 @@ class JobStore:
         self.flush()
         log.info("job finished", extra={"fields": {"job": job.id, "runner": job.runner, "status": status,
                                                    "seconds": round(job.updated_at - job.created_at, 1)}})
+
+    def finish_training(self, job, state, error=None, persist=True):
+        """A live job's training ends: done | failed | cancelled. The job's status returns to the build's (succeeded),
+        the policy stage records the outcome, and the training's own state and error are kept apart from the job's."""
+        with self.lock:
+            if not job.training:
+                return
+            job.training.update(state=state, finished_at=_now(), error=error)
+            for s in job.stages:
+                if s.key == "policy":
+                    s.status = "done" if state == "done" else "failed" if state == "failed" else "skipped"
+                    s.finished_at = _now()
+                    if state == "done":
+                        s.progress = 1.0
+            job.status, job.error = "succeeded", error
+            self._recompute(job)
+        self.flush()
+        log.info("training finished", extra={"fields": {"job": job.id, "state": state, "error": error,
+                                                        "seconds": round(job.updated_at - (job.training.get("started_at") or job.updated_at), 1)}})
 
     # --- running -----------------------------------------------------------------------------
     def start(self, job):

@@ -322,10 +322,13 @@ function LiveView({ job, file, uploading, err, source, onTrained }: { job: Job |
   const elapsed = job ? (running ? Date.now() / 1000 : job.updated_at) - job.created_at : 0;
   const stageLabel = job?.stages.find((s) => s.key === job.stage)?.label;
   const tr = job?.training ?? null;
-  const title = !job ? "Uploading…" : job.status === "failed" ? (tr ? "Training failed" : "Build failed") : job.status === "cancelled" ? (tr ? "Training cancelled" : "Build cancelled")
-    : tr?.state === "done" ? "Policy trained" : tr ? "Watch the robot learn" : spec ? "Environment ready" : job.status === "queued" ? "Waiting for the builder…" : stageLabel ? `${stageLabel}…` : "Starting…";
-  const offer = !source && job && st("policy") === "skipped" && health?.train && onTrained
-    ? <TrainOffer job={job} train={health.train} onStarted={onTrained} /> : null;
+  const title = !job ? "Uploading…" : job.status === "failed" ? "Build failed" : job.status === "cancelled" ? "Build cancelled"
+    : tr?.state === "done" ? "Policy trained" : tr?.state === "failed" ? "Training failed" : tr?.state === "cancelled" ? "Training cancelled"
+    : tr ? "Watch the robot learn" : spec ? "Environment ready" : job.status === "queued" ? "Waiting for the builder…" : stageLabel ? `${stageLabel}…` : "Starting…";
+  // a training that failed or was cancelled can be started again: the offer comes back
+  const canTrainAgain = !!tr && (tr.state === "failed" || tr.state === "cancelled");
+  const offer = !source && job && (st("policy") === "skipped" || (canTrainAgain && st("policy") !== "running")) && health?.train && onTrained
+    ? <TrainOffer job={job} train={health.train} onStarted={onTrained} again={canTrainAgain} /> : null;
 
   return (
     <div className="container">
@@ -457,7 +460,7 @@ function useAttempts(id: string | null, training: Job["training"] | null): Attem
 }
 
 /** "Train on a GPU": the modal runner's gate, over the build view once the environment is built. */
-function TrainOffer({ job, train, onStarted }: { job: Job; train: NonNullable<Health["train"]>; onStarted: (j: Job) => void }) {
+function TrainOffer({ job, train, onStarted, again = false }: { job: Job; train: NonNullable<Health["train"]>; onStarted: (j: Job) => void; again?: boolean }) {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -476,7 +479,7 @@ function TrainOffer({ job, train, onStarted }: { job: Job; train: NonNullable<He
   };
   return (
     <form onSubmit={go} className="bv-train">
-      <p><strong>The environment is built.</strong> Train the robot on it now: PPO on a Modal GPU, about {train.minutes} min,
+      <p><strong>{again ? "The training stopped." : "The environment is built."}</strong> Train the robot on it {again ? "again" : "now"}: PPO on a Modal GPU, about {train.minutes} min,
         {" "}and you watch each attempt as it learns.{train.per_day > 0 && !train.code_required ? ` ${train.left_today} of ${train.per_day} free trainings left today.` : ""}</p>
       <div className="bv-train-row">
         {(needCode || train.code_accepted) && (
