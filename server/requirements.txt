@@ -1,5 +1,5 @@
-fastapi>=0.115,<1
-uvicorn[standard]>=0.30
-python-multipart>=0.0.9
-modal>=1.1  # the live runner's GPU pose client (server/live_pose.py); the deployed app is frontends/live_pose_modal.py
-google-cloud-storage>=2.18  # A2H_STORE=gcs://...: finished builds and trainings kept in a bucket (server/store.py)
+fastapi>=0.162.0,<1
+uvicorn[standard]>=0.54.0
+python-multipart>=0.0.33
+modal>=1.6.3  # the live runner's GPU pose client (server/live_pose.py); the deployed app is frontends/live_pose_modal.py
+google-cloud-storage>=3.17.1  # A2H_STORE=gcs://...: finished builds and trainings kept in a bucket (server/store.py)
