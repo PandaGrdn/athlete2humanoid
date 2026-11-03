@@ -72,7 +72,7 @@ function MyList() {
           <input className="my-key mono" type="text" readOnly value={link} aria-label="A link that restores your key" onFocus={(e) => e.currentTarget.select()} />
           <button className="btn sm" onClick={copy}><Icon name="file" size={14} />{copied ? "Copied" : "Copy link"}</button>
         </div>
-        <p className="faint" style={{ fontSize: 12.5, marginTop: 8 }}>Open this link on another device to see the same list there. Keep it to yourself.</p>
+        <p className="faint" style={{ fontSize: 12.5, marginTop: 8 }}>Copy this link and save it somewhere safe. It is the only way back to your builds on another device, or if this browser's data is cleared. Don't share it.</p>
         <form onSubmit={useKey} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <input className="my-key mono" type="text" value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="Paste a key or a link" aria-label="A key or link from another device" />
           <button className="btn sm" type="submit" disabled={!paste.trim()}>Use this key</button>
