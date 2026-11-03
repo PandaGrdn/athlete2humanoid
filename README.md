@@ -1,3 +1,7 @@
+<p align="center">
+  <a href="https://athlete2humanoid.pages.dev"><img src="docs/assets/cover.png" alt="athlete2humanoid: any video in, a humanoid skill out" width="100%"></a>
+</p>
+
 # athlete2humanoid
 
 **A phone video of a person becomes a robust reinforcement-learning policy for the Unitree G1 humanoid, with no mocap and no motion library.** Meta's SAM 3.1 and SAM 3D Body turn the video into a 3D motion, the motion is rebuilt on the robot's own skeleton, Muse Spark names its key moments, and PPO in mjlab trains thousands of simulated G1s on it, with V-JEPA 2 as input, style term and judge.
@@ -127,7 +131,7 @@ Target: one phone video of two squat jumps. Three policies, 1,200 PPO iterations
 - **A video-similarity reward alone wasn't enough.** V-JEPA cosine barely separates "the action" from "a person moving" (almost every humanoid motion scores ~0.5), and in v2 the distilled reward rose (0.35 → 0.49) while real V-JEPA stayed flat (0.35 → 0.37): reward hacking. Yet all five squat policies completed the squat under the semantic spec (5/5 stages): the metric, not the policies, was the problem.
 - **The first squat-jump task run plateaued** (episodes ~60 of 500 steps, most ending in falls) without stability terms or a warm start. CPU rollouts then showed the robot over-jumping and collapsing on landing, because the jump paid before the landing. Now a fall refunds the attempt (commit 883c6b7, after the final run trained).
 
-Earlier V-JEPA 2 probes: [`RESEARCH.md`](RESEARCH.md) and [`experiments/cross_embodiment_probe.py`](experiments/cross_embodiment_probe.py).
+Earlier V-JEPA 2 probes: [`RESEARCH.md`](docs/planning/RESEARCH.md) and [`experiments/cross_embodiment_probe.py`](experiments/cross_embodiment_probe.py).
 
 ## Quickstart
 
