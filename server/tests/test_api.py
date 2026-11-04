@@ -219,6 +219,16 @@ def test_cancel(make_client):
     assert wait_done(c, jid)["status"] == "cancelled"
 
 
+def test_only_the_starter_can_cancel(make_client):
+    c = make_client(demo_seconds=30, proxy_hops=1)
+    me, them = {"X-Forwarded-For": "1.2.3.4"}, {"X-Forwarded-For": "5.6.7.8"}
+    jid = c.post("/api/jobs", data={"run_id": "latent"}, headers=me).json()["id"]
+    assert c.post(f"/api/jobs/{jid}/cancel", headers=them).status_code == 403
+    assert c.get(f"/api/jobs/{jid}", headers=them).json()["status"] != "cancelled"
+    assert c.post(f"/api/jobs/{jid}/cancel", headers=me).status_code == 200
+    assert wait_done(c, jid)["status"] == "cancelled"
+
+
 def test_active_job_limit(make_client):
     c = make_client(demo_seconds=30, max_active_jobs=1)
     jid = c.post("/api/jobs", data={"run_id": "latent"}).json()["id"]

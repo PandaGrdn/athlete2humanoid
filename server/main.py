@@ -309,10 +309,18 @@ def create_app(settings=None):
         return snap
 
     @app.post("/api/jobs/{jid}/cancel")
-    def cancel_job(jid: str):
+    def cancel_job(jid: str, request: Request):
         job = store.get(jid)
         if job is None:
             raise HTTPException(404, "job not found")
+        # Only whoever started it: the browser's key when it sent one, else the same client. An id alone reads a job.
+        key = store.owner_key.get(jid)
+        if key:
+            mine = persist.owner_key(request.headers) == key
+        else:
+            mine = store.owner.get(jid) == anon(client_ip(request.scope, settings.proxy_hops))
+        if not mine:
+            raise HTTPException(403, "only whoever started this job can cancel it")
         if job.status not in TERMINAL:
             store.cancel[jid].set()
         return store.snapshot(jid)
