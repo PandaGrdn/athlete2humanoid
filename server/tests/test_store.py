@@ -72,7 +72,9 @@ def test_a_finished_build_is_kept_and_listed(live_client, tmp_path):
     j2 = upload(c).json()["id"]
     ids = [x["id"] for x in c.get("/api/my/jobs", headers={"X-A2H-Owner": KEY}).json()["jobs"]]
     assert ids == [j2, jid]
-    c.post(f"/api/jobs/{j2}/cancel")
+    assert c.post(f"/api/jobs/{j2}/cancel", headers={"X-A2H-Owner": OTHER}).status_code == 403  # not theirs
+    assert c.post(f"/api/jobs/{j2}/cancel").status_code == 403  # a key-made job needs its key
+    assert c.post(f"/api/jobs/{j2}/cancel", headers={"X-A2H-Owner": KEY}).status_code == 200
     wait_done(c, j2)
 
 
